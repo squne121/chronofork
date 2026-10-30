@@ -1,7 +1,7 @@
 # Project Chronofork
 
 React + TypeScript + Vite によるゲーム開発リポジトリ。現在は開発基盤のみで、ゲーム機能は未実装です。
-承認済みMVP仕様は移行待ちです（`docs/spec/README.md`）。ライセンスは未設定です（権利の再利用条件は未決定）。
+承認済みMVP仕様は `docs/spec/`、実装契約は `docs/contracts/`、決定記録は `docs/decisions/` にあります。承認待ちの事項は `docs/spec/pending-approvals.md`。ライセンスは未設定です（権利の再利用条件は未決定）。
 
 ## 開発
 
