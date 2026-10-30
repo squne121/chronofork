@@ -4,4 +4,4 @@
 
 | ファイル | 内容 |
 |---|---|
-| [adopted-decisions.md](adopted-decisions.md) | 採用済み DEC-001〜048 の要約、置換・矛盾の記録、未決事項 |
+| [adopted-decisions.md](adopted-decisions.md) | 実装に関係する主要な採用済み決定の抜粋（DEC-001〜048 の全件記録ではない。旧 Drive の全履歴は移行前の記録として保管し、新規決定は GitHub で管理）、置換・矛盾の記録、未決事項 |
