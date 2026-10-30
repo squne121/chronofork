@@ -35,3 +35,7 @@ coverage/
 
 # local long-running test logs (submit via PR, not committed)
 local-runs/
+
+# Claude Code local settings
+CLAUDE.local.md
+.claude/settings.local.json

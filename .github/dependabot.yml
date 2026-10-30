@@ -1,14 +1,12 @@
 version: 2
+# 開発初期のため通常（version）更新は停止。open-pull-requests-limit: 0 は version updates のみ無効化し、
+# Dependabot security updates（リポジトリ設定側）には影響しない。
 updates:
   - package-ecosystem: npm
     directory: /
-    schedule: { interval: weekly }
-    open-pull-requests-limit: 3
-    ignore:
-      # typescript-eslint が TypeScript 7 未対応のため 6.0.x に固定
-      - dependency-name: typescript
-        update-types: ["version-update:semver-major"]
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly }
-    open-pull-requests-limit: 3
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 0
