@@ -28,6 +28,7 @@ export type CohortDiagnosticCode =
   | 'TUNING_COEFFICIENT_INVALID'
   | 'INVALID_POPULATION'
   | 'COHORT_ALREADY_SET'
+  | 'NUMERIC_RANGE_EXCEEDED'
 
 export type CohortDiagnostic = Readonly<{
   code: CohortDiagnosticCode
@@ -44,7 +45,7 @@ export type CohortSlotAllocation = Readonly<{
 }>
 
 export type CohortEvaluation = Readonly<{
-  /** 診断が無い場合に限らず、評価できた Group のコマンドだけを含む。評価不能なら commands は空。 */
+  /** ok=false のときは commands を必ず空にする（部分適用を防ぐ fail-closed）。 */
   outcome: RuleOutcome
   /** Group ごとの内訳（Trace 統合が #15 で確定するまでの単体確認用。共有契約ではない）。 */
   allocations: readonly CohortSlotAllocation[]
@@ -53,18 +54,40 @@ export type CohortEvaluation = Readonly<{
   ok: boolean
 }>
 
-/** 非負の分子 n と正の分母 d の四捨五入（.5 は切り上げ）。浮動小数誤差を避けて整数で計算する。 */
-const roundDiv = (n: number, d: number): number => Math.floor((2 * n + d) / (2 * d))
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER)
 
-/** 契約 §4 の暫定分解式。birth/growth は permille。P は非負整数、birth >= 0、growth >= −1000。 */
+/** 非負の分子 n と正の分母 d の四捨五入（.5 は切り上げ）。BigInt で誤差・桁あふれを避ける。 */
+const roundDiv = (n: bigint, d: bigint): bigint => (2n * n + d) / (2n * d)
+
+export type Decomposition =
+  | Readonly<{ ok: true; delta: number; birthSlots: number; deathSlots: number }>
+  | Readonly<{ ok: false; reason: string }>
+
+/**
+ * 契約 §4 の暫定分解式。birth/growth は permille。P は非負整数、birth >= 0、growth >= −1000。
+ * 計算は BigInt で厳密に行い、人口・delta・B・N・P+B・計算後人口のいずれかが安全整数を超える場合は
+ * 値を出さず ok:false（fail-closed）。ゲーム係数の上限は設けない。
+ */
 export function decomposePopulation(
   population: number,
   birthRatePermille: number,
   growthRatePermille: number,
-): Omit<CohortSlotAllocation, 'groupId' | 'population'> {
-  const delta = roundDiv(population * (1000 + growthRatePermille), 1000) - population
-  const birthSlots = Math.max(0, roundDiv(population * birthRatePermille, 1000), delta)
-  return { delta, birthSlots, deathSlots: birthSlots - delta }
+): Decomposition {
+  const inputs = [population, birthRatePermille, growthRatePermille]
+  if (!inputs.every(Number.isSafeInteger) || population < 0 || birthRatePermille < 0 || growthRatePermille < -1000) {
+    return { ok: false, reason: '入力が安全整数の定義域外です' }
+  }
+  const P = BigInt(population)
+  const delta = roundDiv(P * (1000n + BigInt(growthRatePermille)), 1000n) - P
+  const rawBirth = roundDiv(P * BigInt(birthRatePermille), 1000n)
+  const birth = rawBirth > delta ? rawBirth : delta > 0n ? delta : 0n
+  const death = birth - delta
+  const next = P + delta
+  const absDelta = delta < 0n ? -delta : delta
+  for (const v of [absDelta, birth, death, P + birth, next]) {
+    if (v > MAX_SAFE) return { ok: false, reason: '人口・枠・計算後人口が安全整数の範囲を超えます' }
+  }
+  return { ok: true, delta: Number(delta), birthSlots: Number(birth), deathSlots: Number(death) }
 }
 
 /** 年・RuleID・Group・意味的原因から決定的に作る。配列順・乱数・時刻に依存しない。 */
@@ -148,6 +171,10 @@ export function evaluatePopulationCohorts(world: WorldState, tuning: TuningConfi
       continue
     }
     const slots = decomposePopulation(population, b, g)
+    if (!slots.ok) {
+      diagnostics.push({ code: 'NUMERIC_RANGE_EXCEEDED', groupId, message: slots.reason })
+      continue
+    }
     const source: Source = {
       requestId: cohortRequestId(year, groupId),
       year,
@@ -155,7 +182,7 @@ export function evaluatePopulationCohorts(world: WorldState, tuning: TuningConfi
       sourceRuleId: POPULATION_COHORT_RULE_ID,
       sourceTraceId: cohortProvisionalTraceId(year, groupId),
     }
-    allocations.push({ groupId, population, ...slots })
+    allocations.push({ groupId, population, delta: slots.delta, birthSlots: slots.birthSlots, deathSlots: slots.deathSlots })
     commands.push({
       type: 'POPULATION_COHORT',
       commandId: cohortCommandId(year, groupId),
@@ -167,10 +194,7 @@ export function evaluatePopulationCohorts(world: WorldState, tuning: TuningConfi
     })
   }
 
-  return {
-    outcome: { ...emptyOutcome(), commands },
-    allocations,
-    diagnostics,
-    ok: diagnostics.length === 0,
-  }
+  // 1 件でも診断があれば評価全体を失敗とし、部分的な Command を一切返さない。
+  if (diagnostics.length > 0) return failed(diagnostics)
+  return { outcome: { ...emptyOutcome(), commands }, allocations, diagnostics, ok: true }
 }

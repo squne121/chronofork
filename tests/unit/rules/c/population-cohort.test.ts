@@ -39,19 +39,20 @@ const apply = (w: WorldState, o: ReturnType<typeof evaluatePopulationCohorts>['o
 
 describe('RULE-C-004 暫定分解式', () => {
   it('P=1000, b=20‰, g=4‰ → delta=4, B=20, N=16', () => {
-    expect(decomposePopulation(1000, 20, 4)).toEqual({ delta: 4, birthSlots: 20, deathSlots: 16 })
+    expect(decomposePopulation(1000, 20, 4)).toEqual({ ok: true, delta: 4, birthSlots: 20, deathSlots: 16 })
   })
   it('B は delta を下回らない（増加が出生率を上回る場合 N=0）', () => {
-    expect(decomposePopulation(1000, 1, 50)).toEqual({ delta: 50, birthSlots: 50, deathSlots: 0 })
+    expect(decomposePopulation(1000, 1, 50)).toEqual({ ok: true, delta: 50, birthSlots: 50, deathSlots: 0 })
   })
   it('負の成長でも B>=0・N=B−delta で人口が負にならない', () => {
     const s = decomposePopulation(1000, 10, -20)
-    expect(s).toEqual({ delta: -20, birthSlots: 10, deathSlots: 30 })
+    if (!s.ok) throw new Error('unexpected')
+    expect(s).toEqual({ ok: true, delta: -20, birthSlots: 10, deathSlots: 30 })
     expect(1000 + s.birthSlots - s.deathSlots).toBe(980)
   })
   it('.5 は切り上げ、人口 0 は 0 枠', () => {
-    expect(decomposePopulation(25, 20, 0).birthSlots).toBe(1) // 0.5 → 1
-    expect(decomposePopulation(0, 30, 2)).toEqual({ delta: 0, birthSlots: 0, deathSlots: 0 })
+    expect(decomposePopulation(25, 20, 0)).toMatchObject({ birthSlots: 1 }) // 0.5 → 1
+    expect(decomposePopulation(0, 30, 2)).toEqual({ ok: true, delta: 0, birthSlots: 0, deathSlots: 0 })
   })
 })
 
@@ -162,6 +163,26 @@ describe('applyOutcome との整合（WorldState の変更は reducer に委譲�
     expect(again.world.groups.find((x) => x.groupId === GID)?.population).toBe(1004)
   })
 
+  it('妥当な world で一部 Group のみ確定済み: ok=false・全 Command 空で、未確定 Group も適用されない', () => {
+    const w = world1000()
+    const [done, ...rest] = w.groups
+    expect(rest.length).toBeGreaterThan(0)
+    const partial: WorldState = {
+      ...w,
+      demographics: {
+        cohortSlots: [{ groupId: done!.groupId, year: w.year, birthSlots: 1, deathSlots: 1, claimedBirths: 0, claimedDeaths: 0 }],
+      },
+    }
+    const r = evaluatePopulationCohorts(partial, FIXTURE_TUNING)
+    expect(r.ok).toBe(false)
+    expect(r.diagnostics.map((d) => d.code)).toEqual(['COHORT_ALREADY_SET'])
+    expect(r.outcome.commands).toEqual([])
+    expect(r.allocations).toEqual([])
+    const applied = apply(partial, r.outcome)
+    expect(applied.world.groups).toEqual(partial.groups)
+    expect(applied.world.demographics).toEqual(partial.demographics)
+  })
+
   it('確定済み Group は再評価で診断付きに保留（コマンドを出さず成功扱いにしない）', () => {
     const w = world1000()
     const first = apply(w, evaluatePopulationCohorts(w, FIXTURE_TUNING).outcome)
@@ -212,7 +233,7 @@ describe('不正入力は例外ではなく診断付きで保留', () => {
     expect(r.outcome.commands).toEqual([])
   })
 
-  it('不正な人口の Group のみ除外し、診断を残す', () => {
+  it('不正な人口の Group が 1 つでもあれば全 Command を空にして診断を残す', () => {
     const w = world1000()
     const broken: WorldState = {
       ...w,
@@ -221,6 +242,37 @@ describe('不正入力は例外ではなく診断付きで保留', () => {
     const r = evaluatePopulationCohorts(broken, FIXTURE_TUNING)
     expect(r.ok).toBe(false)
     expect(codesOf(r)).toEqual(['INVALID_POPULATION'])
-    expect(r.outcome.commands).toHaveLength(w.groups.length - 1)
+    expect(r.outcome.commands).toEqual([])
+    expect(r.allocations).toEqual([])
+  })
+
+  describe('安全整数・演算精度（fail-closed）', () => {
+    const MAX = Number.MAX_SAFE_INTEGER
+    it('巨大な出生率係数: B が安全整数超なら Command を出さず NUMERIC_RANGE_EXCEEDED', () => {
+      const t = { ...FIXTURE_TUNING, birthRatePermille: { value: MAX, origin: 'PLACEHOLDER', note: '' } } as TuningConfig
+      const w = withPopulations(createExperimentalWorld(), { [GID]: 2000 })
+      const r = evaluatePopulationCohorts(w, t)
+      expect(r.ok).toBe(false)
+      expect(r.outcome.commands).toEqual([])
+      expect(codesOf(r)).toContain('NUMERIC_RANGE_EXCEEDED')
+    })
+    it('巨大な人口 / 巨大な成長率でも不正な値を返さない', () => {
+      expect(decomposePopulation(MAX, 20, 4).ok).toBe(false)
+      expect(decomposePopulation(2000, 20, MAX).ok).toBe(false)
+      const w = withPopulations(createExperimentalWorld(), { [GID]: MAX })
+      const r = evaluatePopulationCohorts(w, FIXTURE_TUNING)
+      expect(r.ok).toBe(false)
+      expect(r.outcome.commands).toEqual([])
+    })
+    it('P+B が安全整数を超える境界を拒否し、境界内は厳密に計算する', () => {
+      expect(decomposePopulation(MAX - 10, 1000, 0).ok).toBe(false) // B=P → P+B 超過
+      const ok = decomposePopulation(2 ** 51, 1000, 0)
+      expect(ok).toEqual({ ok: true, delta: 0, birthSlots: 2 ** 51, deathSlots: 2 ** 51 })
+    })
+    it('Number 演算で丸めが狂う桁でも BigInt で厳密（P*(1000+g) が 2^53 超）', () => {
+      const P = 9_007_199_254_740
+      const d = decomposePopulation(P, 0, 1)
+      expect(d).toEqual({ ok: true, delta: 9_007_199_255, birthSlots: 9_007_199_255, deathSlots: 0 })
+    })
   })
 })
