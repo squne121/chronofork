@@ -16,6 +16,7 @@ export type GoalFailureCode =
   | 'TITLE_INVALID'
   | 'TITLE_NOT_HEREDITARY'
   | 'TITLE_NOT_RECOGNIZED' // PENDING / REVOKED / 承認根拠不足
+  | 'REQUIRES_RECOGNITION' // ACTIVE だが現在の地域主権に対する承認根拠が無い（旧主権の承認のみ・適用主権の明示なし）
   | 'HOLDER_UNDETERMINED'
   | 'HOLDER_NOT_FOUND'
   | 'HOLDER_DEAD'
@@ -86,7 +87,14 @@ function assessTitle(
   const region = regions.get(title.regionId)
   if (region === undefined) {
     failures.push('REGION_NOT_FOUND')
-  } else if (holderPersonId !== null) {
+  } else if (
+    rec.status === 'ACTIVE' && rec.authority !== undefined && rec.sourceDecisionId !== undefined &&
+    rec.sovereignCountryId !== region.sovereignCountryId
+  ) {
+    // 旧主権への承認を新主権下へ自動で引き継がない・再承認もしない（GAME-03）。通常の歴史状態でありデータ破損ではない。
+    failures.push('REQUIRES_RECOGNITION')
+  }
+  if (region !== undefined && holderPersonId !== null) {
     const holderRef: ControllerRef = { kind: 'PERSON', id: holderPersonId }
     if (sameRef(region.deFactoControllerRef, holderRef)) {
       basis = { kind: 'DIRECT_CONTROL' }
@@ -113,6 +121,7 @@ function assessTitle(
  * 1350 年の WorldState から勝利条件を判定する。入力は変更しない。
  * 勝利: 存命で法的王朝が `dynastyId` に DETERMINED の人物が、有効・ACTIVE 承認済み・世襲の TERRITORIAL Title を保持し、
  * その Region を直接支配するか、Title と Region に一致する有効な ControlMandate の受益者である。
+ * Title 承認は現在の Region.sovereignCountryId と recognition.sovereignCountryId が一致する場合のみ根拠になる。
  * 国名・家門・王号・CROWN・税収・宗主権/主権のみでは勝利にしない。
  */
 export function evaluateGoal(input: unknown, options: GoalOptions): GoalEvaluation {

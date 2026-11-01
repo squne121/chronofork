@@ -77,6 +77,7 @@ describe('evaluateGoal: 成功例', () => {
   it('外国封臣: 外国主権下の地域を ControlMandate で保持', () => {
     const r = evaluateGoal(baseWorld((w) => {
       w.regions[0]!.sovereignCountryId = 'c-b'
+      w.titles[0] = title('t1', 'r1', 'p-hero', { recognition: { status: 'ACTIVE', authority: { kind: 'COUNTRY', id: 'c-b' }, sovereignCountryId: 'c-b', sourceDecisionId: 'dec-2' } })
       w.regions[0]!.deFactoControllerRef = { kind: 'COUNTRY', id: 'c-b' }
       w.legal.controlMandates.push(mandate())
     }), OPTS)
@@ -88,6 +89,7 @@ describe('evaluateGoal: 成功例', () => {
     const r = evaluateGoal(baseWorld((w) => {
       w.countries[0] = { countryId: 'c-a', name: 'A', suzerainCountryId: 'c-b' }
       w.regions[0]!.sovereignCountryId = 'c-b'
+      w.titles[0] = title('t1', 'r1', 'p-hero', { recognition: { status: 'ACTIVE', authority: { kind: 'COUNTRY', id: 'c-b' }, sovereignCountryId: 'c-b', sourceDecisionId: 'dec-2' } })
     }), OPTS)
     expect(r.status).toBe('ACHIEVED')
   })
@@ -133,6 +135,38 @@ describe('evaluateGoal: 失敗例（ゲーム内の敗北）', () => {
     ['税収・主権のみ（他者が支配）', (w) => { w.regions[0]!.deFactoControllerRef = { kind: 'PERSON', id: 'p-other' }; w.legal.taxMandates.push({ mandateId: 'tx', regionId: 'r1', collectorCountryId: 'c-a', effectiveFromYear: 1340, endExclusiveYear: 1360, sourceTreatyOrLawId: 'law-1' }) }, 'NO_CONTROL'],
     ['国が支配しても委任なし（家門・国の一致のみ）', (w) => { w.regions[0]!.deFactoControllerRef = { kind: 'COUNTRY', id: 'c-a' } }, 'NO_CONTROL'],
   ]
+  describe('主権変更後の旧承認（REQUIRES_RECOGNITION）', () => {
+    const toB = (w: W): void => { w.regions[0]!.sovereignCountryId = 'c-b' } // Title 承認は旧主権 c-a のまま
+    const viaMandate = (w: W): void => {
+      toB(w)
+      w.regions[0]!.deFactoControllerRef = { kind: 'COUNTRY', id: 'c-b' }
+      w.legal.controlMandates.push(mandate())
+    }
+    it.each([
+      ['直接支配', toB],
+      ['ControlMandate 経由', viaMandate],
+    ] as [string, (w: W) => void][])('旧主権の承認のみでは勝利しない: %s', (_n, edit) => {
+      const r = evaluateGoal(baseWorld(edit), OPTS)
+      expect(r.status).toBe('NOT_ACHIEVED')
+      expect(failuresOf(r)).toEqual(['REQUIRES_RECOGNITION'])
+    })
+
+    it('適用主権が明示されない承認は勝利根拠にしない（INVALID_INPUT ではない）', () => {
+      const r = evaluateGoal(baseWorld((w) => {
+        w.titles[0] = title('t1', 'r1', 'p-hero', { recognition: { status: 'ACTIVE', authority: { kind: 'COUNTRY', id: 'c-a' }, sourceDecisionId: 'dec-1' } })
+      }), OPTS)
+      expect(r.status).toBe('NOT_ACHIEVED')
+      expect(failuresOf(r)).toContain('REQUIRES_RECOGNITION')
+    })
+
+    it('旧承認は自動失効・自動再承認されず、入力も変更しない', () => {
+      const w = baseWorld(toB)
+      const snapshot = JSON.stringify(w)
+      evaluateGoal(w, OPTS)
+      expect(JSON.stringify(w)).toBe(snapshot)
+    })
+  })
+
   it.each(cases)('%s', (_name, edit, code) => {
     const r = evaluateGoal(baseWorld(edit), OPTS)
     expect(r.status).toBe('NOT_ACHIEVED')
