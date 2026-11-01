@@ -94,15 +94,33 @@ const canon = (m: StatModifier) => [
 const slotKey = (m: StatModifier) =>
   JSON.stringify([m.startYear, m.statKey, 'ids' in m.targetRef ? pairKey(m.targetRef.ids) : null])
 
+/** 検証済み modifier の防御的複製（ネストした ids も複製し凍結）。外部可変参照を断つ。 */
+function cloneModifier(m: StatModifier): StatModifier {
+  const ref = m.targetRef as Extract<StatModifier['targetRef'], { kind: 'PERSON_PAIR' }>
+  return Object.freeze({
+    modifierId: m.modifierId,
+    interventionId: m.interventionId,
+    targetRef: Object.freeze({ kind: 'PERSON_PAIR' as const, ids: Object.freeze([ref.ids[0], ref.ids[1]] as const) }),
+    statKey: m.statKey,
+    signedDelta: m.signedDelta,
+    startYear: m.startYear,
+    endExclusiveYear: m.endExclusiveYear,
+    decayPolicy: m.decayPolicy,
+    ruleVersion: m.ruleVersion,
+  })
+}
+
 /** 台帳全体の検証（個別検証 + modifierId 重複 + 同年同対象同項目の重複）。 */
 export function validateStatModifierLedger(ledger: StatModifierLedger, ctx: StatModifierContext): Validation {
+  if (!Array.isArray(ledger)) return { ok: false, issues: [{ code: 'INVALID_ID', path: 'ledger', message: 'ledger は配列が必要です' }] }
   const issues: StatModifierIssue[] = []
   const ids = new Set<Id>()
   const slots = new Set<string>()
   ledger.forEach((m, i) => {
     const own = validateStatModifier(m, ctx)
     for (const x of own) issues.push({ ...x, path: `ledger[${i}].${x.path}` })
-    if (typeof m !== 'object' || m === null) return
+    // 個別要素が不正なら重複キーを算出しない（例外を避け、不正要素を重複判定へ混ぜない）。
+    if (own.length > 0) return
     if (ids.has(m.modifierId)) issues.push({ code: 'DUPLICATE_MODIFIER_ID', path: `ledger[${i}].modifierId`, message: `modifierId が重複しています: ${m.modifierId}` })
     ids.add(m.modifierId)
     const k = slotKey(m)
@@ -119,27 +137,32 @@ export function validateStatModifierLedger(ledger: StatModifierLedger, ctx: Stat
  * - 別年・別対象は重ね掛け可。
  */
 export function addStatModifier(ledger: StatModifierLedger, modifier: StatModifier, ctx: StatModifierContext): AddModifierResult {
+  // 既存台帳が破損していれば fail-closed（例外にも不正な ADDED にもしない）。
+  const existing = validateStatModifierLedger(ledger, ctx)
+  if (!existing.ok) return { ok: false, issues: existing.issues }
   const own = validateStatModifier(modifier, ctx)
   if (own.length > 0) return { ok: false, issues: own }
-  const sameId = ledger.find((x) => x.modifierId === modifier.modifierId)
+  const kept = ledger.map(cloneModifier)
+  const sameId = kept.find((x) => x.modifierId === modifier.modifierId)
   if (sameId !== undefined) {
-    if (sameModifier(sameId, modifier)) return { ok: true, outcome: 'DUPLICATE', ledger }
+    if (sameModifier(sameId, modifier)) return { ok: true, outcome: 'DUPLICATE', ledger: Object.freeze(kept) }
     return { ok: false, issues: [{ code: 'DUPLICATE_MODIFIER_ID', path: 'modifierId', message: `同じ modifierId で内容が異なります: ${modifier.modifierId}` }] }
   }
-  if (ledger.some((x) => slotKey(x) === slotKey(modifier))) {
+  if (kept.some((x) => slotKey(x) === slotKey(modifier))) {
     return { ok: false, issues: [{ code: 'DUPLICATE_SAME_YEAR_TARGET_STAT', path: 'startYear', message: '同じ年・対象・statKey への命令は既にあります' }] }
   }
-  return { ok: true, outcome: 'ADDED', ledger: [...ledger, modifier] }
+  return { ok: true, outcome: 'ADDED', ledger: Object.freeze([...kept, cloneModifier(modifier)]) }
 }
 
 /** 基礎値テーブルの検証。ペアは昇順・相異・一意、値は値域内の安全な整数。 */
 export function validatePairTrustBase(table: readonly PairTrustBase[], ctx: StatModifierContext): Validation {
+  if (!Array.isArray(table)) return { ok: false, issues: [{ code: 'INVALID_BASE_VALUE', path: 'base', message: 'base は配列が必要です' }] }
   const issues: StatModifierIssue[] = []
   const seen = new Set<string>()
   table.forEach((e, i) => {
     const p = `base[${i}]`
-    if (typeof e !== 'object' || e === null || !Array.isArray(e.personIds)) {
-      issues.push({ code: 'INVALID_PERSON_ID', path: p, message: '基礎値はオブジェクトで personIds が必要です' })
+    if (typeof e !== 'object' || e === null || !Array.isArray(e.personIds) || e.personIds.length !== 2) {
+      issues.push({ code: 'INVALID_PERSON_ID', path: p, message: '基礎値は personIds が厳密に 2 要素の配列である必要があります' })
       return
     }
     const [a, b] = e.personIds
@@ -198,14 +221,16 @@ export function createPairTrustView(input: PairTrustViewInput): Readonly<{ ok: t
   }
   if (issues.length > 0) return { ok: false, issues }
 
+  // 検証通過後は複製だけを使い、呼出元の後続変更（modifier / ids / known 集合）から隔離する。
+  const knownPersonIds: ReadonlySet<Id> = new Set(input.knownPersonIds)
   const baseByPair = new Map<string, number>(input.base.map((e) => [pairKey(e.personIds), e.value]))
-  const sorted = [...input.ledger].sort((x, y) => (x.modifierId < y.modifierId ? -1 : x.modifierId > y.modifierId ? 1 : 0))
+  const sorted = input.ledger.map(cloneModifier).sort((x, y) => (x.modifierId < y.modifierId ? -1 : x.modifierId > y.modifierId ? 1 : 0))
   const { min, max } = PAIR_TRUST_DEFINITION
 
   const view: PairTrustView = {
     resolve(a, b, year) {
       const ids = normalizePersonPair(a, b)
-      if (ids === null || !input.knownPersonIds.has(ids[0]) || !input.knownPersonIds.has(ids[1])) return null
+      if (ids === null || !knownPersonIds.has(ids[0]) || !knownPersonIds.has(ids[1])) return null
       if (!isInt(year) || year < START_YEAR || year > GOAL_YEAR) return null
       const key = pairKey(ids)
       const active = sorted.filter((m) => 'ids' in m.targetRef && pairKey(m.targetRef.ids) === key && m.startYear <= year && year < m.endExclusiveYear)

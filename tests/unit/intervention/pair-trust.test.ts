@@ -186,7 +186,7 @@ describe('台帳: 重複・冪等・入力不変', () => {
     if (!r1.ok) throw new Error('unreachable')
     const r2 = addStatModifier(r1.ledger, { ...EXPERIMENTAL_TRUST_BOOST }, ctx)
     expect(r2).toMatchObject({ ok: true, outcome: 'DUPLICATE' })
-    expect(r2.ok && r2.ledger).toBe(r1.ledger)
+    expect(r2.ok && r2.ledger).toEqual(r1.ok && r1.ledger)
   })
   it('同 modifierId で内容が違う場合は拒否', () => {
     const r = addStatModifier([EXPERIMENTAL_TRUST_BOOST], mod({ signedDelta: 21 }), ctx)
@@ -236,6 +236,57 @@ describe('境界の堅牢性', () => {
     const bad = createPairTrustView({ base: [null as never], ledger: [null as never], knownPersonIds: known })
     expect(bad.ok).toBe(false)
     expect(validateStatModifier(null as never, ctx)).not.toHaveLength(0)
+  })
+})
+
+describe('fail-closed と防御的複製', () => {
+  const valid = EXPERIMENTAL_TRUST_BOOST
+  it('不正な targetRef（undefined/null/型違い）や null 要素の台帳は例外でなく ok:false', () => {
+    for (const bad of [undefined, null, 5, { kind: 'PERSON_PAIR' }, { kind: 'PERSON_PAIR', ids: null }]) {
+      const r = createPairTrustView({ base: [], ledger: [{ ...valid, targetRef: bad as never }], knownPersonIds: known })
+      expect(r.ok).toBe(false)
+    }
+    expect(createPairTrustView({ base: [], ledger: [null as never, undefined as never], knownPersonIds: known }).ok).toBe(false)
+    expect(createPairTrustView({ base: [], ledger: 'x' as never, knownPersonIds: known }).ok).toBe(false)
+  })
+  it('addStatModifier は破損した既存台帳を ok:false で拒否する（例外・不正な ADDED にしない）', () => {
+    expect(addStatModifier([null as never], valid, ctx).ok).toBe(false)
+    expect(addStatModifier([{ ...valid, targetRef: undefined } as never], mod({ modifierId: 'n', startYear: 1260, endExclusiveYear: 1261 }), ctx).ok).toBe(false)
+    expect(addStatModifier([valid, { ...valid, modifierId: 'dup' }], mod({ modifierId: 'n2', startYear: 1260, endExclusiveYear: 1261 }), ctx).ok).toBe(false)
+  })
+  it('作成済み view は呼出元の modifier / ids / known 集合の後続変更の影響を受けない', () => {
+    const m = { ...valid, targetRef: { kind: 'PERSON_PAIR' as const, ids: [P1, P2] as [string, string] } }
+    const k = new Set(known)
+    const base = [{ personIds: [P1, P2] as [string, string], value: 10 }]
+    const r = createPairTrustView({ base, ledger: [m], knownPersonIds: k })
+    if (!r.ok) throw new Error('unreachable')
+    const before = r.view.resolve(P1, P2, 1250)
+    ;(m as { signedDelta: number }).signedDelta = -99
+    m.targetRef.ids[1] = P3
+    base[0]!.value = -50
+    base[0]!.personIds[0] = P4
+    k.delete(P1)
+    expect(r.view.resolve(P1, P2, 1250)).toEqual(before)
+    expect(r.view.resolve(P1, P2, 1250)).toMatchObject({ effective: 30 })
+  })
+  it('addStatModifier の返却台帳は入力・返却後の外部変更から隔離される', () => {
+    const input = { ...valid, targetRef: { kind: 'PERSON_PAIR' as const, ids: [P1, P2] as [string, string] } }
+    const r = addStatModifier([], input, ctx)
+    if (!r.ok) throw new Error('unreachable')
+    ;(input as { signedDelta: number }).signedDelta = -1
+    input.targetRef.ids[0] = P4
+    expect(r.ledger[0]).toMatchObject({ signedDelta: 20, targetRef: { ids: [P1, P2] } })
+    expect(Object.isFrozen(r.ledger)).toBe(true)
+    expect(() => { (r.ledger[0] as { signedDelta: number }).signedDelta = 1 }).toThrow()
+    expect(() => { (r.ledger[0]!.targetRef as unknown as { ids: string[] }).ids[0] = P4 }).toThrow()
+  })
+  it('基礎値の personIds は厳密に 2 要素（3 要素以上・1 要素は拒否）', () => {
+    for (const ids of [[P1, P2, P3], [P1], [], [P1, P2, P2]]) {
+      const r = validatePairTrustBase([{ personIds: ids as never, value: 0 }], ctx)
+      expect(r.ok).toBe(false)
+    }
+    expect(validatePairTrustBase([null as never], ctx).ok).toBe(false)
+    expect(validatePairTrustBase('x' as never, ctx).ok).toBe(false)
   })
 })
 
