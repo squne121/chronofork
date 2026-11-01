@@ -351,3 +351,118 @@ describe('入力・出力の不変性（オブジェクト非共有）', () => {
     expect(rejectionCodes(run(newWorld(), outcome('RULE-C-005', 1, [bad])))).toEqual(['INVALID_COMMAND'])
   })
 })
+
+describe('同一 requestId の原子性（最終契約レビュー）', () => {
+  const withReq = (c: DomainCommand, requestId: string): DomainCommand => ({ ...c, source: { ...c.source, requestId } }) as DomainCommand
+  const bal = (w: ReturnType<typeof newWorld>) => w.resources.find((a) => a.accountId === CASH)?.quantity
+
+  it('同一 requestId の無バッチ 2 件は片方だけ入金されず、全体を拒否する', () => {
+    const w = newWorld()
+    const tx = newTx()
+    const r = run(w, outcome('RULE-C-005', 1, [withReq(ledger(CASH, 'CREDIT', 100, 'a'), 'R'), withReq(ledger(CASH, 'CREDIT', 200, 'b'), 'R')]), tx)
+    expect(r.status).toBe('REJECTED')
+    expect(rejectionCodes(r)).toEqual(['REQUEST_ID_CONFLICT'])
+    expect(r.world).toBe(w)
+    expect(bal(r.world)).toBe(52000)
+    expect(r.transaction).toBe(tx)
+  })
+
+  it('異なる batchId に跨る同一 requestId も全体を拒否する（先頭 batch も適用しない）', () => {
+    const r = run(newWorld(), outcome('RULE-C-005', 1, [
+      withReq(ledger(CASH, 'CREDIT', 100, 'a', { batchId: 'b1' }), 'R'),
+      withReq(ledger(CASH, 'CREDIT', 200, 'b', { batchId: 'b2' }), 'R'),
+    ]))
+    expect(rejectionCodes(r)).toEqual(['REQUEST_ID_CONFLICT'])
+    expect(bal(r.world)).toBe(52000)
+  })
+
+  it('batch 付きと無バッチの混在も拒否する', () => {
+    const r = run(newWorld(), outcome('RULE-C-005', 1, [
+      withReq(ledger(CASH, 'CREDIT', 100, 'a', { batchId: 'b1' }), 'R'),
+      withReq(ledger(CASH, 'CREDIT', 200, 'b'), 'R'),
+    ]))
+    expect(rejectionCodes(r)).toEqual(['REQUEST_ID_CONFLICT'])
+    expect(bal(r.world)).toBe(52000)
+  })
+
+  it('同一 batchId に属する同一 requestId は受理され、再送は DUPLICATE、別枝は独立', () => {
+    const o = () => outcome('RULE-C-005', 1, [
+      withReq(ledger(CASH, 'CREDIT', 100, 'a', { batchId: 'b1' }), 'R'),
+      withReq(ledger(CASH, 'CREDIT', 200, 'b', { batchId: 'b1' }), 'R'),
+    ])
+    const first = run(newWorld(), o())
+    expect(first.status).toBe('APPLIED')
+    expect(bal(first.world)).toBe(52300)
+    expect(run(first.world, o(), first.transaction).status).toBe('DUPLICATE')
+    expect(run(newWorld(), o(), newTx('other-branch')).status).toBe('APPLIED')
+  })
+})
+
+describe('適用後 WorldState の完全検証と例外安全性', () => {
+  const setup = () => chain([cohortOutcome('group-central-elite', 1, 0)])
+  const tryBirth = (mutate: (p: Record<string, unknown>) => void) => {
+    const c = setup()
+    const person = { ...baby('person-new-1') } as Record<string, unknown>
+    mutate(person)
+    const cmd = birth(person as unknown as ReturnType<typeof baby>)
+    const r = run(c.world, outcome('B-002', 3, [cmd]), c.tx)
+    return { c, r }
+  }
+
+  it.each([
+    ['不正な Person.sex', (p: Record<string, unknown>) => { p.sex = 'OTHER' }],
+    ['必須フィールドの欠落（name）', (p: Record<string, unknown>) => { delete p.name }],
+    ['未定義の追加フィールド', (p: Record<string, unknown>) => { p.nickname = 'x' }],
+    ['不正な型（birthYear が文字列）', (p: Record<string, unknown>) => { p.birthYear = '1250' }],
+  ])('%s は INTEGRITY_VIOLATION で拒否し、状態・Transaction を変えない', (_n, mutate) => {
+    const { c, r } = tryBirth(mutate)
+    expect(r.status).toBe('REJECTED')
+    const codes = rejectionCodes(r)
+    expect(codes.some((x) => x === 'INTEGRITY_VIOLATION' || x === 'INVALID_COMMAND' || x === 'HANDLER_EXCEPTION')).toBe(true)
+    expect(r.world).toBe(c.world)
+    expect(r.transaction).toBe(c.tx)
+    expect(r.world.persons.some((p) => p.personId === 'person-new-1')).toBe(false)
+  })
+
+  it('Person.sex の不正は診断（INVALID_ENUM）付きで拒否される', () => {
+    const { r } = tryBirth((p) => { p.sex = 'OTHER' })
+    expect(rejectionCodes(r)).toEqual(['INTEGRITY_VIOLATION'])
+    expect(r.units[0]?.rejections[0]?.diagnostics?.map((d) => d.code)).toContain('INVALID_ENUM')
+  })
+
+  it('ハンドラ例外（必須ペイロード欠落）は例外を投げず、診断付きで拒否し状態を変えない', () => {
+    const w = newWorld()
+    const tx = newTx()
+    const bad = [
+      { type: 'MARRIAGE_REGISTER', commandId: 'e1', source: source('A-LEG-01', 3, 'e1') },
+      { type: 'PERSON_BIRTH', commandId: 'e2', source: source('B-002', 3, 'e2'), cohortYear: 1250, cohortGroupId: 'group-central-elite' },
+      { type: 'LEGAL_CASE_SET', commandId: 'e3', source: source('A-SUC-04', 4, 'e3') },
+    ] as unknown as DomainCommand[]
+    for (const c of bad) {
+      const o = outcome(c.source.sourceRuleId, c.source.phase, [c])
+      const r = run(w, o, tx)
+      expect(r.status).toBe('REJECTED')
+      expect(rejectionCodes(r)).toEqual(['HANDLER_EXCEPTION'])
+      expect(r.units[0]?.rejections[0]?.message).toContain(c.type)
+      expect(r.world).toBe(w)
+      expect(r.transaction).toBe(tx)
+    }
+  })
+
+  it('例外を起こした command を含むバッチは部分適用されない', () => {
+    const w = newWorld()
+    const bad = { type: 'MARRIAGE_REGISTER', commandId: 'e1', batchId: 'b', source: source('RULE-C-005', 1, 'e1') } as unknown as DomainCommand
+    const good = ledger(CASH, 'CREDIT', 100, 'ok', { batchId: 'b' })
+    const r = run(w, outcome('RULE-C-005', 1, [good, bad]))
+    expect(r.world).toBe(w)
+    expect(r.status).toBe('REJECTED')
+  })
+
+  it('正常系と WARNING のみの WorldState は引き続き受理される', () => {
+    const c = setup()
+    expect(run(c.world, outcome('B-002', 3, [birth(baby('person-new-1'))]), c.tx).status).toBe('APPLIED')
+    const w0 = newWorld()
+    const warnOnly = { ...w0, legal: { ...w0.legal, taxMandates: [] } }
+    expect(run(warnOnly, outcome('RULE-C-005', 1, [ledger(CASH, 'CREDIT', 1, 'x')])).status).toBe('APPLIED')
+  })
+})

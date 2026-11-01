@@ -1,7 +1,7 @@
 // 共通 reducer: evaluateRule が返した型付き DomainCommand を、安全かつ原子的に WorldState へ適用する。
 // 純粋関数: 入力の WorldState / Transaction を変更せず、新しい値を返す。EventLog は生成しない。
 import type { DomainCommand, Id, RuleOutcome, WorldState } from '../../contracts/index.ts'
-import { checkWorldIntegrity, hasErrors, validateWorldState } from '../../validation/index.ts'
+import { validateWorldState } from '../../validation/index.ts'
 import { checkCommandAuthority, checkOutcomeHeader } from './authority.ts'
 import { canonicalize, cloneData } from './canonical.ts'
 import { diffWorld } from './diff.ts'
@@ -163,7 +163,13 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
   for (const c of cmds) {
     const before = draft.world
     const handler = HANDLERS[c.type as Implemented] as Handler<DomainCommand>
-    const r = handler(draft, c)
+    let r: Rejection | null
+    try {
+      r = handler(draft, c)
+    } catch (e) {
+      // 不正な command によるハンドラ例外。入力 world / Transaction には触れず、診断付きで拒否する。
+      return { status: 'REJECTED', rejections: [withId(fail('HANDLER_EXCEPTION', `${c.type} の適用中に例外: ${e instanceof Error ? e.message : String(e)}`), c)] }
+    }
     if (r) return { status: 'REJECTED', rejections: [withId(r, c)] }
     const stateChanges = diffWorld(before, draft.world)
     if (stateChanges.length === 0) {
@@ -181,8 +187,10 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
   }
 
   // 5) 既存の WorldState バリデータ（整合性）。ERROR が 1 件でもあれば拒否する（入力は開始時に検証済み）。
-  const introduced = checkWorldIntegrity(draft.world).filter((d) => d.severity === 'ERROR')
-  if (hasErrors(introduced)) {
+  // 構造・列挙値・参照・不変条件のすべてを validateWorldState で検証する（checkWorldIntegrity だけでは見逃す）。
+  const after = validateWorldState(draft.world)
+  const introduced = after.diagnostics.filter((d) => d.severity === 'ERROR')
+  if (!after.ok) {
     return {
       status: 'REJECTED',
       rejections: [{ ...fail('INTEGRITY_VIOLATION', `適用すると WorldState の整合性が壊れます: ${introduced.map((d) => d.code).join(', ')}`), diagnostics: introduced }],
@@ -245,11 +253,25 @@ export function applyOutcome(world: WorldState, outcome: RuleOutcome, context: A
     return rejectAll([fail('INVALID_COMMAND', `command を複製できません（plain data のみ可）: ${String(e)}`)])
   }
 
+  const allUnits = groupUnits(commands)
+  // 同一 requestId の command は単一 batch に属さなければならない。複数 unit に跨る場合は先頭だけ適用せず全体を拒否する。
+  const unitsByRequest = new Map<Id, Set<number>>()
+  allUnits.forEach((u, i) => {
+    for (const c of u.commands) {
+      const rid = c?.source?.requestId
+      if (typeof rid === 'string') unitsByRequest.set(rid, (unitsByRequest.get(rid) ?? new Set()).add(i))
+    }
+  })
+  const split = [...unitsByRequest].filter(([, set]) => set.size > 1).map(([rid]) => rid)
+  if (split.length > 0) {
+    return rejectAll(split.map((rid) => fail('REQUEST_ID_CONFLICT', `requestId ${rid} の command が複数の batch（または無バッチ）に跨っています。同一 batchId にまとめてください`, [rid])))
+  }
+
   let current = world
   let tx = tx0
   const units: UnitResult[] = []
   const applied: AppliedCommand[] = []
-  for (const unit of groupUnits(commands)) {
+  for (const unit of allUnits) {
     const commandIds = unit.commands.map((c) => c.commandId)
     const base = unit.batchId !== undefined ? { batchId: unit.batchId, commandIds } : { commandIds }
     const r = processUnit(current, tx, outcome, unit)
