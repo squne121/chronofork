@@ -1,28 +1,131 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createExperimentalScenario } from '../../../src/scenario/experimental/index.ts'
+import { runTimeline } from '../../../src/simulation/engine/index.ts'
+import { createCalibrationEvaluators } from '../../../src/simulation/rules/c/index.ts'
+import { EXPERIMENTAL_TUNING } from '../../../src/simulation/tuning.ts'
+import type { TuningConfig } from '../../../src/simulation/tuning.ts'
 import App from '../../../src/ui/App.tsx'
-import { loadExperimentalSource } from '../../../src/ui/inspection-source.ts'
+import { runExperimentalTimeline } from '../../../src/ui/timeline-source.ts'
+import type { TimelineRun } from '../../../src/ui/timeline-source.ts'
+
+const BAD_TUNING: TuningConfig = { ...EXPERIMENTAL_TUNING, birthRatePermille: { value: -1, origin: 'PLACEHOLDER', note: '不正' } }
+function haltedRun(): TimelineRun {
+  const sc = createExperimentalScenario()
+  const result = runTimeline(sc.world, { seed: 3, evaluators: createCalibrationEvaluators(BAD_TUNING) })
+  return { inputs: { seed: 3, scenarioId: sc.id, rulesetVersion: 'bad', rngVersion: result.rngVersion, evaluatedRuleIds: ['RULE-C-004'] }, result, initialWorld: sc.world }
+}
+const setYear = (y: number) => fireEvent.change(screen.getByRole('slider'), { target: { value: String(y) } })
+const groupPop = (id: string) => {
+  fireEvent.click(screen.getByRole('tab', { name: '人口集団' }))
+  fireEvent.click(screen.getByTestId(`item-group-${id}`))
+  return within(screen.getByTestId('detail')).getByText('人口').nextElementSibling?.textContent
+}
 
 afterEach(cleanup)
 
 describe('App', () => {
-  it('experimental・未計算を明示し、架空の結果を表示しない', () => {
+  it('experimental・partial・正式な勝敗未成立・37件TODOを明示する', () => {
     render(<App />)
-    expect(screen.getByTestId('experimental-banner').textContent).toBe('experimental / 仮データ / 歴史計算未接続')
+    expect(screen.getByTestId('experimental-banner').textContent).toContain('試験計算')
     expect(screen.getByTestId('current-year').textContent).toContain('1250年')
-    expect(screen.getByTestId('goal-status').textContent).toContain('未計算')
-    expect(screen.getByTestId('chronicle-status').textContent).toContain('未接続')
+    expect(screen.getByTestId('goal-status').textContent).toContain('未成立')
+    expect(screen.getByTestId('autonomous-history').textContent).toContain('NOT_ESTABLISHED')
+    expect(screen.getByTestId('todo-rules').textContent).toContain('TODO 37件')
+    expect(screen.getByTestId('run-inputs').textContent).toMatch(/seed 1 .*experimental-0/)
     const text = document.body.textContent ?? ''
     expect(text).not.toMatch(/勝利|敗北|達成/)
     expect(text).not.toContain('参照不明')
   })
 
-  it('機能するふりをする介入・比較ボタンを置かない', () => {
+  it('介入・比較ボタンは無く、未実装を明示する', () => {
     render(<App />)
     const names = screen.getAllByRole('button').map((b) => b.textContent ?? '')
-    expect(names.some((n) => /介入|比較|実行|適用|進める/.test(n))).toBe(false)
-    expect((screen.getByRole('slider') as HTMLInputElement).disabled).toBe(true)
+    expect(names.some((n) => /介入|比較|適用|進める|保存/.test(n))).toBe(false)
+    expect(screen.getByTestId('reserved-areas').textContent).toContain('未接続: 介入機能')
+  })
+
+  it('年スライダーで 1250→1251→1350 を選べ、人口が実際に変化する', () => {
+    render(<App />)
+    const slider = screen.getByRole('slider') as HTMLInputElement
+    expect(slider.disabled).toBe(false)
+    expect(slider.max).toBe('1350')
+    const g = 'group-west-commons'
+    const p1250 = groupPop(g)
+    setYear(1251)
+    expect(screen.getByTestId('current-year').textContent).toContain('1251年')
+    const p1251 = groupPop(g)
+    setYear(1350)
+    const p1350 = groupPop(g)
+    expect(p1250).not.toBe(p1251)
+    expect(p1251).not.toBe(p1350)
+    expect(screen.getByTestId('chronicle-status').textContent).toContain('該当する実計算済みの事件はありません')
+  })
+
+  it('EventLog の人口差分が次年初の人口と一致し、Event→Trace→Event を辿れる', () => {
+    const run = runExperimentalTimeline(1)
+    render(<App run={run} />)
+    const e = run.result.eventLog.find((x) => x.year === 1250 && x.involvedRefs.some((r) => 'id' in r && r.id === 'group-west-commons'))!
+    const pc = e.stateChanges.find((c) => c.path.endsWith('population'))!
+    fireEvent.click(screen.getByTestId(`event-${e.eventId}`))
+    const detail = screen.getByTestId('event-detail')
+    expect(detail.textContent).toContain(String(pc.before))
+    expect(detail.textContent).toContain(String(pc.after))
+    expect(screen.getByTestId('event-backlink').textContent).toContain('一致（')
+    const w1251 = run.result.snapshots[1]!.groups.find((x) => x.groupId === 'group-west-commons')!
+    expect(w1251.population).toBe(pc.after)
+    fireEvent.click(within(detail).getByRole('button', { name: /判断根拠を開く/ }))
+    const trace = screen.getByTestId('trace-detail')
+    expect(trace.textContent).toContain('RULE-C-004')
+    expect(trace.textContent).toContain('CALIBRATION_ONLY')
+    expect(screen.getByTestId('trace-forwardlink').textContent).toContain('一致（')
+    fireEvent.click(within(trace).getByRole('button', { name: /Event を開く/ }))
+    expect(screen.getByTestId(`event-${e.eventId}`).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('年を変えると古い Event/Trace 選択を解除し、対象フィルタで絞れる', () => {
+    const run = runExperimentalTimeline(1)
+    render(<App run={run} />)
+    const first = run.result.eventLog[0]!
+    fireEvent.click(screen.getByTestId(`event-${first.eventId}`))
+    fireEvent.click(screen.getByRole('button', { name: /判断根拠を開く/ }))
+    setYear(1251)
+    expect(screen.getByTestId('event-detail').textContent).toContain('事件を選ぶと')
+    expect(screen.getByTestId('trace-detail').textContent).toContain('Event の「判断根拠を開く」')
+    const items = () => within(screen.getByTestId('chronicle-list')).getAllByRole('button').length
+    const all = items()
+    fireEvent.change(screen.getByTestId('event-target'), { target: { value: 'GROUP:group-west-commons' } })
+    expect(items()).toBe(1)
+    expect(all).toBeGreaterThan(1)
+    fireEvent.change(screen.getByTestId('event-scope'), { target: { value: 'all' } })
+    expect(items()).toBe(100)
+  })
+
+  it('同 seed の再計算は同一結果、別 seed は seed 表示が変わる', () => {
+    expect(JSON.stringify(runExperimentalTimeline(5).result)).toBe(JSON.stringify(runExperimentalTimeline(5).result))
+    render(<App />)
+    fireEvent.change(screen.getByTestId('seed-input'), { target: { value: '9' } })
+    fireEvent.click(screen.getByTestId('rerun'))
+    expect(screen.getByTestId('run-inputs').textContent).toContain('seed 9')
+    fireEvent.change(screen.getByTestId('seed-input'), { target: { value: 'abc' } })
+    expect((screen.getByTestId('rerun') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('停止した計算は HALTED と原因を示し、敗北と表示せず、未計算年を選べない', () => {
+    const run = haltedRun()
+    expect(run.result.status).toBe('HALTED')
+    render(<App run={run} />)
+    expect(screen.getByTestId('run-status').textContent).toContain('HALTED')
+    const halt = screen.getByTestId('halt-diagnostic')
+    expect(halt.textContent).toContain('ゲーム内の敗北ではなく')
+    expect(halt.textContent).toContain(run.result.halt!.code)
+    expect(document.body.textContent).not.toMatch(/勝利|敗北して|達成/)
+    const slider = screen.getByRole('slider') as HTMLInputElement
+    expect(slider.disabled).toBe(true)
+    setYear(1350)
+    expect(screen.getByTestId('current-year').textContent).toContain('1250年')
+    expect(screen.getByTestId('year-note').textContent).toContain('未計算のため選べません')
   })
 
   it('6地域を表示し、選択すると詳細が切り替わる', () => {
@@ -98,31 +201,5 @@ describe('App', () => {
     const h = within(screen.getByTestId('detail')).getByRole('heading', { name: /試験人物04/ })
     expect(h).toBeTruthy()
     expect(screen.getByTestId('detail').textContent).not.toContain('を選ぶと詳細を表示します')
-  })
-
-  it('将来接続: 与えられた EventLog / Goal は読み取り表示される', () => {
-    const base = loadExperimentalSource()
-    render(
-      <App
-        source={{
-          ...base,
-          goal: { status: 'NOT_EVALUABLE', year: 1250 },
-          events: [
-            {
-              eventId: 'evt-test',
-              semanticEventKey: 'k',
-              year: 1250,
-              phase: 1,
-              eventType: 'TEST_EVENT',
-              involvedRefs: [],
-              stateChanges: [],
-              sourceTraceIds: [],
-            },
-          ],
-        }}
-      />,
-    )
-    expect(screen.getByTestId('goal-status').textContent).toBe('1250年は判定対象外')
-    expect(screen.getByTestId('chronicle-list').textContent).toContain('TEST_EVENT')
   })
 })

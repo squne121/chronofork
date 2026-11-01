@@ -11,20 +11,77 @@ const REGIONS = [
 
 test.use({ viewport: { width: 1280, height: 800 } })
 
-test('experimental・未計算を明示し、架空の結果を表示しない', async ({ page }) => {
+test('experimental・partial・正式な勝敗未成立・37件TODOを明示する', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Project Chronofork', level: 1 })).toBeVisible()
-  await expect(page.getByTestId('experimental-banner')).toHaveText('experimental / 仮データ / 歴史計算未接続')
+  await expect(page.getByTestId('experimental-banner')).toContainText('試験計算')
   await expect(page.getByTestId('current-year')).toContainText('1250年')
-  await expect(page.getByTestId('goal-status')).toContainText('未計算')
-  await expect(page.getByTestId('chronicle-status')).toContainText('未接続')
+  await expect(page.getByTestId('goal-status')).toContainText('未成立')
+  await expect(page.getByTestId('autonomous-history')).toContainText('NOT_ESTABLISHED')
+  await expect(page.getByTestId('todo-rules')).toContainText('TODO 37件')
+  await expect(page.getByTestId('run-inputs')).toContainText('seed 1')
   await expect(page.getByTestId('reserved-areas')).toContainText('未接続: 介入機能')
   await expect(page.getByTestId('reserved-areas')).toContainText('未接続: 比較機能')
   const body = page.locator('body')
-  await expect(body).not.toContainText(/勝利|敗北|達成|1350年の結果/)
+  await expect(body).not.toContainText(/勝利|敗北|達成/)
   await expect(body).not.toContainText('参照不明')
-  await expect(page.getByRole('slider')).toBeDisabled()
-  await expect(page.getByRole('button', { name: /介入|比較|実行|適用/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /介入|比較|適用|保存/ })).toHaveCount(0)
+})
+
+test('年スライダーで 1250→1251→1350 を選び、実計算の人口が変化する', async ({ page }) => {
+  await page.goto('/')
+  const slider = page.getByRole('slider')
+  await expect(slider).toBeEnabled()
+  await expect(slider).toHaveAttribute('max', '1350')
+  const pop = async () => {
+    await page.getByRole('tab', { name: '人口集団' }).click()
+    await page.getByTestId('item-group-group-west-commons').click()
+    return (await page.getByTestId('detail').locator('dt:text-is("人口") + dd').textContent()) ?? ''
+  }
+  const p1250 = await pop()
+  await slider.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByTestId('current-year')).toContainText('1251年')
+  const p1251 = await pop()
+  await slider.focus()
+  await page.keyboard.press('End')
+  await expect(page.getByTestId('current-year')).toContainText('1350年')
+  const p1350 = await pop()
+  expect(p1250).not.toBe(p1251)
+  expect(p1251).not.toBe(p1350)
+  expect(Number(p1250.replace(/,/g, ''))).toBeLessThan(Number(p1251.replace(/,/g, '')))
+  await expect(page.getByTestId('chronicle-status')).toContainText('事件はありません')
+  await expect(page.getByTestId('autonomous-history')).toContainText('NOT_ESTABLISHED')
+})
+
+test('EventLog の人口差分から Trace を開き、Event へ戻れる', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('event-target').selectOption('GROUP:group-west-commons')
+  const item = page.getByTestId('chronicle-list').getByRole('button')
+  await expect(item).toHaveCount(1)
+  await expect(item).toContainText('人口')
+  const label = (await item.textContent()) ?? ''
+  const [, before, after] = /人口 ([\d,]+)→([\d,]+)/.exec(label) ?? []
+  expect(before).toBeTruthy()
+  expect(after).not.toBe(before)
+  await item.click()
+  const ev = page.getByTestId('event-detail')
+  await expect(ev).toContainText(before.replace(/,/g, ''))
+  await expect(ev).toContainText(after.replace(/,/g, ''))
+  await expect(page.getByTestId('event-backlink')).toContainText('一致（')
+  await ev.getByRole('button', { name: /判断根拠を開く/ }).click()
+  const tr = page.getByTestId('trace-detail')
+  await expect(tr).toContainText('RULE-C-004')
+  await expect(tr).toContainText('CALIBRATION_ONLY')
+  await expect(page.getByTestId('trace-forwardlink')).toContainText('一致（')
+  await tr.getByRole('button', { name: /Event を開く/ }).click()
+  await expect(item).toHaveAttribute('aria-pressed', 'true')
+  // 翌年初の人口は Event の変更後と一致する
+  await page.getByRole('slider').focus()
+  await page.keyboard.press('ArrowRight')
+  await page.getByRole('tab', { name: '人口集団' }).click()
+  await page.getByTestId('item-group-group-west-commons').click()
+  await expect(page.getByTestId('detail').locator('dt:text-is("人口") + dd')).toHaveText(after)
 })
 
 test('6地域が表示され、選択すると詳細が切り替わる', async ({ page }) => {
