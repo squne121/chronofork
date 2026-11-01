@@ -18,6 +18,12 @@ export default function App({ source: injected }: Readonly<{ source?: Inspection
     setTab(s.kind)
     setSelection(s)
   }
+  // タブ操作（クリック/キーボード）: カテゴリが変わるときは古い選択を解除する
+  const changeTab = (kind: EntityKind) => {
+    if (kind === tab) return
+    setTab(kind)
+    setSelection(undefined)
+  }
   const events = source.events
   const traces = source.traces
 
@@ -88,7 +94,7 @@ export default function App({ source: injected }: Readonly<{ source?: Inspection
         </section>
 
         <div className="right-col">
-          <Inspector source={source} index={index} tab={tab} selection={selection} onTab={setTab} onSelect={select} />
+          <Inspector source={source} index={index} tab={tab} selection={selection} onTab={changeTab} onSelect={select} />
 
           <section aria-labelledby="reserved-heading" className="panel">
             <h2 id="reserved-heading">介入・比較・判断根拠</h2>

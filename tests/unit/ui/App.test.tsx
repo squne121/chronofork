@@ -68,6 +68,38 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: '称号' }).getAttribute('aria-selected')).toBe('true')
   })
 
+  it('タブ切替（クリック・キーボード）で古い選択を解除し、未選択状態を表示する', () => {
+    render(<App />)
+    fireEvent.click(screen.getByTestId('region-node-region-eldia-central'))
+    expect(within(screen.getByTestId('detail')).getByRole('heading', { name: 'エルディア中央' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: '人物' }))
+    expect(screen.getByRole('tab', { name: '人物' }).getAttribute('aria-selected')).toBe('true')
+    expect(within(screen.getByTestId('detail')).queryByRole('heading', { name: 'エルディア中央' })).toBeNull()
+    expect(screen.getByTestId('detail').textContent).toContain('を選ぶと詳細を表示します')
+    expect(screen.getByTestId('region-node-region-eldia-central').getAttribute('aria-pressed')).toBe('false')
+
+    fireEvent.click(screen.getByTestId('region-node-region-eldia-west'))
+    const region = screen.getByRole('tab', { name: '地域' })
+    fireEvent.keyDown(region, { key: 'ArrowRight' })
+    expect(screen.getByTestId('detail').textContent).not.toContain('エルディア西部')
+    expect(screen.getByTestId('detail').textContent).toContain('を選ぶと詳細を表示します')
+    fireEvent.click(screen.getAllByTestId(/^item-group-/)[0])
+    expect(screen.getByTestId('detail').textContent).not.toContain('を選ぶと詳細を表示します')
+    fireEvent.keyDown(screen.getByRole('tab', { name: '人口集団' }), { key: 'Home' })
+    expect(screen.getByTestId('detail').textContent).toContain('を選ぶと詳細を表示します')
+  })
+
+  it('詳細リンク移動では選択を維持してカテゴリを変更する', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('tab', { name: '称号' }))
+    fireEvent.click(screen.getByTestId('item-title-title-exp-west'))
+    fireEvent.click(within(screen.getByTestId('detail')).getByRole('button', { name: /試験人物04/ }))
+    expect(screen.getByRole('tab', { name: '人物' }).getAttribute('aria-selected')).toBe('true')
+    const h = within(screen.getByTestId('detail')).getByRole('heading', { name: /試験人物04/ })
+    expect(h).toBeTruthy()
+    expect(screen.getByTestId('detail').textContent).not.toContain('を選ぶと詳細を表示します')
+  })
+
   it('将来接続: 与えられた EventLog / Goal は読み取り表示される', () => {
     const base = loadExperimentalSource()
     render(

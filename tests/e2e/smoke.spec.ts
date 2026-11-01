@@ -66,3 +66,36 @@ test('人口集団・人物・称号を選択し、リンクで詳細を切り�
   await expect(page.getByTestId('detail').getByRole('heading', { name: /試験人物01/ })).toBeVisible()
   await expect(page.getByTestId('detail')).toContainText('保有称号')
 })
+
+test('タブ操作は選択を解除し、詳細リンク移動は選択を維持する', async ({ page }) => {
+  await page.goto('/')
+  const detail = page.getByTestId('detail')
+  const empty = '地域・集団・人物・称号を選ぶと詳細を表示します。'
+
+  // クリックで切替
+  await page.getByTestId('region-node-region-eldia-central').click()
+  await expect(detail.getByRole('heading', { name: 'エルディア中央', level: 3 })).toBeVisible()
+  await page.getByRole('tab', { name: '人物' }).click()
+  await expect(page.getByRole('tab', { name: '人物' })).toHaveAttribute('aria-selected', 'true')
+  await expect(detail).toContainText(empty)
+  await expect(detail.getByRole('heading', { name: 'エルディア中央' })).toHaveCount(0)
+  await expect(page.getByTestId('region-node-region-eldia-central')).toHaveAttribute('aria-pressed', 'false')
+
+  // キーボードで切替
+  await page.getByRole('tab', { name: '地域' }).click()
+  await page.getByTestId('region-node-region-eldia-west').click()
+  await expect(detail.getByRole('heading', { name: 'エルディア西部', level: 3 })).toBeVisible()
+  await page.getByRole('tab', { name: '地域' }).focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('tab', { name: '人口集団' })).toHaveAttribute('aria-selected', 'true')
+  await expect(detail).toContainText(empty)
+  await expect(detail.getByRole('heading', { name: 'エルディア西部' })).toHaveCount(0)
+
+  // 詳細リンクでは選択を維持
+  await page.getByRole('tab', { name: '称号' }).click()
+  await page.getByTestId('item-title-title-exp-crown-eldia').click()
+  await detail.getByRole('button', { name: /試験人物01/ }).click()
+  await expect(page.getByRole('tab', { name: '人物' })).toHaveAttribute('aria-selected', 'true')
+  await expect(detail.getByRole('heading', { name: /試験人物01/ })).toBeVisible()
+  await expect(detail).not.toContainText(empty)
+})
