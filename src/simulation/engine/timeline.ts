@@ -68,7 +68,7 @@ export function runTimeline(initial: WorldState, options: TimelineOptions): Time
       code: valid.ok ? 'YEAR_OUT_OF_RANGE' : 'INVALID_INPUT_WORLD',
       year: initial.year, phase: null, ruleId: null,
       message: valid.ok ? `開始年は ${START_YEAR}〜${GOAL_YEAR} です` : '初期 WorldState が不正です',
-      rejections: [], diagnostics: valid.diagnostics.filter((d) => d.severity === 'ERROR'), traces: [],
+      rejections: [], diagnostics: valid.diagnostics.filter((d) => d.severity === 'ERROR'), evaluatorDiagnostics: [], traces: [],
     }, null)
   }
 
@@ -87,7 +87,7 @@ export function runTimeline(initial: WorldState, options: TimelineOptions): Time
     const dup = ids.find((id) => seenIds.has(id))
     if (dup !== undefined) {
       return finish(snapshots, eventLog, decisionTraces, {
-        code: 'DUPLICATE_ID', year: r.year, phase: null, ruleId: null, message: `年を跨いで ID が重複しています: ${dup}`, rejections: [], diagnostics: [], traces: [],
+        code: 'DUPLICATE_ID', year: r.year, phase: null, ruleId: null, message: `年を跨いで ID が重複しています: ${dup}`, rejections: [], diagnostics: [], evaluatorDiagnostics: [], traces: [],
       }, null)
     }
     ids.forEach((id) => seenIds.add(id))

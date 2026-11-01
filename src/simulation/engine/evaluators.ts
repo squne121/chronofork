@@ -22,3 +22,19 @@ export type RuleEvaluator = (world: WorldState, context: EvaluationContext) => R
 export type EvaluatorMap = Readonly<Partial<Record<RuleId, RuleEvaluator>>>
 
 export const DEFAULT_EVALUATORS: EvaluatorMap = Object.freeze({})
+
+/** 評価器が返せる診断（ルール固有コードをそのまま運ぶ。ランナーは意味を解釈しない）。 */
+export type EvaluatorDiagnostic = Readonly<{ code: string; message: string; groupId?: Id }>
+
+/**
+ * 評価器が「評価不能」を明示して年次進行を止めるための例外。空の Outcome を返すと reducer が NO_OP として
+ * 通過させ、黙って翌年へ進んでしまうため、評価不能は必ずこれで表現する（runYear が EVALUATION_FAILED で停止）。
+ */
+export class EvaluationFailure extends Error {
+  readonly diagnostics: readonly EvaluatorDiagnostic[]
+  constructor(message: string, diagnostics: readonly EvaluatorDiagnostic[]) {
+    super(message)
+    this.name = 'EvaluationFailure'
+    this.diagnostics = diagnostics
+  }
+}

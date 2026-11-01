@@ -96,8 +96,8 @@ export const cohortRequestId = (year: Year, groupId: Id): Id =>
 export const cohortCommandId = (year: Year, groupId: Id): Id =>
   `cmd:${year}:${POPULATION_COHORT_RULE_ID}:${groupId}:${POPULATION_COHORT_CAUSE}`
 /**
- * Source.sourceTraceId は必須項目のため決定的に埋めるが、DecisionTrace の traceId と
- * 結合された値ではない（Trace/EventLog の ID 規約は #15 が確立する。それまで接続を推測しない）。
+ * 単体評価器 evaluatePopulationCohorts 用の仮 sourceTraceId。DecisionTrace の traceId とは結合されない。
+ * 年次ランナーへの接続は population-cohort-adapter.ts が EvaluationContext.traceId(i) へ差し替える。
  */
 export const cohortProvisionalTraceId = (year: Year, groupId: Id): Id =>
   `provisional-trace:${year}:${POPULATION_COHORT_RULE_ID}:${groupId}:${POPULATION_COHORT_CAUSE}`
