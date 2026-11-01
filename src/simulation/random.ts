@@ -5,9 +5,10 @@
  * 可変状態・Math.random・Date.now・Registry には依存しない。
  * RuleID が Registry の 37 件に存在するかの検証は呼出側の責務。
  *
- * rngVersion `chronofork-rng-1`:
+ * rngVersion `chronofork-rng-2`:
  *   message = field(DOMAIN) ‖ u64be(seed) ‖ u8(stream) ‖ i32be(year)
- *             ‖ field(phase) ‖ field(ruleId) ‖ opt(actorId) ‖ opt(targetId) ‖ opt(eventKey)
+ *             ‖ u8(phase) ‖ field(ruleId) ‖ opt(actorId) ‖ opt(targetId) ‖ opt(eventKey)
+ *   phase = 契約 §2 の Phase（1〜7 の整数）。1 バイトの固定長で符号化する。
  *   field(s) = 0x01 ‖ u32be(UTF-8 バイト長) ‖ UTF-8 バイト列
  *   opt(null) = 0x00 / opt(s) = field(s)
  *   digest = SHA-256(message)。先頭 8 バイトの上位 53 bit を 2^53 で割った値を返す。
@@ -15,16 +16,19 @@
  * stream が異なれば値は独立。branchId・配列走査順・状態スコアは鍵に含めない。
  */
 
-export const rngVersion = 'chronofork-rng-1'
+export const rngVersion = 'chronofork-rng-2'
 
 export type RandomStream = 'EXOGENOUS' | 'ENDOGENOUS'
+
+/** 共通契約 §2 の Phase。7 は確定検証のみ。 */
+export type Phase = 1 | 2 | 3 | 4 | 5 | 6 | 7
 
 export interface RandomKey {
   readonly stream: RandomStream
   /** 整数（int32 範囲）。 */
   readonly year: number
-  /** 空でない文字列。 */
-  readonly phase: string
+  /** 共通契約 §2 の Phase（1〜7 の整数）。 */
+  readonly phase: Phase
   /** 空でない文字列。Registry 照合はしない。 */
   readonly ruleId: string
   /** 空でない文字列、または欠損を表す null。 */
@@ -47,6 +51,13 @@ function requireString(name: string, value: unknown): string {
   }
   if (LONE_SURROGATE.test(value)) {
     throw new RangeError(`${name} に不正なサロゲートが含まれる`)
+  }
+  return value
+}
+
+function requirePhase(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 7) {
+    throw new RangeError('phase は 1〜7 の整数でなければならない')
   }
   return value
 }
@@ -81,7 +92,7 @@ export function encodeRandomInput(seed: number, key: RandomKey): Uint8Array {
     ...u32(seed >>> 0),
     STREAM_CODE[key.stream],
     ...u32(key.year >>> 0),
-    ...field(encoder.encode(requireString('phase', key.phase))),
+    requirePhase(key.phase),
     ...field(encoder.encode(requireString('ruleId', key.ruleId))),
     ...optional('actorId', key.actorId),
     ...optional('targetId', key.targetId),

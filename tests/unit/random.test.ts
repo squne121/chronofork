@@ -13,7 +13,7 @@ const text = (s: string) => new TextEncoder().encode(s)
 const base: RandomKey = {
   stream: 'EXOGENOUS',
   year: 1300,
-  phase: 'PRODUCTION',
+  phase: 4,
   ruleId: 'RULE-C-002',
   actorId: 'region-1',
   targetId: null,
@@ -22,7 +22,7 @@ const base: RandomKey = {
 
 describe('rngVersion', () => {
   it('固定値', () => {
-    expect(rngVersion).toBe('chronofork-rng-1')
+    expect(rngVersion).toBe('chronofork-rng-2')
   })
 })
 
@@ -40,23 +40,23 @@ describe('SHA-256 実装（FIPS 180-4 / NIST の参照値）', () => {
   })
 })
 
-describe('既知ベクトル（rngVersion chronofork-rng-1）', () => {
+describe('既知ベクトル（rngVersion chronofork-rng-2）', () => {
   // 期待値は実装と独立に Python hashlib.sha256 で、同じ仕様（src/simulation/random.ts
   // 冒頭の符号化）から算出した: value = (digest 先頭 8 バイトの u64 >> 11) / 2**53。
   const vectors: [string, number, RandomKey, number][] = [
-    ['外生', 20261028, base, 0.3956778567886915],
-    ['内生（stream 違い）', 20261028, { ...base, stream: 'ENDOGENOUS' }, 0.5576488717920662],
+    ['外生', 20261028, base, 0.7916901570454645],
+    ['内生（stream 違い）', 20261028, { ...base, stream: 'ENDOGENOUS' }, 0.7423116493712034],
     [
       '最小値・全 null',
       0,
-      { stream: 'EXOGENOUS', year: 0, phase: 'p', ruleId: 'r', actorId: null, targetId: null, eventKey: null },
-      0.3067029656712026,
+      { stream: 'EXOGENOUS', year: 0, phase: 1, ruleId: 'r', actorId: null, targetId: null, eventKey: null },
+      0.4340469499343652,
     ],
     [
       '最大 seed・非 ASCII',
       Number.MAX_SAFE_INTEGER,
-      { stream: 'ENDOGENOUS', year: 1349, phase: 'ⅳ', ruleId: 'B-001', actorId: '人物', targetId: 't', eventKey: 'e😀' },
-      0.7753758601053544,
+      { stream: 'ENDOGENOUS', year: 1349, phase: 7, ruleId: 'B-001', actorId: '人物', targetId: 't', eventKey: 'e😀' },
+      0.9498080712820781,
     ],
   ]
   it.each(vectors)('%s', (_n, seed, key, expected) => {
@@ -93,7 +93,7 @@ describe('決定性', () => {
   it('プロパティ列挙順やキー外の追加プロパティに影響されない', () => {
     const reordered = {
       eventKey: 'weather', targetId: null, actorId: 'region-1', ruleId: 'RULE-C-002',
-      phase: 'PRODUCTION', year: 1300, stream: 'EXOGENOUS',
+      phase: 4, year: 1300, stream: 'EXOGENOUS',
       branchId: 'A1', score: 0.9,
     } as RandomKey
     expect(drawRandom(20261028, reordered)).toBe(drawRandom(20261028, base))
@@ -107,7 +107,7 @@ describe('符号化', () => {
       [2, base],
       [1, { ...base, stream: 'ENDOGENOUS' }],
       [1, { ...base, year: 1301 }],
-      [1, { ...base, phase: 'TAX' }],
+      [1, { ...base, phase: 5 }],
       [1, { ...base, ruleId: 'RULE-C-003' }],
       [1, { ...base, actorId: 'region-2' }],
       [1, { ...base, targetId: 'x' }],
@@ -126,16 +126,16 @@ describe('符号化', () => {
     expect(encodeRandomInput(1, k('ab', 'c'))).not.toEqual(encodeRandomInput(1, k('a', 'bc')))
   })
 
-  it('バイト列レイアウト（長さ接頭辞・stream・null タグ）', () => {
+  it('バイト列レイアウト（長さ接頭辞・stream・1 バイト phase・null タグ）', () => {
     const bytes = encodeRandomInput(0x0102, {
-      stream: 'ENDOGENOUS', year: 2, phase: 'P', ruleId: 'R', actorId: null, targetId: 'T', eventKey: null,
+      stream: 'ENDOGENOUS', year: 2, phase: 3, ruleId: 'R', actorId: null, targetId: 'T', eventKey: null,
     })
     const expected = [
       1, 0, 0, 0, 16, ...text(rngVersion),
       0, 0, 0, 0, 0, 0, 1, 2,
       1,
       0, 0, 0, 2,
-      1, 0, 0, 0, 1, 0x50,
+      3,
       1, 0, 0, 0, 1, 0x52,
       0,
       1, 0, 0, 0, 1, 0x54,
@@ -176,11 +176,24 @@ describe('値域と不正入力', () => {
     expect(drawRandom(1, { ...base, year: -1 })).not.toBe(drawRandom(1, { ...base, year: 1 }))
   })
 
+  it.each([0, 8, -1, 1.5, NaN, Infinity, '4', '', null, undefined, 4n, {}])(
+    '不正 phase %s',
+    (phase) => {
+      expect(() => drawRandom(1, { ...base, phase: phase as never })).toThrow(RangeError)
+      expect(() => encodeRandomInput(1, { ...base, phase: phase as never })).toThrow(RangeError)
+    },
+  )
+
+  it.each([1, 2, 3, 4, 5, 6, 7] as const)('有効 phase %s は互いに異なる値', (phase) => {
+    const values = new Set([1, 2, 3, 4, 5, 6, 7].map((p) => drawRandom(1, { ...base, phase: p as never })))
+    expect(values.size).toBe(7)
+    expect(drawRandom(1, { ...base, phase })).toBeGreaterThanOrEqual(0)
+  })
+
   it('不正 stream・空文字列・undefined・不正サロゲートを拒否', () => {
     expect(() => drawRandom(1, { ...base, stream: 'X' as never })).toThrow(RangeError)
     expect(() => drawRandom(1, { ...base, stream: 'toString' as never })).toThrow(RangeError)
-    expect(() => drawRandom(1, { ...base, phase: '' })).toThrow(RangeError)
-    expect(() => drawRandom(1, { ...base, ruleId: '' })).toThrow(RangeError)
+        expect(() => drawRandom(1, { ...base, ruleId: '' })).toThrow(RangeError)
     expect(() => drawRandom(1, { ...base, actorId: '' })).toThrow(RangeError)
     expect(() => drawRandom(1, { ...base, targetId: undefined as never })).toThrow(RangeError)
     expect(() => drawRandom(1, { ...base, eventKey: '\uD800' })).toThrow(RangeError)
