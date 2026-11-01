@@ -109,6 +109,12 @@ const REJECTED: readonly Case[] = [
   ['繰延効果の RuleID が未登録', (w) => {
     w.deferred.push({ deferredId: 'd1', source: { requestId: 'r', year: 1250, phase: 3, sourceRuleId: 'ENGINE-INIT' as 'B-001', sourceTraceId: 't' }, effectiveFromYear: 1251, payload: { kind: 'SUPPORT_SIGNAL', groupId: 'group-west-elite', houseId: 'house-vargas', signal: 1, causeEventId: 'e' } })
   }, 'UNKNOWN_RULE_ID'],
+  ['繰延効果が +2 年以降', (w) => {
+    w.deferred.push({ deferredId: 'd2', source: { requestId: 'r', year: 1250, phase: 3, sourceRuleId: 'B-001', sourceTraceId: 't' }, effectiveFromYear: 1252, payload: { kind: 'SUPPORT_SIGNAL', groupId: 'group-west-elite', houseId: 'house-vargas', signal: 1, causeEventId: 'e' } })
+  }, 'INVALID_PERIOD'],
+  ['繰延効果が同年施行', (w) => {
+    w.deferred.push({ deferredId: 'd3', source: { requestId: 'r', year: 1250, phase: 3, sourceRuleId: 'B-001', sourceTraceId: 't' }, effectiveFromYear: 1250, payload: { kind: 'SUPPORT_SIGNAL', groupId: 'group-west-elite', houseId: 'house-vargas', signal: 1, causeEventId: 'e' } })
+  }, 'INVALID_PERIOD'],
   ['隣接が非対称', (w) => { w.regions[4]!.adjacentRegionIds = [] }, 'ADJACENCY_ASYMMETRIC'],
   ['年初状態の範囲外', (w) => { w.year = 1400 }, 'OUT_OF_RANGE'],
 ]

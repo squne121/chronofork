@@ -125,7 +125,9 @@ export const COMMAND_WRITE_OWNER: Readonly<Record<CommandType, WriteOwner>> = {
   TITLE_RECOGNITION_SET: 'A_LEGAL',
   LEGAL_CASE_SET: 'A_LEGAL',
   CONTROL_MANDATE_SET: 'A_LEGAL',
-  TAX_MANDATE_SET: 'RESOURCE_LEDGER_REDUCER', // A 権原 + D 支配事実 + C 計算 → TaxCollectionMandate
+  // 徴税権の法的確定は A（権原）＋D（支配事実）。ResourceLedger は確定済み mandate を参照して
+  // 現金取引（RESOURCE_TRANSACTION）を行うのみで、mandate 自体の書込 owner ではない（契約 §2.1/§5）。
+  TAX_MANDATE_SET: 'A_LEGAL',
   PERSON_BIRTH: 'B_PERSON',
   PERSON_DEATH: 'COMMON_DEATH_REDUCER',
   POPULATION_COHORT: 'COMMON_POPULATION_REDUCER',
@@ -154,13 +156,17 @@ export type RequestPayload =
   | Readonly<{ kind: 'FORCE_COMMIT_REQUEST'; accountId: Id; amount: number }>
   | Readonly<{ kind: 'CASUALTY_NOTICE'; casualtyId: Id; groupId: Id; count: number }>
 
-export type CrossDomainRequest = Readonly<{
+type RequestBase = Readonly<{
   source: Source
   targetDomain: Domain
-  kind: RequestKind
-  payload: RequestPayload
   requiredResponseYear: Year
 }>
+
+/** kind と payload.kind は型レベルで一致する（不一致の組合せはコンパイル時に拒否）。 */
+export type CrossDomainRequest = {
+  [K in RequestKind]: RequestBase &
+    Readonly<{ kind: K; payload: Extract<RequestPayload, { kind: K }> }>
+}[RequestKind]
 
 export type ResponsePayload =
   | Readonly<{ kind: 'LEGAL_DYNASTY'; legalDynasty: LegalDynastyState }>

@@ -12,6 +12,7 @@ import type {
   LegalCase,
   LegalDynastyState,
   Marriage,
+  MarriageContract,
   Person,
   PopulationGroup,
   Region,
@@ -316,9 +317,27 @@ function dynasty(d: Sink, v: unknown, p: string): Dynasty {
   return { dynastyId: str(d, o, 'dynastyId', p), name: str(d, o, 'name', p) }
 }
 
-function marriage(d: Sink, v: unknown, p: string): Marriage {
-  const o = obj(d, v, p, ['marriageId', 'personIds', 'registeredYear', 'status'])
+function marriageContract(d: Sink, v: unknown, p: string): MarriageContract {
+  const o = obj(d, v, p, ['contractId', 'evidenceId', 'clauses'])
   return {
+    contractId: str(d, o, 'contractId', p),
+    evidenceId: str(d, o, 'evidenceId', p),
+    clauses: arr(d, o, 'clauses', p, (cv, cp) => {
+      const co = obj(d, cv, cp, ['clauseId', 'kind', 'dynastyId'])
+      return {
+        clauseId: str(d, co, 'clauseId', cp),
+        kind: oneOf(d, co, 'kind', cp, ['CHILD_LEGAL_DYNASTY'], 'CHILD_LEGAL_DYNASTY'),
+        dynastyId: str(d, co, 'dynastyId', cp),
+      }
+    }),
+  }
+}
+
+function marriage(d: Sink, v: unknown, p: string): Marriage {
+  const o = obj(d, v, p, ['marriageId', 'personIds', 'registeredYear', 'status', 'contract'])
+  const contract = o['contract'] === undefined ? undefined : marriageContract(d, o['contract'], `${p}.contract`)
+  return {
+    ...(contract === undefined ? {} : { contract }),
     marriageId: str(d, o, 'marriageId', p),
     personIds: pair(d, o, 'personIds', p),
     registeredYear: num(d, o, 'registeredYear', p),

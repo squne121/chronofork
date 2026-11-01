@@ -221,6 +221,20 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
     ref('PERSON', a, `${p}.personIds[0]`, o)
     ref('PERSON', b, `${p}.personIds[1]`, o)
     intYear(m.registeredYear, `${p}.registeredYear`, o)
+    if (m.contract !== undefined) {
+      const clauseIds = new Set<Id>()
+      const attributed = new Set<Id>()
+      m.contract.clauses.forEach((cl, j) => {
+        const cp = `${p}.contract.clauses[${j}]`
+        if (clauseIds.has(cl.clauseId)) add('DUPLICATE_ID', cp, `条項 ID が重複しています: ${cl.clauseId}`, o)
+        clauseIds.add(cl.clauseId)
+        ref('DYNASTY', cl.dynastyId, `${cp}.dynastyId`, o)
+        attributed.add(cl.dynastyId)
+      })
+      if (attributed.size > 1) {
+        add('MARRIAGE_CLAUSE_CONFLICT', `${p}.contract.clauses`, '子の法的王朝帰属を指定する条項が矛盾しています（優先順位は自動決定しません）', o, [...attributed])
+      }
+    }
   })
   world.legal.cases.forEach((c, i) => {
     const p = `$.legal.cases[${i}]`
@@ -269,6 +283,8 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
   })
 
   // --- 資源台帳 ---
+  const poolByGroup = new Map<Id, Id>()
+  const poolTotalByGroup = new Map<Id, number>()
   world.resources.forEach((a, i) => {
     const p = `$.resources[${i}]`
     const o = { kind: 'ACCOUNT', id: a.accountId }
@@ -281,6 +297,28 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
     if (!cOk) add('RESOURCE_INVALID_QUANTITY', `${p}.committed`, `committed は非負整数です: ${a.committed}`, o)
     if (qOk && cOk && a.committed > a.quantity) {
       add('RESOURCE_OVER_COMMITTED', p, `committed ${a.committed} が quantity ${a.quantity} を超えています`, o)
+    }
+    // 兵源は人口由来の単一 ForcePool（契約 §3.1）。国家別の独立兵源は作らない。
+    if (a.kind === 'FORCE_HEADCOUNT') {
+      const groupOwned = a.ownerRef.kind === 'GROUP'
+      if (!groupOwned || a.sourceGroupId === undefined || a.sourceGroupId !== a.ownerRef.id) {
+        add('FORCE_POOL_SOURCE_INVALID', p, 'FORCE_HEADCOUNT は人口集団を ownerRef とし、sourceGroupId が同一集団である必要があります', o)
+        return
+      }
+      const group = world.groups.find((g) => g.groupId === a.sourceGroupId)
+      if (group && a.sourceRegionId !== undefined && a.sourceRegionId !== group.regionId) {
+        add('FORCE_POOL_SOURCE_INVALID', `${p}.sourceRegionId`, `sourceRegionId が集団 ${group.groupId} の地域 ${group.regionId} と一致しません`, o, [group.regionId])
+      }
+      const first = poolByGroup.get(a.sourceGroupId)
+      if (first !== undefined) add('FORCE_POOL_DUPLICATE', p, `集団 ${a.sourceGroupId} の ForcePool が複数あります`, o, [first])
+      else poolByGroup.set(a.sourceGroupId, a.accountId)
+      if (qOk) {
+        const total = (poolTotalByGroup.get(a.sourceGroupId) ?? 0) + a.quantity
+        poolTotalByGroup.set(a.sourceGroupId, total)
+        if (group && isCount(group.population) && total > group.population) {
+          add('FORCE_POOL_EXCEEDS_POPULATION', `${p}.quantity`, `兵源 ${total} が集団 ${group.groupId} の人口 ${group.population} を超えています`, o, [group.groupId])
+        }
+      }
     }
   })
 
@@ -300,7 +338,7 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
   world.deferred.forEach((e, i) => {
     const p = `$.deferred[${i}]`
     const o = { kind: 'DeferredEffect', id: e.deferredId }
-    if (!(e.effectiveFromYear > e.source.year)) add('INVALID_PERIOD', `${p}.effectiveFromYear`, '繰延効果は発生年の翌年以降に施行します', o)
+    if (e.effectiveFromYear !== e.source.year + 1) add('INVALID_PERIOD', `${p}.effectiveFromYear`, `繰延効果の施行年は発生年の翌年（${e.source.year + 1}）に限ります: ${e.effectiveFromYear}`, o)
     ref('GROUP', e.payload.groupId, `${p}.payload.groupId`, o)
     ref('HOUSE', e.payload.houseId, `${p}.payload.houseId`, o)
   })

@@ -13,6 +13,16 @@ const GAP = 'docs/spec/pending-approvals.md §2（データ不足）'
 
 const COUNTRIES = ['eldia', 'margald', 'versa'] as const
 
+/** [sourceGroupId, sourceRegionId, 仮の兵源数]。一般住民集団のみ。人口の部分集合で、人口へ再加算しない。 */
+const FORCE_POOLS = [
+  ['group-central-commons', 'region-eldia-central', 200],
+  ['group-west-commons', 'region-eldia-west', 200],
+  ['group-east-commons', 'region-eldia-east', 200],
+  ['group-south-commons', 'region-eldia-south', 200],
+  ['group-margald', 'region-margald-home', 1000],
+  ['group-versa', 'region-versa-coast', 300],
+] as const
+
 /** 家門名（接頭辞なし）→ houseId に変換した支持 bps（無党派込み 10000）。仮値。 */
 function support(weights: Readonly<Record<string, number>>, undecidedBps: number) {
   return {
@@ -166,10 +176,13 @@ function build(): WorldState {
       ],
     },
     resources: [
-      ...COUNTRIES.flatMap((c, i) => [
-        { accountId: `acct-cash-${c}`, kind: 'CASH_MILLI_BU' as const, ownerRef: { kind: 'COUNTRY' as const, id: `country-${c}` }, quantity: [52000, 60000, 30000][i] ?? 0, committed: 0 },
-        { accountId: `acct-force-${c}`, kind: 'FORCE_HEADCOUNT' as const, ownerRef: { kind: 'COUNTRY' as const, id: `country-${c}` }, quantity: [800, 1000, 300][i] ?? 0, committed: 0 },
-      ]),
+      ...COUNTRIES.map((c, i) => (
+        { accountId: `acct-cash-${c}`, kind: 'CASH_MILLI_BU' as const, ownerRef: { kind: 'COUNTRY' as const, id: `country-${c}` }, quantity: [52000, 60000, 30000][i] ?? 0, committed: 0 }
+      )),
+      // 兵源は集団由来の単一 ForcePool（契約 §3.1）。国家別の独立兵源は持たない。仮値・CALIBRATION_ONLY。
+      ...FORCE_POOLS.map(([groupId, regionId, quantity]) => (
+        { accountId: `acct-force-${groupId}`, kind: 'FORCE_HEADCOUNT' as const, ownerRef: { kind: 'GROUP' as const, id: groupId }, quantity, committed: 0, sourceGroupId: groupId, sourceRegionId: regionId }
+      )),
     ],
     demographics: { cohortSlots: [] },
     deferred: [],
@@ -202,7 +215,7 @@ export const EXPERIMENTAL_PROVENANCE: readonly ProvenanceEntry[] = Object.freeze
   { subject: '地域の隣接関係', origin: 'PLACEHOLDER', source: GAP },
   { subject: 'Title の配置・授与根拠・承認 authority', origin: 'PLACEHOLDER', source: GAP, note: '法的根拠は試験データ。勝利条件の判定対象として正式化されていない' },
   { subject: '初期 TaxCollectionMandate（徴税先＝主権国）', origin: 'PLACEHOLDER', source: GAP, note: 'GAME-04: 初期値の明示のみ。占領・宗主への暗黙移転は行わない' },
-  { subject: '台帳の現金・兵員残高', origin: 'PLACEHOLDER', source: GAP, note: 'CALIBRATION_ONLY' },
+  { subject: '台帳の現金残高・集団別 ForcePool の兵員数', origin: 'PLACEHOLDER', source: GAP, note: 'CALIBRATION_ONLY。兵源は集団由来の単一 Pool で、国家別の兵源は持たない（契約 §3.1）' },
 ] satisfies ProvenanceEntry[])
 
 export type ExperimentalScenario = Readonly<{

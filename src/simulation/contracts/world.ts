@@ -92,11 +92,30 @@ export type Office = Readonly<{
 
 export type Dynasty = Readonly<{ dynastyId: Id; name: string }>
 
+/**
+ * 婚姻契約の明示条項。子の法的王朝帰属を契約が明示する場合のみ表現する（GAME-01）。
+ * 父系・母系などの既定規則は持たない。条項が無ければ子の帰属は A が証拠なしに決めず UNDETERMINED。
+ */
+export type MarriageClause = Readonly<{
+  clauseId: Id
+  kind: 'CHILD_LEGAL_DYNASTY'
+  dynastyId: Id
+}>
+
+/** 契約の証拠。evidenceId は A が適法性を確認した根拠（契約書・決定）の ID。 */
+export type MarriageContract = Readonly<{
+  contractId: Id
+  evidenceId: Id
+  clauses: readonly MarriageClause[]
+}>
+
 export type Marriage = Readonly<{
   marriageId: Id
   personIds: readonly [Id, Id] // ID 昇順
   registeredYear: Year
   status: 'ACTIVE' | 'DISSOLVED'
+  /** 未設定は「契約条項なし／証拠なし」であり、帰属を推定しない（子の帰属は UNDETERMINED のまま）。 */
+  contract?: MarriageContract
 }>
 
 export type LegalCase = Readonly<{
@@ -161,7 +180,7 @@ export type CohortSlot = Readonly<{
 
 export type Demographics = Readonly<{ cohortSlots: readonly CohortSlot[] }>
 
-/** 翌年施行（effectiveFromYear = t+1）の効果。型付き union のみ。汎用更新は持たない。 */
+/** 翌年施行（effectiveFromYear = source.year + 1 のみ）の効果。型付き union のみ。汎用更新は持たない。 */
 export type DeferredPayload = Readonly<{
   kind: 'SUPPORT_SIGNAL'
   groupId: Id
