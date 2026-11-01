@@ -5,6 +5,9 @@ import type { Diagnostic } from '../../validation/index.ts'
 export const REJECTION_CODES = [
   // 外枠（Outcome / Source / 権限）
   'TRANSACTION_SCOPE_MISMATCH',
+  'INVALID_INPUT_WORLD',
+  'UNRESOLVED_CROSS_DOMAIN_REQUEST',
+  'REQUEST_ID_CONFLICT',
   'UNKNOWN_RULE_ID',
   'PHASE_MISMATCH',
   'YEAR_MISMATCH',
@@ -109,6 +112,8 @@ export type CommandTransaction = Readonly<{
   year: Year
   /** commandId → 内容の正規化指紋（適用済みのみ）。 */
   commands: ReadonlyMap<Id, string>
+  /** requestId → 適用済みの意味内容（commandId・batchId を除く正規化指紋）→ 適用した commandId。 */
+  requests: ReadonlyMap<Id, ReadonlyMap<string, Id>>
   /** batchId → 所属 commandId 列の指紋。 */
   batches: ReadonlyMap<Id, string>
   casualties: ReadonlyMap<Id, CasualtyRecord>

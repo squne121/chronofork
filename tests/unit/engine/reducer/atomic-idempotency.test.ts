@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import type { DomainCommand } from '../../../../src/simulation/contracts/index.ts'
 import { diffWorld } from '../../../../src/simulation/engine/reducer/index.ts'
 import { validateWorldState } from '../../../../src/simulation/validation/index.ts'
 import { deepFreeze } from '../../foundation/helpers.ts'
-import { baby, birth, chain, cohort, cohortOutcome, ledger, natural, newTx, newWorld, outcome, rejectionCodes, run, CASH } from './helpers.ts'
+import { baby, birth, chain, cohort, cohortOutcome, ledger, natural, newTx, newWorld, outcome, rejectionCodes, run, source, CASH } from './helpers.ts'
 
 describe('純粋性と実差分', () => {
   it('入力 WorldState / Outcome / Transaction を変更しない（凍結入力でも成功）', () => {
@@ -38,11 +39,23 @@ describe('純粋性と実差分', () => {
     expect(diffWorld(w, r.world)).toEqual([])
   })
 
-  it('requests / traceDrafts は扱わず、件数を unhandled で明示する', () => {
-    const r = run(newWorld(), outcome('RULE-C-004', 1, [cohort('group-west-commons', 1, 0)], {
-      requests: [{ kind: 'CASUALTY_NOTICE', source: { requestId: 'q', year: 1250, phase: 1, sourceRuleId: 'RULE-C-004', sourceTraceId: 't' }, targetDomain: 'C', requiredResponseYear: 1250, payload: { kind: 'CASUALTY_NOTICE', casualtyId: 'x', groupId: 'g', count: 1 } }],
-    }))
+  const req = { kind: 'CASUALTY_NOTICE', source: { requestId: 'q', year: 1250, phase: 1, sourceRuleId: 'RULE-C-004', sourceTraceId: 't' }, targetDomain: 'C', requiredResponseYear: 1250, payload: { kind: 'CASUALTY_NOTICE', casualtyId: 'x', groupId: 'g', count: 1 } } as const
+
+  it('requests のみの Outcome は NO_OP（状態変更なし）で、件数を unhandled で明示する', () => {
+    const w = newWorld()
+    const r = run(w, outcome('RULE-C-004', 1, [], { requests: [req] }))
+    expect(r.status).toBe('NO_OP')
+    expect(r.world).toBe(w)
     expect(r.unhandled).toEqual({ requests: 1, traceDrafts: 0 })
+  })
+
+  it('未応答の requests を伴う commands は確定しない（照会 → 応答 → 適用）', () => {
+    const w = newWorld()
+    const r = run(w, outcome('RULE-C-004', 1, [cohort('group-west-commons', 1, 0)], { requests: [req] }))
+    expect(r.status).toBe('REJECTED')
+    expect(rejectionCodes(r)).toEqual(['UNRESOLVED_CROSS_DOMAIN_REQUEST'])
+    expect(r.world).toBe(w)
+    expect(r.transaction.commands.size).toBe(0)
   })
 
   it('適用後の世界は既存の WorldState バリデータを通る', () => {
@@ -177,5 +190,164 @@ describe('commandId の冪等性（枝・年度の Transaction 内）', () => {
     const reordered = Object.fromEntries(Object.entries(c1).reverse()) as typeof c1
     const first = run(newWorld(), outcome('RULE-C-005', 1, [c1]))
     expect(run(first.world, outcome('RULE-C-005', 1, [reordered]), first.transaction).status).toBe('DUPLICATE')
+  })
+})
+
+describe('requestId の冪等性', () => {
+  const credit = (amount: number, id: string, requestTag = 'same-req', extra: { batchId?: string } = {}) => {
+    const c = ledger(CASH, 'CREDIT', amount, id, extra)
+    return { ...c, source: { ...c.source, requestId: requestTag } }
+  }
+  const bal = (w: ReturnType<typeof newWorld>) => w.resources.find((a) => a.accountId === CASH)?.quantity
+
+  it('同一 requestId・同内容で commandId だけ違う再送は DUPLICATE（二重入金しない）', () => {
+    const first = run(newWorld(), outcome('RULE-C-005', 1, [credit(100, 'a')]))
+    const again = run(first.world, outcome('RULE-C-005', 1, [credit(100, 'b')]), first.transaction)
+    expect(again.status).toBe('DUPLICATE')
+    expect(again.world).toBe(first.world)
+    expect(bal(again.world)).toBe(52100)
+  })
+
+  it('同一 requestId・異内容の再送は CONFLICT（二重支出しない）', () => {
+    const first = run(newWorld(), outcome('RULE-C-005', 1, [credit(100, 'a')]))
+    const other = run(first.world, outcome('RULE-C-005', 1, [credit(999, 'c')]), first.transaction)
+    expect(other.status).toBe('CONFLICT')
+    expect(rejectionCodes(other)).toEqual(['REQUEST_ID_CONFLICT'])
+    expect(bal(other.world)).toBe(52100)
+  })
+
+  it('同一 requestId の複数 command を単一 batch として処理できる', () => {
+    const r = run(newWorld(), outcome('RULE-C-005', 1, [credit(100, 'a', 'r1', { batchId: 'b' }), { ...ledger(CASH, 'DEBIT', 30, 'd', { batchId: 'b' }), source: { ...ledger(CASH, 'DEBIT', 30, 'd').source, requestId: 'r1' } }]))
+    expect(r.status).toBe('APPLIED')
+    expect(bal(r.world)).toBe(52070)
+    const resend = run(r.world, outcome('RULE-C-005', 1, [credit(100, 'a2', 'r1', { batchId: 'b2' }), { ...ledger(CASH, 'DEBIT', 30, 'd2', { batchId: 'b2' }), source: { ...ledger(CASH, 'DEBIT', 30, 'd').source, requestId: 'r1' } }]), r.transaction)
+    expect(resend.status).toBe('DUPLICATE')
+  })
+
+  it('同一 requestId を別 unit の追加内容で再利用すると拒否、バッチ内の同一内容の重複も拒否', () => {
+    const first = run(newWorld(), outcome('RULE-C-005', 1, [credit(100, 'a')]))
+    const mixed = run(first.world, outcome('RULE-C-005', 1, [credit(100, 'b', 'same-req', { batchId: 'x' }), credit(5, 'c', 'new-req', { batchId: 'x' })]), first.transaction)
+    expect(mixed.status).toBe('CONFLICT')
+    const dupInBatch = run(newWorld(), outcome('RULE-C-005', 1, [credit(7, 'p', 'q', { batchId: 'y' }), credit(7, 'r', 'q', { batchId: 'y' })]))
+    expect(rejectionCodes(dupInBatch)).toEqual(['REQUEST_ID_CONFLICT'])
+  })
+
+  it('別 branch・別 year では独立して判定される', () => {
+    const a = run(newWorld(), outcome('RULE-C-005', 1, [credit(100, 'a')]), newTx('branch-a'))
+    const b = run(newWorld(), outcome('RULE-C-005', 1, [credit(100, 'a')]), newTx('branch-b'))
+    expect(a.status).toBe('APPLIED')
+    expect(b.status).toBe('APPLIED')
+    expect(a.transaction.requests.size).toBe(1)
+  })
+})
+
+describe('入力 WorldState のフェイルファスト', () => {
+  const broken = () => {
+    const w = newWorld()
+    return { ...w, groups: w.groups.map((g, i) => (i === 0 ? { ...g, population: -1 } : g)) }
+  }
+  it('最初から破損している状態には何も適用せず、診断付きで拒否する', () => {
+    const w = broken()
+    const tx = newTx()
+    const r = run(w, outcome('RULE-C-005', 1, [ledger(CASH, 'CREDIT', 1, 'x')]), tx)
+    expect(r.status).toBe('REJECTED')
+    expect(rejectionCodes(r)).toEqual(['INVALID_INPUT_WORLD'])
+    expect(r.rejections[0]?.diagnostics?.length).toBeGreaterThan(0)
+    expect(r.world).toBe(w)
+    expect(r.transaction).toBe(tx)
+    expect(tx.commands.size).toBe(0)
+  })
+  it('空の Outcome でも破損入力は NO_OP にせず拒否する', () => {
+    expect(rejectionCodes(run(broken(), outcome('B-001', 3, [])))).toEqual(['INVALID_INPUT_WORLD'])
+  })
+  it('構造が壊れた入力（フィールド欠落）も拒否する', () => {
+    const w = { ...newWorld(), persons: undefined } as unknown as ReturnType<typeof newWorld>
+    expect(rejectionCodes(run(w, outcome('B-001', 3, [])))).toEqual(['INVALID_INPUT_WORLD'])
+  })
+  it('WARNING のみ（UNRESOLVED_TAX_AUTHORITY）の状態は受理する', () => {
+    const w0 = newWorld()
+    const w = { ...w0, legal: { ...w0.legal, taxMandates: [] } }
+    expect(validateWorldState(w).diagnostics.some((d) => d.severity === 'WARNING')).toBe(true)
+    expect(run(w, outcome('RULE-C-005', 1, [ledger(CASH, 'CREDIT', 1, 'x')])).status).toBe('APPLIED')
+  })
+})
+
+describe('入力・出力の不変性（オブジェクト非共有）', () => {
+  const mutate = (v: unknown) => {
+    // 再帰的に文字列・数値を書き換える（元 Command の可変ネスト値の変更を模擬）
+    if (Array.isArray(v)) { v.forEach(mutate); v.push('MUTATED'); return }
+    if (v && typeof v === 'object') {
+      for (const k of Object.keys(v)) {
+        const o = v as Record<string, unknown>
+        if (typeof o[k] === 'string') o[k] = 'MUTATED'
+        else if (typeof o[k] === 'number') o[k] = -999
+        else mutate(o[k])
+      }
+    }
+  }
+  const snap = (v: unknown) => JSON.stringify(v)
+
+  it('PERSON_BIRTH: 適用後に元 Command を変更しても WorldState と差分は変わらない', () => {
+    const c0 = chain([cohortOutcome('group-central-elite', 1, 0)])
+    const cmd = birth(baby('person-new-1'))
+    const r = run(c0.world, outcome('B-002', 3, [cmd]), c0.tx)
+    expect(r.status).toBe('APPLIED')
+    const worldBefore = snap(r.world)
+    const changesBefore = snap(r.applied)
+    mutate(cmd)
+    expect(snap(r.world)).toBe(worldBefore)
+    expect(snap(r.applied)).toBe(changesBefore)
+  })
+
+  it('MARRIAGE / SUPPORT_SET / LegalCase / Mandate: ネスト値を共有しない', () => {
+    const marriage: DomainCommand = { type: 'MARRIAGE_REGISTER', commandId: 'm', source: source('A-LEG-01', 3, 'm'), marriage: { marriageId: 'mar-1', personIds: ['person-exp-02', 'person-exp-03'], registeredYear: 1250, status: 'ACTIVE', contract: { contractId: 'c', evidenceId: 'e', clauses: [{ clauseId: 'cl', kind: 'CHILD_LEGAL_DYNASTY', dynastyId: 'dynasty-nalven' }] } } }
+    const support: DomainCommand = { type: 'SUPPORT_SET', commandId: 's', source: source('RULE-C-008', 2, 's'), groupId: 'group-west-elite', causeEventIds: ['ev'], support: { houseBps: { 'house-nalven': 5000, 'house-vargas': 1000 }, undecidedBps: 4000 } }
+    const lcase: DomainCommand = { type: 'LEGAL_CASE_SET', commandId: 'lc', source: source('A-SUC-04', 4, 'lc'), legalCase: { caseId: 'case-1', titleId: 'title-exp-central', kind: 'SUCCESSION', status: 'PENDING', candidatePersonIds: ['person-exp-02'], reasonCodes: ['r'] } }
+    const mandate: DomainCommand = { type: 'CONTROL_MANDATE_SET', commandId: 'cm', source: source('A-TIT-07', 4, 'cm'), mandate: { mandateId: 'cm-1', regionId: 'region-eldia-west', controllerRef: { kind: 'PERSON', id: 'person-exp-04' }, beneficiaryPersonId: 'person-exp-04', authorizingTitleId: 'title-exp-west', sourceEventId: 'ev', effectiveFromYear: 1250, endExclusiveYear: 1300 } }
+    const recog: DomainCommand = { type: 'TITLE_RECOGNITION_SET', commandId: 'rc', source: source('A-TIT-06', 4, 'rc'), titleId: 'title-exp-west', recognition: { status: 'PENDING' } }
+    const region: DomainCommand = { type: 'REGION_CONTROL_SET', commandId: 'rg', source: source('D-MIL-001', 5, 'rg'), regionId: 'region-eldia-west', deFactoControllerRef: { kind: 'COUNTRY', id: 'country-margald' } }
+    const cases: [DomainCommand, ReturnType<typeof outcome>][] = [
+      [marriage, outcome('A-LEG-01', 3, [marriage])],
+      [support, outcome('RULE-C-008', 2, [support])],
+      [lcase, outcome('A-SUC-04', 4, [lcase])],
+      [mandate, outcome('A-TIT-07', 4, [mandate])],
+      [recog, outcome('A-TIT-06', 4, [recog])],
+      [region, outcome('D-MIL-001', 5, [region])],
+    ]
+    for (const [cmd, o] of cases) {
+      const r = run(newWorld(), o)
+      expect(r.status, cmd.type).toBe('APPLIED')
+      const w = snap(r.world)
+      const a = snap(r.applied)
+      mutate(cmd)
+      expect(snap(r.world), cmd.type).toBe(w)
+      expect(snap(r.applied), cmd.type).toBe(a)
+    }
+  })
+
+  it('StateChange の before/after を後から変更しても WorldState に波及しない', () => {
+    const c0 = chain([cohortOutcome('group-central-elite', 1, 0)])
+    const r = run(c0.world, outcome('B-002', 3, [birth(baby('person-new-1'))]), c0.tx)
+    const added = r.applied[0]?.stateChanges.find((s) => s.path === '$.persons[person-new-1]')
+    expect(added).toBeDefined()
+    const worldBefore = snap(r.world)
+    mutate(added?.after)
+    expect(snap(r.world)).toBe(worldBefore)
+  })
+
+  it('以前の WorldState スナップショットは後続の適用で変化しない', () => {
+    const w0 = deepFreeze(newWorld())
+    const s0 = snap(w0)
+    const r1 = run(w0, cohortOutcome('group-central-elite', 1, 0))
+    const s1 = snap(r1.world)
+    const r2 = run(r1.world, outcome('B-002', 3, [birth(baby('person-new-1'))]), r1.transaction)
+    expect(r2.status).toBe('APPLIED')
+    expect(snap(w0)).toBe(s0)
+    expect(snap(r1.world)).toBe(s1)
+  })
+
+  it('plain data でない command（関数を含む等）は例外にせず拒否する', () => {
+    const bad = { ...ledger(CASH, 'CREDIT', 1, 'f'), extra: () => 1 } as unknown as DomainCommand
+    expect(rejectionCodes(run(newWorld(), outcome('RULE-C-005', 1, [bad])))).toEqual(['INVALID_COMMAND'])
   })
 })

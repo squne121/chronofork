@@ -7,6 +7,7 @@ export function createTransaction(scope: Readonly<{ branchId: Id; year: Year }>)
     branchId: scope.branchId,
     year: scope.year,
     commands: new Map(),
+    requests: new Map(),
     batches: new Map(),
     casualties: new Map(),
   }

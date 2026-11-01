@@ -1,6 +1,6 @@
 // WorldState の前後差分。確定した実状態差分のみを path/before/after で返す（EventLog ではない）。
 import type { JsonValue, WorldState } from '../../contracts/index.ts'
-import { canonicalize } from './canonical.ts'
+import { canonicalize, cloneData } from './canonical.ts'
 import type { StateChange } from './types.ts'
 
 type Collection = readonly [path: string, items: (w: WorldState) => readonly object[], key: (item: never) => string]
@@ -32,7 +32,7 @@ function diffValue(path: string, a: unknown, b: unknown, out: StateChange[]): vo
     for (const k of keys) diffValue(`${path}.${k}`, a[k], b[k], out)
     return
   }
-  out.push({ path, before: (a ?? null) as JsonValue, after: (b ?? null) as JsonValue })
+  out.push({ path, before: cloneData((a ?? null) as JsonValue), after: cloneData((b ?? null) as JsonValue) })
 }
 
 export function diffWorld(before: WorldState, after: WorldState): StateChange[] {

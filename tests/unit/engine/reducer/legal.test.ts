@@ -78,7 +78,7 @@ describe('出生者の法的所属（GAME-01: 明示条項のみ）', () => {
 
 describe('Title・LegalCase・委任・徴税権', () => {
   const kase = (extra: Partial<{ status: 'PENDING' | 'APPROVED' | 'REJECTED'; candidates: string[]; id: string }> = {}): DomainCommand => ({
-    type: 'LEGAL_CASE_SET', commandId: `case-${extra.id ?? 'c1'}-${extra.status ?? 'APPROVED'}`, source: source('A-SUC-04', 4, 'case'),
+    type: 'LEGAL_CASE_SET', commandId: `case-${extra.id ?? 'c1'}-${extra.status ?? 'APPROVED'}`, source: source('A-SUC-04', 4, `case-${extra.status ?? 'APPROVED'}`),
     legalCase: { caseId: extra.id ?? 'case-1', titleId: 'title-exp-central', kind: 'SUCCESSION', status: extra.status ?? 'APPROVED', candidatePersonIds: extra.candidates ?? ['person-exp-02'], reasonCodes: [] },
   })
   const transfer = (legalCaseId?: string, to: 'person-exp-02' | 'none' = 'person-exp-02', titleId = 'title-exp-central'): DomainCommand => ({

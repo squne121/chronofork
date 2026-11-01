@@ -1,10 +1,9 @@
 // 共通 reducer: evaluateRule が返した型付き DomainCommand を、安全かつ原子的に WorldState へ適用する。
 // 純粋関数: 入力の WorldState / Transaction を変更せず、新しい値を返す。EventLog は生成しない。
 import type { DomainCommand, Id, RuleOutcome, WorldState } from '../../contracts/index.ts'
-import { checkWorldIntegrity, hasErrors } from '../../validation/index.ts'
-import type { Diagnostic } from '../../validation/index.ts'
+import { checkWorldIntegrity, hasErrors, validateWorldState } from '../../validation/index.ts'
 import { checkCommandAuthority, checkOutcomeHeader } from './authority.ts'
-import { canonicalize } from './canonical.ts'
+import { canonicalize, cloneData } from './canonical.ts'
 import { diffWorld } from './diff.ts'
 import type { Draft, Handler } from './draft.ts'
 import { fail } from './draft.ts'
@@ -56,9 +55,6 @@ const HANDLERS: HandlerMap = {
 export const IMPLEMENTED_COMMAND_TYPES: readonly Implemented[] = Object.keys(HANDLERS) as Implemented[]
 export const UNIMPLEMENTED_COMMAND_TYPES: readonly DomainCommand['type'][] = ['TREATY_COMMIT']
 
-const diagKey = (d: Diagnostic) => `${d.code}|${d.path}|${d.message}`
-const errorKeys = (w: WorldState) => new Set(checkWorldIntegrity(w).filter((d) => d.severity === 'ERROR').map(diagKey))
-
 type Unit = { batchId?: Id; commands: DomainCommand[] }
 
 /** batchId ごとに初出位置でまとめる。batchId の無い command は単独の単位。 */
@@ -79,6 +75,16 @@ function groupUnits(commands: readonly DomainCommand[]): Unit[] {
     u.commands.push(c)
   }
   return units
+}
+
+/** 意味内容の指紋: commandId・batchId・sourceTraceId（評価ごとの参照）を除く（同一 requestId の別 commandId 再送を同内容と判定する）。 */
+function semanticKey(c: DomainCommand): string {
+  const { commandId: _id, batchId: _batch, source, ...rest } = c
+  void _id
+  void _batch
+  const { sourceTraceId: _trace, ...semanticSource } = source
+  void _trace
+  return canonicalize({ ...rest, source: semanticSource })
 }
 
 const batchFingerprint = (cmds: readonly DomainCommand[]) => canonicalize(cmds.map((c) => c.commandId))
@@ -118,6 +124,28 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
   const sameCount = known.filter((k) => k === 'SAME').length
   if (sameCount === cmds.length) return { status: 'DUPLICATE', rejections: [] }
 
+  // 1b) requestId の冪等性: 同一の意味的要求の重複確定を防ぐ（commandId が違っても二重適用しない）。
+  const sems = cmds.map(semanticKey)
+  const reqState = cmds.map((c, i) => {
+    const applied = tx.requests.get(c.source.requestId)
+    return applied === undefined ? 'NEW' : applied.has(sems[i] as string) ? 'SAME' : 'DIFF'
+  })
+  if (reqState.every((k) => k === 'SAME')) return { status: 'DUPLICATE', rejections: [] }
+  if (reqState.some((k) => k !== 'NEW')) {
+    return {
+      status: 'CONFLICT',
+      rejections: cmds
+        .filter((_, i) => reqState[i] !== 'NEW')
+        .map((c) => withId(fail('REQUEST_ID_CONFLICT', `requestId ${c.source.requestId} は別内容/別構成で確定済みです`), c)),
+    }
+  }
+  const semSeen = new Set<string>()
+  for (const [i, c] of cmds.entries()) {
+    const key = `${c.source.requestId}\u0000${sems[i]}`
+    if (semSeen.has(key)) return { status: 'REJECTED', rejections: [withId(fail('REQUEST_ID_CONFLICT', `requestId ${c.source.requestId} に同一内容の command が重複しています`), c)] }
+    semSeen.add(key)
+  }
+
   // 2) 全件の静的な事前検証（Source / owner / RuleID / Phase / 実装有無）。1 件でも不正なら全件拒否。
   const pre: Rejection[] = []
   for (const c of cmds) {
@@ -152,9 +180,8 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
     }
   }
 
-  // 5) 既存の WorldState バリデータ（整合性）。バッチが新たに作った ERROR は拒否する。
-  const baseline = errorKeys(world)
-  const introduced = checkWorldIntegrity(draft.world).filter((d) => d.severity === 'ERROR' && !baseline.has(diagKey(d)))
+  // 5) 既存の WorldState バリデータ（整合性）。ERROR が 1 件でもあれば拒否する（入力は開始時に検証済み）。
+  const introduced = checkWorldIntegrity(draft.world).filter((d) => d.severity === 'ERROR')
   if (hasErrors(introduced)) {
     return {
       status: 'REJECTED',
@@ -165,11 +192,17 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
   // 6) コミット。
   const commands = new Map(tx.commands)
   cmds.forEach((c, i) => commands.set(c.commandId, prints[i] as string))
+  const requests = new Map(tx.requests)
+  cmds.forEach((c, i) => {
+    const m = new Map(requests.get(c.source.requestId))
+    m.set(sems[i] as string, c.commandId)
+    requests.set(c.source.requestId, m)
+  })
   const batches = new Map(tx.batches)
   if (unit.batchId !== undefined) batches.set(unit.batchId, batchFingerprint(cmds))
   return {
     status: 'APPLIED',
-    committed: { world: draft.world, tx: { ...tx, commands, batches, casualties: draft.casualties }, applied },
+    committed: { world: draft.world, tx: { ...tx, commands, requests, batches, casualties: draft.casualties }, applied },
   }
 }
 
@@ -188,17 +221,35 @@ export function applyOutcome(world: WorldState, outcome: RuleOutcome, context: A
   if (tx0.year !== world.year) {
     return rejectAll([fail('TRANSACTION_SCOPE_MISMATCH', `Transaction の年 ${tx0.year} が WorldState の年 ${world.year} と異なります`)])
   }
+  // 入力 WorldState のフェイルファスト: 開始時点で構造・参照・不変条件が壊れていれば何も適用しない。
+  const input = validateWorldState(world)
+  if (!input.ok) {
+    return rejectAll([{ ...fail('INVALID_INPUT_WORLD', `入力 WorldState が不正です: ${[...new Set(input.diagnostics.filter((d) => d.severity === 'ERROR').map((d) => d.code))].join(', ')}`), diagnostics: input.diagnostics }])
+  }
   const header = checkOutcomeHeader(outcome)
   if (header) return rejectAll([header])
   if (outcome.deferred.length > 0) {
     return rejectAll([fail('UNIMPLEMENTED_DEFERRED_EFFECT', 'DeferredEffect の適用は未実装です。Outcome 全体を拒否します')])
   }
 
+  // 未応答の照会に依存し得る状態変更は確定しない（照会 → 応答 → 適用。応答後の別 Outcome で適用する）。
+  if (outcome.requests.length > 0 && outcome.commands.length > 0) {
+    return rejectAll([fail('UNRESOLVED_CROSS_DOMAIN_REQUEST', 'requests を伴う Outcome の commands は、応答前に確定しません')])
+  }
+
+  // 呼出側のオブジェクトを出力 WorldState / StateChange と共有しないため、command は深く複製して扱う。
+  let commands: DomainCommand[]
+  try {
+    commands = cloneData(outcome.commands) as DomainCommand[]
+  } catch (e) {
+    return rejectAll([fail('INVALID_COMMAND', `command を複製できません（plain data のみ可）: ${String(e)}`)])
+  }
+
   let current = world
   let tx = tx0
   const units: UnitResult[] = []
   const applied: AppliedCommand[] = []
-  for (const unit of groupUnits(outcome.commands)) {
+  for (const unit of groupUnits(commands)) {
     const commandIds = unit.commands.map((c) => c.commandId)
     const base = unit.batchId !== undefined ? { batchId: unit.batchId, commandIds } : { commandIds }
     const r = processUnit(current, tx, outcome, unit)
