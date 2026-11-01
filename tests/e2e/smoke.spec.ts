@@ -156,3 +156,36 @@ test('タブ操作は選択を解除し、詳細リンク移動は選択を維�
   await expect(detail.getByRole('heading', { name: /試験人物01/ })).toBeVisible()
   await expect(detail).not.toContainText(empty)
 })
+
+test('Event 切替・対象フィルタ変更で古い Trace/詳細が残らない。seed と 1350 年の案内', async ({ page }) => {
+  await page.goto('/')
+  const list = page.getByTestId('chronicle-list').getByRole('button')
+  await list.nth(0).click()
+  await page.getByTestId('event-detail').getByRole('button', { name: /判断根拠を開く/ }).click()
+  const traceText = (await page.getByTestId('trace-detail').locator('dd').first().textContent()) ?? ''
+  expect(traceText).toContain('trace:')
+  await list.nth(1).click()
+  await expect(page.getByTestId('trace-detail')).not.toContainText(traceText)
+  await expect(page.getByTestId('trace-detail')).toContainText('Event の「判断根拠を開く」')
+
+  await list.nth(0).click()
+  await page.getByTestId('event-target').selectOption('GROUP:group-west-commons')
+  const first = await page.getByTestId('chronicle-list').getByRole('button').first().textContent()
+  await page.getByTestId('chronicle-list').getByRole('button').first().click()
+  const options = await page.getByTestId('event-target').locator('option').evaluateAll((o) => o.map((x) => (x as HTMLOptionElement).value))
+  const another = options.find((v) => v && v !== 'GROUP:group-west-commons')!
+  await page.getByTestId('event-target').selectOption(another)
+  await expect(page.getByTestId('event-detail')).toContainText('事件を選ぶと')
+  expect(first).toBeTruthy()
+
+  await page.getByTestId('seed-input').fill('-1')
+  await expect(page.getByTestId('rerun')).toBeDisabled()
+  await page.getByTestId('seed-input').fill('7')
+  await expect(page.getByTestId('rerun')).toBeEnabled()
+
+  await page.getByRole('slider').focus()
+  await page.keyboard.press('End')
+  await expect(page.getByTestId('current-year')).toContainText('1350年')
+  await expect(page.locator('#chronicle-heading').locator('..')).toContainText('1350年は評価専用')
+  await expect(page.locator('#chronicle-heading').locator('..')).not.toContainText('1351')
+})

@@ -68,7 +68,10 @@ export function HistoryPanel(p: Props) {
     <section aria-labelledby="chronicle-heading" className="panel">
       <h2 id="chronicle-heading">年表（EventLog）と判断根拠（DecisionTrace）</h2>
       <p className="note">
-        EventLog に記録された確定済みの状態差分のみを表示します。{p.year}年の事件は{p.year}年の年内に確定し、{p.year + 1}年初の状態に反映されます。
+        EventLog に記録された確定済みの状態差分のみを表示します。
+        {p.year >= 1350
+          ? '1350年は評価専用の年で、年内の事件は生成されません（1350年初が最終の状態です）。'
+          : `${p.year}年の事件は${p.year}年の年内に確定し、${p.year + 1}年初の状態に反映されます。`}
       </p>
       <div className="filters">
         <label>

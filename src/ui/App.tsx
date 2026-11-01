@@ -60,9 +60,20 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
     const e = history.event(id)
     if (e && snapshotOf(result, e.year)) setYear(e.year)
     setEventId(id)
+    // 現在の Trace が新しい Event を参照していなければ解除する（無関係な判断根拠を残さない）。
+    setTraceId((cur) => (cur !== undefined && history.trace(cur)?.eventIds.includes(id) ? cur : undefined))
+  }
+  const changeTarget = (key: string) => {
+    setTargetKey(key)
+    // 新しい対象に関与しない Event/Trace の詳細は解除する。
+    const e = eventId ? history.event(eventId) : undefined
+    if (key && !(e && involves(e, key))) {
+      setEventId(undefined)
+      setTraceId(undefined)
+    }
   }
   const rerun = () => {
-    const seed = Number(seedText)
+    const seed = Number(seedText.trim())
     setRun(runExperimentalTimeline(seed))
     setEventId(undefined)
     setTraceId(undefined)
@@ -146,7 +157,7 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
               setEventId(undefined)
               setTraceId(undefined)
             }}
-            onTarget={setTargetKey}
+            onTarget={changeTarget}
             onEvent={openEvent}
             onTrace={setTraceId}
             onSelect={select}

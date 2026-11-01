@@ -13,7 +13,7 @@ type Props = Readonly<{
 /** 試験計算の入力・版・状態・網羅状況。正式な歴史・勝敗が未成立であることを常に示す。 */
 export function RunPanel({ inputs, result, seedText, onSeedText, onRerun }: Props) {
   const halt = result.halt
-  const seedValid = /^-?\d+$/.test(seedText.trim()) && Number.isSafeInteger(Number(seedText))
+  const seedValid = /^\d+$/.test(seedText.trim()) && Number.isSafeInteger(Number(seedText.trim()))
   return (
     <section aria-labelledby="run-heading" className="panel" data-testid="run-panel">
       <h2 id="run-heading">試験計算（CALIBRATION_ONLY・partial）</h2>
@@ -105,7 +105,7 @@ export function RunPanel({ inputs, result, seedText, onSeedText, onRerun }: Prop
         <button type="submit" disabled={!seedValid} data-testid="rerun">
           試験計算をやり直す
         </button>
-        {!seedValid && <span className="missing">seed は整数で入力してください</span>}
+        {!seedValid && <span className="missing">seed は 0 以上の安全な整数で入力してください</span>}
       </form>
     </section>
   )

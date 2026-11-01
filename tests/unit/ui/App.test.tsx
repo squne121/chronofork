@@ -102,6 +102,61 @@ describe('App', () => {
     expect(items()).toBe(100)
   })
 
+  it('無関係な Event へ切り替えると Trace を解除し、Trace→対応 Event の往復は維持する', () => {
+    const run = runExperimentalTimeline(1)
+    render(<App run={run} />)
+    const [a, b] = run.result.eventLog.filter((x) => x.year === 1250)
+    fireEvent.click(screen.getByTestId(`event-${a!.eventId}`))
+    fireEvent.click(screen.getByRole('button', { name: /判断根拠を開く/ }))
+    expect(screen.getByTestId('trace-detail').textContent).toContain(a!.sourceTraceIds[0])
+    // Trace→対応 Event: Trace は維持される
+    fireEvent.click(within(screen.getByTestId('trace-detail')).getByRole('button', { name: /Event を開く/ }))
+    expect(screen.getByTestId('trace-detail').textContent).toContain(a!.sourceTraceIds[0])
+    // 無関係な Event B: Trace A は残らない
+    fireEvent.click(screen.getByTestId(`event-${b!.eventId}`))
+    expect(screen.getByTestId('event-detail').textContent).toContain(b!.eventId)
+    expect(screen.getByTestId('trace-detail').textContent).not.toContain(a!.sourceTraceIds[0])
+    expect(screen.getByTestId('trace-detail').textContent).toContain('Event の「判断根拠を開く」')
+  })
+
+  it('対象フィルタを別 Group に変えると対象外の Event/Trace 詳細を解除する', () => {
+    const run = runExperimentalTimeline(1)
+    render(<App run={run} />)
+    const a = run.result.eventLog.find((x) => x.year === 1250)!
+    fireEvent.click(screen.getByTestId(`event-${a.eventId}`))
+    fireEvent.click(screen.getByRole('button', { name: /判断根拠を開く/ }))
+    const other = run.result.eventLog.find((x) => x.year === 1250 && x.eventId !== a.eventId)!
+    const key = (r: (typeof other.involvedRefs)[number]) => (r.kind === 'PERSON_PAIR' ? '' : `${r.kind}:${r.id}`)
+    fireEvent.change(screen.getByTestId('event-target'), { target: { value: key(other.involvedRefs[0]!) } })
+    expect(screen.getByTestId('event-detail').textContent).not.toContain(a.eventId)
+    expect(screen.getByTestId('trace-detail').textContent).not.toContain(a.sourceTraceIds[0])
+    // 関与する対象への変更では維持される
+    fireEvent.click(screen.getByTestId(`event-${other.eventId}`))
+    fireEvent.change(screen.getByTestId('event-target'), { target: { value: key(other.involvedRefs[0]!) } })
+    expect(screen.getByTestId('event-detail').textContent).toContain(other.eventId)
+  })
+
+  it('seed は 0 以上の安全整数のみ受け付け、負数・範囲外・小数は再計算を無効化する', () => {
+    render(<App />)
+    const btn = screen.getByTestId('rerun') as HTMLButtonElement
+    for (const bad of ['-1', '9007199254740992', '1.5', '', '1e3']) {
+      fireEvent.change(screen.getByTestId('seed-input'), { target: { value: bad } })
+      expect(btn.disabled).toBe(true)
+    }
+    for (const ok of ['0', '9007199254740991']) {
+      fireEvent.change(screen.getByTestId('seed-input'), { target: { value: ok } })
+      expect(btn.disabled).toBe(false)
+    }
+  })
+
+  it('1350年は評価専用で、1351年初への反映を示唆しない', () => {
+    render(<App />)
+    setYear(1350)
+    const text = screen.getByTestId('chronicle-status').closest('section')!.textContent ?? ''
+    expect(text).toContain('1350年は評価専用')
+    expect(text).not.toContain('1351')
+  })
+
   it('同 seed の再計算は同一結果、別 seed は seed 表示が変わる', () => {
     expect(JSON.stringify(runExperimentalTimeline(5).result)).toBe(JSON.stringify(runExperimentalTimeline(5).result))
     render(<App />)
