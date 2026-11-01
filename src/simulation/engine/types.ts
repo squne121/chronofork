@@ -11,7 +11,7 @@ import type {
 } from '../contracts/index.ts'
 import type { GoalEvaluation } from '../goal.ts'
 import type { Diagnostic } from '../validation/index.ts'
-import type { EvaluatorMap } from './evaluators.ts'
+import type { EvaluatorDiagnostic, EvaluatorMap } from './evaluators.ts'
 import type { Rejection } from './reducer/index.ts'
 
 export type RunOptions = Readonly<{
@@ -30,6 +30,7 @@ export type HaltCode =
   | 'YEAR_OUT_OF_RANGE'
   | 'IMPLEMENTED_RULE_WITHOUT_EVALUATOR'
   | 'EVALUATOR_EXCEPTION'
+  | 'EVALUATION_FAILED'
   | 'INVALID_OUTCOME'
   | 'UNRESOLVED_CROSS_DOMAIN_REQUEST'
   | 'OUTCOME_REJECTED'
@@ -46,6 +47,8 @@ export type RunHalt = Readonly<{
   message: string
   rejections: readonly Rejection[]
   diagnostics: readonly Diagnostic[]
+  /** 評価器が明示した評価不能の診断（EVALUATION_FAILED のとき）。それ以外は空。 */
+  evaluatorDiagnostics: readonly EvaluatorDiagnostic[]
   /** 失敗した Outcome の判断記録（診断用）。確定した履歴には含まれず、Event は作られない。 */
   traces: readonly DecisionTrace[]
 }>

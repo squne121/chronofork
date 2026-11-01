@@ -16,7 +16,8 @@ import { getRule } from '../rule-registry.ts'
 import { validateWorldState } from '../validation/index.ts'
 import type { Diagnostic } from '../validation/index.ts'
 import { DEFAULT_EVALUATORS } from './evaluators.ts'
-import type { EvaluationContext, EvaluatorMap, RuleEvaluator } from './evaluators.ts'
+import { EvaluationFailure } from './evaluators.ts'
+import type { EvaluationContext, EvaluatorDiagnostic, EvaluatorMap, RuleEvaluator } from './evaluators.ts'
 import { buildEvents, buildTraces } from './history.ts'
 import { traceIdOf } from './ids.ts'
 import { applyOutcome, createTransaction } from './reducer/index.ts'
@@ -42,6 +43,7 @@ type HaltInput = Readonly<{
   ruleId?: RuleId
   rejections?: readonly Rejection[]
   diagnostics?: readonly Diagnostic[]
+  evaluatorDiagnostics?: readonly EvaluatorDiagnostic[]
   traces?: readonly DecisionTrace[]
 }>
 
@@ -54,6 +56,7 @@ function halted(world: WorldState, year: number, executedRuleIds: readonly RuleI
     message: h.message,
     rejections: h.rejections ?? [],
     diagnostics: h.diagnostics ?? [],
+    evaluatorDiagnostics: h.evaluatorDiagnostics ?? [],
     traces: h.traces ?? [],
   }
   return { status: 'HALTED', year, world, halt, executedRuleIds }
@@ -170,6 +173,9 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
         if (bad) return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: bad })
         outcome = cloneData(outcome)
       } catch (e) {
+        if (e instanceof EvaluationFailure) {
+          return halted(input, t, executed, { code: 'EVALUATION_FAILED', phase, ruleId, message: `${ruleId} の評価が成立しません: ${e.message}`, evaluatorDiagnostics: e.diagnostics })
+        }
         return halted(input, t, executed, { code: 'EVALUATOR_EXCEPTION', phase, ruleId, message: `評価器が例外: ${e instanceof Error ? e.message : String(e)}` })
       }
       executed.push(ruleId)
