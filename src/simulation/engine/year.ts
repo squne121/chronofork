@@ -2,6 +2,7 @@
 // 純粋・決定的。入力は変更しない。失敗（評価器の例外・不正 Outcome・拒否・検証 ERROR）は停止として返し、
 // その年の部分状態は確定しない（年単位の原子性）。
 import type {
+  CrossDomainRequest,
   DecisionTrace,
   EventLogEntry,
   Id,
@@ -70,6 +71,7 @@ function checkOutcome(o: RuleOutcome, ctx: EvaluationContext): string | null {
   for (const k of ['commands', 'requests', 'deferred', 'traceDrafts'] as const) {
     if (!Array.isArray(o[k])) return `Outcome.${k} が配列ではありません`
   }
+  if (o.responses !== undefined && !Array.isArray(o.responses)) return 'Outcome.responses が配列ではありません'
   const ids = new Set<Id>()
   for (const [i, d] of o.traceDrafts.entries()) {
     if (d.year !== ctx.year || d.phase !== ctx.phase || d.ruleId !== ctx.ruleId) {
@@ -92,7 +94,55 @@ function checkOutcome(o: RuleOutcome, ctx: EvaluationContext): string | null {
   return null
 }
 
-function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions): EvaluationContext {
+
+type MarriageQuery = Extract<CrossDomainRequest, { kind: 'LEGAL_MARRIAGE_QUERY' }>
+
+/** B-005からA-LEG-01への型付き同年照会だけを配送する。他種別は既存の安全停止を維持。 */
+function legalMarriageRequestValid(r: CrossDomainRequest, year: number, traceIds: ReadonlySet<Id>): r is MarriageQuery {
+  if (!r || r.kind !== 'LEGAL_MARRIAGE_QUERY' || r.payload?.kind !== 'LEGAL_MARRIAGE_QUERY') return false
+  const ids = r.payload.personIds
+  return r.targetDomain === 'A' && r.requiredResponseYear === year &&
+    r.source?.sourceRuleId === 'B-005' && r.source.year === year && r.source.phase === 3 &&
+    typeof r.source.requestId === 'string' && r.source.requestId.length > 0 &&
+    traceIds.has(r.source.sourceTraceId) &&
+    Array.isArray(ids) && ids.length === 2 &&
+    typeof ids[0] === 'string' && ids[0].length > 0 &&
+    typeof ids[1] === 'string' && ids[1].length > 0 && ids[0] < ids[1]
+}
+
+/** A-LEG-01が照会を一件ずつ応答し、ACCEPTのときだけ同一requestIdへの婚姻登録を出すことを検査。 */
+function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[], traceId: (draftIndex: number) => Id): string | null {
+  const responses = o.responses
+  if (!Array.isArray(responses) || responses.length !== queries.length || o.traceDrafts.length !== queries.length) {
+    return 'A-LEG-01の照会・応答・判断件数が一致しません'
+  }
+  const seen = new Set<Id>()
+  let accepts = 0
+  for (const q of queries) {
+    const response = responses.find((r) => r?.requestId === q.source.requestId)
+    if (!response || seen.has(q.source.requestId)) return '婚姻照会への応答が欠落または重複しています'
+    seen.add(q.source.requestId)
+    if (!['ACCEPT','REJECT','DEFER'].includes(response.status) || !Array.isArray(response.reasonCodes) || response.payload !== undefined) {
+      return '婚姻照会への応答形式が不正です'
+    }
+    const ts = o.traceDrafts.filter((d) => d.candidates.some((c) => c.inputs?.sourceRequestId === q.source.requestId))
+    if (ts.length !== 1 || ts[0]?.status !== response.status) return '婚姻照会の判断Traceと応答が一致しません'
+    const matching = o.commands.filter((c) => c.source.requestId === q.source.requestId)
+    if (response.status === 'ACCEPT') {
+      accepts++
+      if (matching.length !== 1 || matching[0]?.type !== 'MARRIAGE_REGISTER') return 'ACCEPTの婚姻登録commandがありません'
+      const c = matching[0]
+      if (c.marriage.personIds[0] !== q.payload.personIds[0] || c.marriage.personIds[1] !== q.payload.personIds[1] ||
+          c.source.sourceTraceId !== traceId(o.traceDrafts.indexOf(ts[0]!))) {
+        return '婚姻登録commandの対象・Trace参照が照会と一致しません'
+      }
+    } else if (matching.length !== 0) return '未承認の照会から婚姻登録commandが生成されました'
+  }
+  if (o.commands.length !== accepts) return '照会外の婚姻登録commandが含まれます'
+  return null
+}
+
+function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions, priorTraces: readonly DecisionTrace[], marriageQueries: readonly MarriageQuery[]): EvaluationContext {
   const year = world.year
   return {
     year,
@@ -100,6 +150,8 @@ function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: R
     ruleId,
     seed: options.seed,
     branchId: options.branchId ?? 'main',
+    priorTraces: deepFreeze(cloneData(priorTraces)),
+    marriageQueries: deepFreeze(cloneData(marriageQueries)),
     traceId: (i) => traceIdOf(year, phase, ruleId, i),
     random: (k) =>
       drawRandom(options.seed, {
@@ -155,17 +207,21 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
   let tx = createTransaction({ branchId: options.branchId ?? 'main', year: t })
   const events: EventLogEntry[] = []
   const traces: DecisionTrace[] = []
+  const marriageQueries: MarriageQuery[] = []
 
   for (const phase of YEARLY_PHASES) {
     for (const ruleId of RULE_SCHEDULE[phase]) {
       const evaluator: RuleEvaluator | undefined = evaluators[ruleId]
       if (!evaluator) {
+        if (ruleId === 'A-LEG-01' && marriageQueries.length > 0) {
+          return halted(input, t, executed, { code: 'UNRESOLVED_CROSS_DOMAIN_REQUEST', phase, ruleId, message: 'B-005婚姻照会のA-LEG-01応答評価器がありません' })
+        }
         if (isImplemented(ruleId)) {
           return halted(input, t, executed, { code: 'IMPLEMENTED_RULE_WITHOUT_EVALUATOR', phase, ruleId, message: `${ruleId} は IMPLEMENTED だが評価器が登録されていません` })
         }
         continue // TODO: 呼ばない。Command・Event・Trace を作らない。
       }
-      const ctx = makeContext(world, phase, ruleId, options)
+      const ctx = makeContext(world, phase, ruleId, options, traces, marriageQueries)
       let outcome: RuleOutcome
       try {
         outcome = evaluator(deepFreeze(cloneData(world)), ctx)
@@ -181,11 +237,27 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
       executed.push(ruleId)
 
       if (outcome.requests.length > 0) {
-        return halted(input, t, executed, {
-          code: 'UNRESOLVED_CROSS_DOMAIN_REQUEST', phase, ruleId,
-          message: '領域間 request に対する応答機構が未実装のため、未応答のまま進めず停止します',
-          traces: buildTraces(outcome, [], t, ['UNRESOLVED_CROSS_DOMAIN_REQUEST']),
-        })
+        const ids = new Set(outcome.traceDrafts.map((_, i) => ctx.traceId(i)))
+        const requestsValid = ruleId === 'B-005' && phase === 3 && outcome.commands.length === 0 &&
+          outcome.requests.every((q) => legalMarriageRequestValid(q, t, ids)) &&
+          new Set(outcome.requests.map((q) => q.source.requestId)).size === outcome.requests.length &&
+          marriageQueries.length === 0
+        if (!requestsValid) {
+          return halted(input, t, executed, {
+            code: 'UNRESOLVED_CROSS_DOMAIN_REQUEST', phase, ruleId,
+            message: 'この領域間requestは未対応、または婚姻照会の発行源・形式が不正です',
+            traces: buildTraces(outcome, [], t, ['UNRESOLVED_CROSS_DOMAIN_REQUEST']),
+          })
+        }
+        marriageQueries.push(...outcome.requests as MarriageQuery[])
+      }
+      if (ruleId === 'A-LEG-01' && marriageQueries.length > 0) {
+        const bad = marriageResponseError(outcome, marriageQueries, ctx.traceId)
+        if (bad !== null) {
+          return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: bad })
+        }
+      } else if ((outcome.responses?.length ?? 0) > 0 || (ruleId === 'A-LEG-01' && outcome.commands.length > 0)) {
+        return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: '照会のない法的婚姻登録、または権限のない応答は拒否します' })
       }
       const r = applyOutcome(world, outcome, { transaction: tx })
       if (r.status !== 'APPLIED' && r.status !== 'NO_OP' && r.status !== 'DUPLICATE') {
@@ -202,6 +274,7 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
       traces.push(...buildTraces(outcome, newEvents, t))
       world = r.world
       tx = r.transaction
+      if (ruleId === 'A-LEG-01') marriageQueries.length = 0
     }
   }
 

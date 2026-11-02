@@ -185,5 +185,7 @@ export type RuleOutcome = Readonly<{
   commands: readonly DomainCommand[]
   requests: readonly CrossDomainRequest[]
   deferred: readonly DeferredEffect[] // 翌年施行 (effectiveFromYear = t+1)
+  /** 同年の型付き照会に対する応答。A-LEG-01のLEGAL_MARRIAGE_QUERYだけが初期実装で利用。 */
+  responses?: readonly CrossDomainResponse[]
   traceDrafts: readonly DecisionTraceDraft[]
 }>
