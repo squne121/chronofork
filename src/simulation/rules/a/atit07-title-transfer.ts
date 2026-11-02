@@ -17,7 +17,8 @@ export const createATit07EvidenceEvaluator = (): RuleEvaluator => (world: WorldS
     t.year === ctx.year && t.ruleId === 'B-003' && t.status === 'ACCEPT' &&
     t.eventIds.length === 1 && t.actorRef.kind === 'PERSON')
   const dead = new Set(deathTraces.map(t => t.actorRef.kind === 'PERSON' ? t.actorRef.id : ''))
-  const successorTraces = (ctx.priorTraces ?? []).filter(t => t.year === ctx.year && t.ruleId === 'A-SUC-04')
+  const successorTraces = (ctx.priorTraces ?? []).filter(t => t.year === ctx.year && t.ruleId === 'A-SUC-04' &&
+    !t.reasonCodes.includes('LEGAL_CASE_RECORDING_ONLY'))
   const traceDrafts: DecisionTraceDraft[] = []
   const commands: LegalTitleTransferCommand[] = []
   const seenTitle = new Set<Id>()
@@ -82,6 +83,26 @@ export const createATit07EvidenceEvaluator = (): RuleEvaluator => (world: WorldS
       modifierIds:[],ruleVersion:ATIT07_RULE_VERSION,
     })
     if (!inScope) continue
+    // 相続判断はDEFERのまま。死亡した保持者をUNDETERMINEDにする管理操作だけ別ACCEPT Traceで記録。
+    // ACCEPTは法的継承の承認ではなく、既存Titleの未確定状態を確定することだけを表す。
+    let commandTraceIndex = traceIndex
+    if (!approved) {
+      const recordId = 'atit07:undetermined:' + JSON.stringify([ctx.year, titleId])
+      commandTraceIndex = traceDrafts.length
+      traceDrafts.push({
+        year: ctx.year, phase: ctx.phase, ruleId: ctx.ruleId,
+        actorRef: { kind: 'REGION', id: title.regionId },
+        candidates: [{
+          candidateId: recordId, eligible: true,
+          inputs: { titleId, predecessorPersonId: predecessorId, legalCaseId: caseId,
+            nextHolderStatus: 'UNDETERMINED', provenance: 'CALIBRATION_ONLY' },
+          reasonCodes: ['CALIBRATION_ONLY', 'TITLE_HOLDER_UNDETERMINED_RECORDING_ONLY'],
+        }],
+        selectedCandidateId: recordId, status: 'ACCEPT',
+        reasonCodes: ['CALIBRATION_ONLY', 'TITLE_HOLDER_UNDETERMINED_RECORDING_ONLY', 'NOT_SUCCESSION_APPROVAL'],
+        modifierIds: [], ruleVersion: ATIT07_RULE_VERSION,
+      })
+    }
     // APPROVEDなら既存承認ケースに記録されたただ一人を保持者へ。そうでなければ保有者未確定へ。
     commands.push({
       type:'LEGAL_TITLE_TRANSFER',
@@ -89,7 +110,7 @@ export const createATit07EvidenceEvaluator = (): RuleEvaluator => (world: WorldS
       source:{
         requestId:'req:atit07:' + JSON.stringify([ctx.year,titleId]),
         year:ctx.year,phase:ctx.phase,sourceRuleId:'A-TIT-07',
-        sourceTraceId:ctx.traceId(traceIndex),sourceIntentId:caseId ?? trace.traceId,
+        sourceTraceId:ctx.traceId(commandTraceIndex),sourceIntentId:caseId ?? trace.traceId,
       },
       titleId,
       ...(approved && caseId && idStr(successorId)
