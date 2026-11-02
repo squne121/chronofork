@@ -69,6 +69,7 @@ function evaluators(ledger:readonly StatModifier[],opts:Setup={}):EvaluatorMap {
 function root():{a0:Branch;timeline:ReturnType<typeof runTimeline>} {
   const table=evaluators([])
   const timeline=runTimeline(makeWorld(),{seed:SEED,branchId:'A0',evaluators:table})
+  if(timeline.status!=='COMPLETED')throw new Error('A0_HALTED:'+JSON.stringify(timeline.halt))
   const r=createRootBranch(timeline,[],table)
   if(!r.ok)throw new Error(r.code+': '+r.message)
   return {a0:r.branch,timeline}
