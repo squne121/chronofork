@@ -16,6 +16,11 @@ import {
 } from './b004-branch-fixture.ts'
 
 const BIRTH_YEAR = FORK_YEAR + 1
+// test-local: 母親役P5を1261年時点31歳とする試験用の生年補正（正式scenarioは変更しない）。
+const createBirthWorld = (): WorldState => {
+  const w = createSyntheticWorld()
+  return { ...w, persons: w.persons.map(p => p.personId === P5 ? { ...p, birthYear: 1230 } : p) }
+}
 const BIRTH: BirthCandidateEvidence = Object.freeze({
   candidateId: 'explicit-candidate-p4p5-child-01',
   evidenceId: 'synthetic-child-evidence-1261',
@@ -55,7 +60,7 @@ function evaluate(ledger: readonly StatModifier[], approvals: readonly MarriageA
 }
 function root(): { a0: Branch; timeline: ReturnType<typeof runTimeline> } {
   const evaluators = evaluate([])
-  const timeline = runTimeline(createSyntheticWorld(), { seed: SEED, branchId:'A0', evaluators })
+  const timeline = runTimeline(createBirthWorld(), { seed: SEED, branchId:'A0', evaluators })
   const result = createRootBranch(timeline, [], evaluators)
   if (!result.ok) throw new Error(result.code + ': ' + result.message)
   return { a0: result.branch, timeline }
@@ -111,7 +116,7 @@ describe('B-005婚姻 → C-004枠 → B-002出生 → A-DYN-02法的王朝（�
     expect(a1.snapshots.map((w)=>w.groups)).toEqual(a0.snapshots.map((w)=>w.groups))
     const birth = traceAt(a1,'B-002',BIRTH_YEAR)!
     expect(birth).toMatchObject({status:'ACCEPT',ruleId:'B-002',year:1261})
-    expect(birth.candidates[0]?.inputs).toMatchObject({evidenceId:BIRTH.evidenceId,childPersonId:id,marriageId:eventAt(a1,'MARRIAGE_REGISTER',1260)[0]!.stateChanges.find(x=>x.path.includes('marriages'))?.after?.marriageId ?? birth.candidates[0]?.inputs.marriageId})
+    expect(birth.candidates[0]?.inputs).toMatchObject({evidenceId:BIRTH.evidenceId,childPersonId:id,marriageId:a1.snapshots[11]!.legal.marriages[0]!.marriageId})
     const events = eventAt(a1,'PERSON_BIRTH',BIRTH_YEAR)
     expect(events).toHaveLength(1)
     expect(events[0]?.sourceTraceIds).toEqual([birth.traceId])
