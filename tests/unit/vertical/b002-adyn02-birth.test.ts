@@ -12,7 +12,7 @@ import type { MarriageApprovalEvidence } from '../../../src/simulation/rules/a/i
 import { createB002CalibrationEvaluator, createB005CalibrationEvaluator } from '../../../src/simulation/rules/b/index.ts'
 import type { BirthCandidateEvidence } from '../../../src/simulation/rules/b/index.ts'
 import {
-  B004_BRANCH_CONFIG as CFG, FORK_YEAR, P4, P5, SEED, TRUST_BOOST, createSyntheticWorld, evaluatorsForLedger,
+  FORK_YEAR, P4, P5, SEED, TRUST_BOOST, createSyntheticWorld, evaluatorsForLedger,
 } from './b004-branch-fixture.ts'
 
 const BIRTH_YEAR = FORK_YEAR + 1
@@ -35,8 +35,8 @@ const CONTRACT_CLAUSE = Object.freeze({
 })
 const APPROVAL_NO_CLAUSE: MarriageApprovalEvidence = Object.freeze({
   approvalId: 'synthetic-approved-pair45',
-  personIds: [P4,P5], authorizedYear: FORK_YEAR, status: 'APPROVED',
-  issuerRef: { kind: 'COUNTRY', id: 'country-eldia' }, evidenceId: 'synthetic-approved-document',
+  personIds: [P4,P5] as const, authorizedYear: FORK_YEAR, status: 'APPROVED' as const,
+  issuerRef: { kind: 'COUNTRY' as const, id: 'country-eldia' }, evidenceId: 'synthetic-approved-document',
   provenance: 'CALIBRATION_ONLY',
   contract: { contractId: 'synthetic-p4p5-contract', evidenceId: 'synthetic-approved-document', clauses: [] },
 })
