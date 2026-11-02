@@ -51,7 +51,7 @@ export function createALeg01CalibrationEvaluator(
     if (!Array.isArray(p) || p.length !== 2 || normalizePersonPair(p[0], p[1])?.[0] !== p[0]) {
       issues.push({ code: 'INVALID_PAIR', path }); return
     }
-    const key = r.authorizedYear + ':' + pairKey(p)
+    const key = r.authorizedYear + ':' + pairKey([p[0] as Id, p[1] as Id])
     if (slots.has(key)) issues.push({ code: 'DUPLICATE_APPROVAL_FOR_PAIR_YEAR', path })
     slots.add(key)
     if (!Number.isSafeInteger(r.authorizedYear) || r.authorizedYear < START_YEAR || r.authorizedYear >= GOAL_YEAR) {
