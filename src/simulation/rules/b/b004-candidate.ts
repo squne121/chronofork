@@ -6,12 +6,15 @@ import type { DecisionTraceDraft, Id, JsonValue, RuleOutcome, WorldState } from 
 import { EvaluationFailure } from '../../engine/evaluators.ts'
 import type { EvaluationContext, EvaluatorMap, RuleEvaluator } from '../../engine/evaluators.ts'
 import type { PairTrustView } from '../../intervention/index.ts'
-import { normalizePersonPair, pairKey } from '../../intervention/index.ts'
+import { PAIR_TRUST_DEFINITION, normalizePersonPair, pairKey } from '../../intervention/index.ts'
 
 export const B004_RULE_ID = 'B-004' as const
 export const B004_CALIBRATION_REASON = 'CALIBRATION_ONLY'
 export const B004_TECHNICAL_ONLY_REASON = 'B004_TECHNICAL_ONLY'
 export const B004_NO_MARRIAGE_REASON = 'NO_MARRIAGE_REGISTERED'
+/** 婚姻適格性・合法性は未審査。ACCEPT は信頼スコアの技術的採否のみで、婚姻の可否を意味しない。 */
+export const B004_ELIGIBILITY_UNREVIEWED_REASON = 'MARRIAGE_ELIGIBILITY_UNREVIEWED'
+export const B004_KINSHIP_UNREVIEWED_REASON = 'KINSHIP_UNREVIEWED'
 export const B004_RULE_VERSION = 'b004-calibration-0:B-004:pair-trust-candidate:CALIBRATION_ONLY'
 
 /** 試験用の外部設定。値は仮値で、実値はテストが記録する。 */
@@ -40,7 +43,19 @@ export type B004Issue = Readonly<{ code: 'INVALID_PAIR' | 'INVALID_CALIBRATION';
 
 const isSafeInt = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v)
 
-const candidateIdOf = (ids: readonly [Id, Id]) => `b004:${ids[0]}|${ids[1]}`
+/** 区切り文字を含む ID でも衝突しない JSON 符号化（pairKey）。 */
+const candidateIdOf = (ids: readonly [Id, Id]) => `b004:${pairKey(ids)}`
+
+/** pair.trust の絶対値上限（校正値域）に対し score が安全整数に収まる trustWeight の上限。 */
+export const B004_MAX_TRUST_WEIGHT = Math.floor(Number.MAX_SAFE_INTEGER / Math.max(Math.abs(PAIR_TRUST_DEFINITION.min), Math.abs(PAIR_TRUST_DEFINITION.max)))
+
+/** WorldState に明示された親子・同親の兄弟姉妹。明示データのみで推測しない（他の血縁度は未審査のまま）。 */
+function knownKinship(a: { personId: Id; fatherId?: Id; motherId?: Id }, b: { personId: Id; fatherId?: Id; motherId?: Id }): 'PARENT_CHILD' | 'SIBLING' | null {
+  if ([a.fatherId, a.motherId].includes(b.personId) || [b.fatherId, b.motherId].includes(a.personId)) return 'PARENT_CHILD'
+  const shared = (x?: Id, y?: Id) => x !== undefined && x === y
+  if (shared(a.fatherId, b.fatherId) || shared(a.motherId, b.motherId)) return 'SIBLING'
+  return null
+}
 
 /**
  * 設定を検証して評価器を作る。不正なペア（自己ペア・空 ID）や設定は fail-closed（評価器を作らない）。
@@ -52,7 +67,7 @@ export function createB004CalibrationEvaluator(
   const cal = input.calibration ?? EXPERIMENTAL_B004_CALIBRATION
   const issues: B004Issue[] = []
   if (cal.status !== 'CALIBRATION_ONLY') issues.push({ code: 'INVALID_CALIBRATION', path: 'status', message: 'CALIBRATION_ONLY の設定のみ受け付けます' })
-  if (!isSafeInt(cal.trustWeight) || cal.trustWeight < 0) issues.push({ code: 'INVALID_CALIBRATION', path: 'trustWeight', message: 'trustWeight は 0 以上の安全な整数が必要です' })
+  if (!isSafeInt(cal.trustWeight) || cal.trustWeight < 0 || cal.trustWeight > B004_MAX_TRUST_WEIGHT) issues.push({ code: 'INVALID_CALIBRATION', path: 'trustWeight', message: `trustWeight は 0 以上 ${B004_MAX_TRUST_WEIGHT} 以下の整数が必要です（score を安全整数に収めるため）` })
   if (!isSafeInt(cal.acceptThreshold)) issues.push({ code: 'INVALID_CALIBRATION', path: 'acceptThreshold', message: 'acceptThreshold は安全な整数が必要です' })
   if (!Array.isArray(input.pairs)) issues.push({ code: 'INVALID_PAIR', path: 'pairs', message: 'pairs は配列が必要です' })
 
@@ -71,6 +86,9 @@ export function createB004CalibrationEvaluator(
   const frozenCal: B004Calibration = Object.freeze({ ...cal })
 
   const evaluator: RuleEvaluator = (world: WorldState, ctx: EvaluationContext): RuleOutcome => {
+    if (ctx.ruleId !== B004_RULE_ID || ctx.phase !== 3) {
+      throw new EvaluationFailure('B-004 評価器は B-004（フェーズ 3）以外では実行できません', [{ code: 'RULE_MISMATCH', message: `${String(ctx.ruleId)} / phase ${String(ctx.phase)}` }])
+    }
     if (world.year !== ctx.year) {
       throw new EvaluationFailure('WorldState の年と評価年が一致しません', [{ code: 'YEAR_MISMATCH', message: `${world.year} != ${ctx.year}` }])
     }
@@ -83,11 +101,12 @@ export function createB004CalibrationEvaluator(
 function draftOf(world: WorldState, ctx: EvaluationContext, view: PairTrustView, cal: B004Calibration, ids: readonly [Id, Id]): DecisionTraceDraft {
   const candidateId = candidateIdOf(ids)
   const base = { year: ctx.year, phase: ctx.phase, ruleId: ctx.ruleId, actorRef: { kind: 'PERSON_PAIR', ids } as const, ruleVersion: B004_RULE_VERSION }
-  const tag = [B004_CALIBRATION_REASON, B004_TECHNICAL_ONLY_REASON, B004_NO_MARRIAGE_REASON]
+  const tag = [B004_CALIBRATION_REASON, B004_TECHNICAL_ONLY_REASON, B004_NO_MARRIAGE_REASON, B004_ELIGIBILITY_UNREVIEWED_REASON]
   const persons = ids.map((id) => world.persons.find((p) => p.personId === id))
   const baseInputs: Record<string, JsonValue> = {
     personIds: [ids[0], ids[1]],
     trustWeight: cal.trustWeight,
+    acceptThreshold: cal.acceptThreshold,
   }
   const deferOrReject = (status: 'DEFER' | 'REJECT', eligible: boolean, reason: string, extra: Record<string, JsonValue> = {}, modifierIds: readonly Id[] = []): DecisionTraceDraft => ({
     ...base,
@@ -102,6 +121,9 @@ function draftOf(world: WorldState, ctx: EvaluationContext, view: PairTrustView,
   }
   const dead = ids.filter((_, i) => persons[i]!.alive !== true)
   if (dead.length > 0) return deferOrReject('REJECT', false, 'PERSON_DECEASED', { deceasedPersonIds: dead })
+
+  const kin = knownKinship(persons[0]!, persons[1]!)
+  if (kin !== null) return deferOrReject('DEFER', false, B004_KINSHIP_UNREVIEWED_REASON, { knownKinship: kin })
 
   const r = view.resolve(ids[0], ids[1], ctx.year)
   if (r === null) return deferOrReject('DEFER', false, 'TRUST_UNRESOLVED')
