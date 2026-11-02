@@ -133,7 +133,7 @@ function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[]
       if (matching.length !== 1 || matching[0]?.type !== 'MARRIAGE_REGISTER') return 'ACCEPTの婚姻登録commandがありません'
       const c = matching[0]
       if (c.marriage.personIds[0] !== q.payload.personIds[0] || c.marriage.personIds[1] !== q.payload.personIds[1] ||
-          c.source.sourceTraceId !== traceId(o.traceDrafts.indexOf(ts[0]!)) {
+          c.source.sourceTraceId !== traceId(o.traceDrafts.indexOf(ts[0]!))) {
         return '婚姻登録commandの対象・Trace参照が照会と一致しません'
       }
     } else if (matching.length !== 0) return '未承認の照会から婚姻登録commandが生成されました'
