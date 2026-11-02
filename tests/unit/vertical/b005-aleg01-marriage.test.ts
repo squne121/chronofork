@@ -133,6 +133,22 @@ describe('B-005 → A-LEG-01の実婚姻成立（explicit synthetic evidence）'
     expect(marriageEvents(unknownIssuer)).toHaveLength(0)
   })
 
+  it('既知の親子関係ではB-004/B-005が法的な成立を推定せず、明示承認fixtureがあってもEventを作らない', () => {
+    const base = createSyntheticWorld()
+    // test-local: P4の子をP5とする。父1215年生・子1240年生の明示関係のみ。
+    const related = { ...base, persons: base.persons.map((p) =>
+      p.personId === P5 ? { ...p, fatherId: P4, birthYear: 1240 } : p) }
+    const result = runTimeline(related, {
+      seed: CFG.seed, branchId: 'kinship-test',
+      evaluators: evaluators([TRUST_BOOST]),
+    })
+    expect(result.status).toBe('COMPLETED')
+    expect(result.decisionTraces.find((t) => t.ruleId === 'B-004' && t.year === 1260)?.status).toBe('DEFER')
+    expect(result.decisionTraces.find((t) => t.ruleId === 'B-005' && t.year === 1260)?.status).toBe('DEFER')
+    expect(result.eventLog.some((e) => e.eventType.includes('MARRIAGE_REGISTER'))).toBe(false)
+    expect(result.snapshots.at(-1)?.legal.marriages).toEqual([])
+  })
+
   it('台帳の重複・不正な承認書は評価器生成時に拒否し、無言の法的承認を行わない', () => {
     expect(createALeg01CalibrationEvaluator([TEST_APPROVAL, TEST_APPROVAL]).ok).toBe(false)
     expect(createALeg01CalibrationEvaluator([{ ...TEST_APPROVAL, evidenceId: '' }]).ok).toBe(false)
