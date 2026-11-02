@@ -111,7 +111,7 @@ function legalMarriageRequestValid(r: CrossDomainRequest, year: number, traceIds
 }
 
 /** A-LEG-01が照会を一件ずつ応答し、ACCEPTのときだけ同一requestIdへの婚姻登録を出すことを検査。 */
-function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[]): string | null {
+function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[], traceId: (draftIndex: number) => Id): string | null {
   const responses = o.responses
   if (!Array.isArray(responses) || responses.length !== queries.length || o.traceDrafts.length !== queries.length) {
     return 'A-LEG-01の照会・応答・判断件数が一致しません'
@@ -133,7 +133,7 @@ function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[]
       if (matching.length !== 1 || matching[0]?.type !== 'MARRIAGE_REGISTER') return 'ACCEPTの婚姻登録commandがありません'
       const c = matching[0]
       if (c.marriage.personIds[0] !== q.payload.personIds[0] || c.marriage.personIds[1] !== q.payload.personIds[1] ||
-          c.source.sourceTraceId !== ('trace:' + q.source.year + ':p3:A-LEG-01:' + o.traceDrafts.indexOf(ts[0]!))) {
+          c.source.sourceTraceId !== traceId(o.traceDrafts.indexOf(ts[0]!)) {
         return '婚姻登録commandの対象・Trace参照が照会と一致しません'
       }
     } else if (matching.length !== 0) return '未承認の照会から婚姻登録commandが生成されました'
@@ -252,7 +252,7 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
         marriageQueries.push(...outcome.requests as MarriageQuery[])
       }
       if (ruleId === 'A-LEG-01' && marriageQueries.length > 0) {
-        const bad = marriageResponseError(outcome, marriageQueries)
+        const bad = marriageResponseError(outcome, marriageQueries, ctx.traceId)
         if (bad !== null) {
           return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: bad })
         }
