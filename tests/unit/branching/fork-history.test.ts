@@ -197,6 +197,29 @@ describe('評価器構成の照合（fail-closed）', () => {
   })
 })
 
+describe('createRootBranch の評価器指定は実行済み RuleID と一致が必要', () => {
+  const c004 = plainFactory()({ branchId: 'R', parentBranchId: 'n', forkYear: 1250, seed: SEED, ledger: [], knownPersonIds: new Set() })
+  const c005 = plainFactory(['RULE-C-005'])({ branchId: 'R', parentBranchId: 'n', forkYear: 1250, seed: SEED, ledger: [], knownPersonIds: new Set() })
+  const ran = (ev: EvaluatorMap) => runTimeline(newWorld(), { seed: SEED, branchId: 'R', evaluators: ev })
+  it('C004 の実行結果へ C005 だけを指定する誤用は拒否。正しい構成は成功、省略時は coverage 由来', () => {
+    expect(createRootBranch(ran(c004), [], c005)).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+    expect(createRootBranch(ran(c004), [], { ...c004, ...c005 })).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+    const good = createRootBranch(ran(c004), [], c004)
+    expect(good.ok && good.branch.evaluatorProfile).toEqual({ mode: 'RULES', ruleIds: ['RULE-C-004'] })
+    const omitted = createRootBranch(ran(c004))
+    expect(omitted.ok && omitted.branch.evaluatorProfile.ruleIds).toEqual(['RULE-C-004'])
+  })
+  it('評価器なしの履歴（空）へ余分な評価器を指定すると拒否。空指定は成功', () => {
+    expect(createRootBranch(ran({}), [], c004)).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+    expect(createRootBranch(ran({}), [], {}).ok).toBe(true)
+  })
+  it('HALTED の親は従来どおり登録でき、停止診断を保持する', () => {
+    const halted = ran(factory(newCounter(), { throwAtYear: 1280 })({ branchId: 'R', parentBranchId: 'n', forkYear: 1250, seed: SEED, ledger: [], knownPersonIds: new Set() }))
+    const r = createRootBranch(halted, [], c005)
+    expect(r.ok && r.branch.halt).toMatchObject({ code: 'EVALUATOR_EXCEPTION', year: 1280 })
+  })
+})
+
 describe('壊れた親 Branch は例外なく INVALID_PARENT', () => {
   const root = makeRoot()
   const bad = (name: string, broken: unknown) =>

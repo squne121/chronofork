@@ -73,6 +73,11 @@ function checkBranchShape(b: unknown): string | null {
 export function createRootBranch(result: TimelineResult, ledger: StatModifierLedger = [], evaluators?: EvaluatorMap): ForkResult {
   try {
     const ids = evaluators ? Object.keys(evaluators).filter((k) => evaluators[k as keyof EvaluatorMap] !== undefined) : result.coverage.executedRuleIds
+    // 完走した履歴では、明示された評価器の RuleID 集合が実際に実行された集合と厳密一致しなければ拒否する
+    // （誤った構成を親の出典として登録させない）。HALTED は一部のみ実行されうるため従来どおり検証しない。
+    if (evaluators && result.status === 'COMPLETED' && !sameIds([...new Set(ids)].sort(), [...result.coverage.executedRuleIds].sort())) {
+      return reject('EVALUATOR_MISMATCH', `指定した評価器 [${[...ids].sort().join(',')}] が実行済み RuleID [${result.coverage.executedRuleIds.join(',')}] と一致しません`)
+    }
     const branch: Branch = {
       branchId: result.branchId,
       parentBranchId: null,
