@@ -6,6 +6,7 @@ export type {
   Branch,
   BranchEvaluatorFactory,
   BranchEvaluatorInput,
+  EvaluatorProfile,
   ForkInput,
   ForkRejectCode,
   ForkResult,

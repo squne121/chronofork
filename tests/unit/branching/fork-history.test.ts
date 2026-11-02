@@ -154,6 +154,102 @@ describe('modifier 引継ぎ', () => {
   })
 })
 
+/** 台帳に反応しない synthetic 評価器（modifier 以外の条件が同じなら親と同じ履歴になる）。 */
+const plainFactory = (ruleIds: ('RULE-C-004' | 'RULE-C-005')[] = ['RULE-C-004']): BranchEvaluatorFactory => () =>
+  Object.fromEntries(ruleIds.map((id) => [id, (_w: WorldState, ctx: Parameters<NonNullable<EvaluatorMap[typeof id]>>[1]) =>
+    id === 'RULE-C-004'
+      ? outcomeOf(ctx, { commands: [cohortCommand(ctx, 20 + Math.floor(ctx.random({ stream: 'EXOGENOUS', targetId: GROUP, eventKey: 'b' }) * 5), 16)], traceDrafts: [draft(ctx)] })
+      : outcomeOf(ctx, { traceDrafts: [draft(ctx, 'REJECT', 'NO_ELIGIBLE_CANDIDATE')] })])) as EvaluatorMap
+const rootWith = (f: BranchEvaluatorFactory | null): Branch => {
+  const ev = f?.({ branchId: 'R', parentBranchId: 'n', forkYear: 1250, seed: SEED, ledger: [], knownPersonIds: new Set() }) ?? {}
+  return ok(createRootBranch(runTimeline(newWorld(), { seed: SEED, branchId: 'R', evaluators: ev }), [], ev))
+}
+
+describe('評価器構成の照合（fail-closed）', () => {
+  it('modifier 以外が同じなら親と同じ履歴が再現される（C004 相当の評価器あり）', () => {
+    const parent = rootWith(plainFactory())
+    expect(parent.evaluatorProfile).toEqual({ mode: 'RULES', ruleIds: ['RULE-C-004'] })
+    const f = ok(forkHistory({ parent, forkYear: 1260, branchId: 'F', modifiers: [mod(1260)], evaluatorsFor: plainFactory() }))
+    expect(f.snapshots).toEqual(parent.snapshots)
+    expect(f.eventLog).toEqual(parent.eventLog)
+    expect(f.decisionTraces).toEqual(parent.decisionTraces)
+    expect(f.evaluatorProfile).toEqual(parent.evaluatorProfile)
+  })
+  it('評価器の渡し忘れ・片方だけ欠落・別ルール・余分は EVALUATOR_MISMATCH', () => {
+    const one = rootWith(plainFactory())
+    const m = () => [mod(1260)]
+    expect(forkHistory({ parent: one, forkYear: 1260, branchId: 'F', modifiers: m() })).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+    expect(forkHistory({ parent: one, forkYear: 1260, branchId: 'F', modifiers: m(), evaluatorsFor: () => ({}) })).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+    expect(forkHistory({ parent: one, forkYear: 1260, branchId: 'F', modifiers: m(), evaluatorsFor: plainFactory(['RULE-C-005']) })).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+    expect(forkHistory({ parent: one, forkYear: 1260, branchId: 'F', modifiers: m(), evaluatorsFor: plainFactory(['RULE-C-004', 'RULE-C-005']) })).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+    const two = rootWith(plainFactory(['RULE-C-004', 'RULE-C-005']))
+    expect(forkHistory({ parent: two, forkYear: 1260, branchId: 'F', modifiers: m(), evaluatorsFor: plainFactory() })).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+    expect(forkHistory({ parent: two, forkYear: 1260, branchId: 'F', modifiers: m(), evaluatorsFor: plainFactory(['RULE-C-004', 'RULE-C-005']) }).ok).toBe(true)
+  })
+  it('空評価器の技術試験は親も空（NONE）のときだけ通り、世界は変化しない。評価器を足すのも拒否', () => {
+    const empty = rootWith(null)
+    expect(empty.evaluatorProfile).toEqual({ mode: 'NONE', ruleIds: [] })
+    const f = ok(forkHistory({ parent: empty, forkYear: 1260, branchId: 'F', modifiers: [mod(1260)] }))
+    expect(f.evaluatorProfile.mode).toBe('NONE')
+    expect(f.eventLog).toEqual([])
+    expect(f.snapshots.map((s) => ({ ...s, year: 0 }))).toEqual(empty.snapshots.map((s) => ({ ...s, year: 0 })))
+    expect(forkHistory({ parent: empty, forkYear: 1260, branchId: 'F', modifiers: [mod(1260)], evaluatorsFor: plainFactory() })).toMatchObject({ ok: false, code: 'EVALUATOR_MISMATCH' })
+  })
+})
+
+describe('壊れた親 Branch は例外なく INVALID_PARENT', () => {
+  const root = makeRoot()
+  const bad = (name: string, broken: unknown) =>
+    it(name, () => {
+      const r = forkHistory({ parent: broken as Branch, forkYear: 1260, branchId: 'Z', modifiers: [mod(1260)], evaluatorsFor: factory(newCounter()) })
+      expect(r).toMatchObject({ ok: false, code: 'INVALID_PARENT' })
+    })
+  const snaps = (f: (a: unknown[]) => void) => { const a = [...root.snapshots] as unknown[]; f(a); return { ...root, snapshots: a } }
+  bad('lineage 欠落', { ...root, lineage: undefined })
+  bad('lineage 末尾が branchId と不一致', { ...root, lineage: ['x'] })
+  bad('snapshot 配列内 null', snaps((a) => { a[10] = null }))
+  bad('snapshot の人物配列欠落（fork 年）', snaps((a) => { a[10] = { ...(a[10] as object), persons: undefined } }))
+  bad('snapshot の人物配列欠落（別年）', snaps((a) => { a[40] = { ...(a[40] as object), persons: undefined } }))
+  bad('年の不連続', snaps((a) => { a.splice(5, 1) }))
+  bad('startYear 不正', { ...root, startYear: 'x' })
+  bad('parentBranchId が lineage と不整合', { ...root, parentBranchId: 'q' })
+  bad('forkYear が root なのに非 null', { ...root, forkYear: 1260 })
+  bad('status と halt の不整合', { ...root, halt: { code: 'X' } })
+  bad('eventLog 欠落', { ...root, eventLog: undefined })
+  bad('evaluatorProfile 欠落', { ...root, evaluatorProfile: undefined })
+  bad('null 親', null)
+  bad('空オブジェクト', {})
+})
+
+describe('未来 modifier の破棄（継承分だけを fork 年の世界で検証）', () => {
+  const futurePerson = 'p-synthetic-future'
+  const withFuturePerson = (b: Branch): Branch => {
+    const base = b.snapshots[0]!.persons[0]!
+    const snapshots = b.snapshots.map((s) => (s.year >= 1300 ? { ...s, persons: [...s.persons, { ...base, personId: futurePerson }] } : s))
+    return { ...b, snapshots } as Branch
+  }
+  const futureRef = toPairRef(P[0]!, futurePerson)!
+  const futureMod = (over: Partial<StatModifier> = {}) => ({ ...mod(1300), targetRef: futureRef, ...over })
+
+  it('t より後に初登場する人物への未来 modifier は破棄され、正当な fork を拒否しない', () => {
+    const parent = withFuturePerson({ ...makeRoot(), ledger: [futureMod()] } as Branch)
+    const a = ok(forkHistory({ parent, forkYear: 1260, branchId: 'F', modifiers: [mod(1260)], evaluatorsFor: factory(newCounter()) }))
+    expect(a.ledger.some((m) => m.startYear === 1300)).toBe(false)
+  })
+  it('同じ未来人物でも継承される modifier（開始年 ≤ t）は fork 年の世界で検証され拒否される', () => {
+    const parent = withFuturePerson({ ...makeRoot(), ledger: [futureMod({ startYear: 1255 })] } as Branch)
+    expect(forkHistory({ parent, forkYear: 1260, branchId: 'F', modifiers: [mod(1260)], evaluatorsFor: factory(newCounter()) })).toMatchObject({ ok: false, code: 'INVALID_PARENT_LEDGER' })
+  })
+  it('破棄対象でも期間・重複・未登録 statKey の不正は維持して拒否する', () => {
+    const run = (ledger: StatModifierLedger) =>
+      forkHistory({ parent: withFuturePerson({ ...makeRoot(), ledger } as Branch), forkYear: 1260, branchId: 'F', modifiers: [mod(1260)], evaluatorsFor: factory(newCounter()) })
+    expect(run([futureMod({ statKey: 'pair.unknown' })])).toMatchObject({ ok: false, code: 'INVALID_PARENT_LEDGER' })
+    expect(run([futureMod({ startYear: 1300, endExclusiveYear: 1290 })])).toMatchObject({ ok: false, code: 'INVALID_PARENT_LEDGER' })
+    expect(run([futureMod(), futureMod()])).toMatchObject({ ok: false, code: 'INVALID_PARENT_LEDGER' })
+    expect(run([futureMod({ targetRef: { kind: 'PERSON_PAIR', ids: ['nobody-a', 'nobody-b'] } })])).toMatchObject({ ok: false, code: 'INVALID_PARENT_LEDGER' })
+  })
+})
+
 describe('境界・拒否・HALTED', () => {
   const root = makeRoot()
   it('t=1349 は可、t=1350 と範囲外は拒否。1350 に介入を置かない', () => {
@@ -178,11 +274,6 @@ describe('境界・拒否・HALTED', () => {
     const m = mod(1260)
     expect(forkHistory({ parent: root, forkYear: 1260, branchId: 'A1', modifiers: [m], seed: SEED + 1 })).toMatchObject({ ok: false, code: 'SEED_MISMATCH' })
     expect(forkHistory({ parent: { ...root, rngVersion: 'old' }, forkYear: 1260, branchId: 'A1', modifiers: [m] })).toMatchObject({ ok: false, code: 'RNG_VERSION_MISMATCH' })
-  })
-  it('評価器なしの fork は世界を変えない（架空の差分を作らない）', () => {
-    const a = ok(forkHistory({ parent: root, forkYear: 1260, branchId: 'A1', modifiers: [mod(1260)] }))
-    expect(a.eventLog).toEqual(root.eventLog.filter((e) => e.year < 1260))
-    expect(a.decisionTraces).toEqual(root.decisionTraces.filter((e) => e.year < 1260))
   })
   it('評価器の生成関数が例外でも拒否で返す', () => {
     const r = forkHistory({ parent: root, forkYear: 1260, branchId: 'A1', modifiers: [mod(1260)], evaluatorsFor: () => { throw new Error('boom') } })

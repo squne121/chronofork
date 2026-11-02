@@ -18,6 +18,12 @@ export type RecomputeSummary = Readonly<{
   suffixCoverage: RuleCoverage
 }>
 
+/**
+ * 評価器構成の技術メタデータ（出典の確認用。ルールの実装状況を意味しない）。
+ * NONE は評価器なし（技術試験）。RULES は ruleIds の評価器で計算した履歴。分岐は親と同じ構成でのみ作れる。
+ */
+export type EvaluatorProfile = Readonly<{ mode: 'NONE' | 'RULES'; ruleIds: readonly string[] }>
+
 export type Branch = Readonly<{
   branchId: Id
   parentBranchId: Id | null
@@ -29,6 +35,7 @@ export type Branch = Readonly<{
   rngVersion: string
   startYear: Year
   ledger: StatModifierLedger
+  evaluatorProfile: EvaluatorProfile
   /** COMPLETED でも HALTED でもゲーム内の勝敗ではない。HALTED は年次計算の技術的失敗。 */
   status: 'COMPLETED' | 'HALTED'
   halt: RunHalt | null
@@ -68,6 +75,7 @@ export type ForkInput = Readonly<{
 
 export type ForkRejectCode =
   | 'INVALID_PARENT'
+  | 'EVALUATOR_MISMATCH'
   | 'PARENT_HALTED'
   | 'RNG_VERSION_MISMATCH'
   | 'SEED_MISMATCH'
