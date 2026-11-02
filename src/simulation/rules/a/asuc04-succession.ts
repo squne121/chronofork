@@ -122,12 +122,32 @@ export function createASuc04CalibrationEvaluator(
         modifierIds:[],ruleVersion:ASUC04_RULE_VERSION,
       })
       if (!usable || !decision) continue
+      // PENDING/REJECTEDの法的採否はDEFER/REJECTのまま。Caseの行政的な記録のみ別のACCEPT Traceへ紐付ける。
+      // これにより「承認された相続」と「未決ケースの記録」を混同しない。
+      let commandTraceIndex = traceIndex
+      if (!approved) {
+        const recordId = 'asuc04:case-record:' + caseIdOf(decision)
+        commandTraceIndex = traceDrafts.length
+        traceDrafts.push({
+          year: ctx.year, phase: ctx.phase, ruleId: ctx.ruleId,
+          actorRef: { kind: 'REGION', id: title.regionId },
+          candidates: [{
+            candidateId: recordId, eligible: true,
+            inputs: { titleId: title.titleId, caseId: caseIdOf(decision), caseStatus: decision.status,
+              decisionId: decision.decisionId, provenance: 'CALIBRATION_ONLY' },
+            reasonCodes: ['CALIBRATION_ONLY', 'LEGAL_CASE_RECORDING_ONLY'],
+          }],
+          selectedCandidateId: recordId, status: 'ACCEPT',
+          reasonCodes: ['CALIBRATION_ONLY', 'LEGAL_CASE_RECORDING_ONLY', 'NOT_SUCCESSION_APPROVAL'],
+          modifierIds: [], ruleVersion: ASUC04_RULE_VERSION,
+        })
+      }
       commands.push({
         type:'LEGAL_CASE_SET',
         commandId:'cmd:asuc04:' + decisionKey(decision),
         source: {
           requestId:'req:asuc04:' + decisionKey(decision),year:ctx.year,phase:ctx.phase,
-          sourceRuleId:'A-SUC-04',sourceTraceId:ctx.traceId(traceIndex),sourceIntentId:decision.decisionId,
+          sourceRuleId:'A-SUC-04',sourceTraceId:ctx.traceId(commandTraceIndex),sourceIntentId:decision.decisionId,
         },
         legalCase: {
           caseId:caseIdOf(decision),titleId:title.titleId,kind:'SUCCESSION',status:decision.status,
