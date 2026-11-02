@@ -178,19 +178,17 @@ describe('B-003死亡→A-SUC-04相続ケース→A-TIT-07世襲Title（CALIBRAT
     }
   })
 
-  it('証拠の発行者不明、grantBasis不一致、候補不在・非直系は承認ケースを作らない',()=>{
-    const cases:SuccessionDecisionEvidence[]=[
-      {...DECISION,issuerRef:{kind:'PERSON',id:'unknown-issuer'}},
-      {...DECISION,grantBasisId:'unproven-basis'},
-      {...DECISION,successorPersonId:'absent-person'},
-      {...DECISION,successorPersonId:P5},
-    ]
-    for(const e of cases){
-      const b=fork(a0,{successionDecisions:[e]})
-      expect(events(b,'LEGAL_CASE_SET',1285)).toHaveLength(0)
-      expect(title(b,1286).holder).toEqual({status:'UNDETERMINED'})
-      expect(trace(b,'A-SUC-04',1285)?.status).toBe('DEFER')
-    }
+  const invalidSuccessionDecisions:readonly {name:string;evidence:SuccessionDecisionEvidence}[]=[
+    {name:'発行者不明',evidence:{...DECISION,issuerRef:{kind:'PERSON',id:'unknown-issuer'}}},
+    {name:'grantBasis不一致',evidence:{...DECISION,grantBasisId:'unproven-basis'}},
+    {name:'候補不在',evidence:{...DECISION,successorPersonId:'absent-person'}},
+    {name:'非直系',evidence:{...DECISION,successorPersonId:P5}},
+  ]
+  it.each(invalidSuccessionDecisions)('$nameは承認ケースを作らない',({evidence})=>{
+    const b=fork(a0,{successionDecisions:[evidence]})
+    expect(events(b,'LEGAL_CASE_SET',1285)).toHaveLength(0)
+    expect(title(b,1286).holder).toEqual({status:'UNDETERMINED'})
+    expect(trace(b,'A-SUC-04',1285)?.status).toBe('DEFER')
   })
 
   it('子の法的王朝所属がUNDETERMINEDなら明示相続ケースを自動APPROVEDにしない',()=>{
