@@ -58,7 +58,8 @@ export function createASuc04CalibrationEvaluator(
     for (const t of ctx.priorTraces ?? []) {
       if (t.year !== ctx.year || t.ruleId !== 'B-003' || t.status !== 'ACCEPT' || t.eventIds.length !== 1 ||
           t.actorRef.kind !== 'PERSON') continue
-      const p = world.persons.find(x => x.personId === t.actorRef.id)
+      const deadPersonId = t.actorRef.id
+      const p = world.persons.find(x => x.personId === deadPersonId)
       if (p?.alive === false && p.deathYear === ctx.year) deceased.set(p.personId,t.traceId)
     }
     const affected = world.titles.filter((t) => t.holder.status === 'HELD' && deceased.has(t.holder.personId))
