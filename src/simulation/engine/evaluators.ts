@@ -1,6 +1,6 @@
 // 既定の評価器テーブル。実ルール（Issue #17 以降）は、ここへの登録と Registry の IMPLEMENTED 化を同時に行う。
 // 現在は空（全 37 RuleID が TODO）。TODO のルールから Command / EventLog / DecisionTrace を作らない。
-import type { Id, Phase, RuleId, RuleOutcome, WorldState, Year } from '../contracts/index.ts'
+import type { CrossDomainRequest, DecisionTrace, Id, Phase, RuleId, RuleOutcome, WorldState, Year } from '../contracts/index.ts'
 import type { RandomStream } from '../random.ts'
 
 export type EvaluationContext = Readonly<{
@@ -10,6 +10,10 @@ export type EvaluationContext = Readonly<{
   seed: number
   /** 枝の識別子。ID・乱数キーには使わない（外生乱数は枝間で同値）。 */
   branchId: Id
+  /** 当年に確定した自分より前の判断。法的状態ではなく読取専用の因果証拠。 */
+  priorTraces: readonly DecisionTrace[]
+  /** B-005からA-LEG-01へ同年に配送される法的婚姻照会。 */
+  marriageQueries: readonly Extract<CrossDomainRequest, { kind: 'LEGAL_MARRIAGE_QUERY' }>[]
   /** traceDrafts[draftIndex] に対応する traceId。Command/Request の source.sourceTraceId に使う。 */
   traceId: (draftIndex: number) => Id
   /** drawRandom(seed, …) の year/phase/ruleId 補完版。状態スコアや走査順をキーに混ぜない。 */
