@@ -345,13 +345,14 @@ function marriageContract(d: Sink, v: unknown, p: string): MarriageContract {
 }
 
 function marriage(d: Sink, v: unknown, p: string): Marriage {
-  const o = obj(d, v, p, ['marriageId', 'personIds', 'registeredYear', 'status', 'contract'])
+  const o = obj(d, v, p, ['marriageId', 'personIds', 'registeredYear', 'status', 'dissolvedYear', 'contract'])
   const contract = o['contract'] === undefined ? undefined : marriageContract(d, o['contract'], `${p}.contract`)
   return {
     ...(contract === undefined ? {} : { contract }),
     marriageId: str(d, o, 'marriageId', p),
     personIds: pair(d, o, 'personIds', p),
     registeredYear: num(d, o, 'registeredYear', p),
+    ...(optNum(d, o, 'dissolvedYear', p) === undefined ? {} : { dissolvedYear: num(d, o, 'dissolvedYear', p) }),
     status: oneOf(d, o, 'status', p, ['ACTIVE', 'DISSOLVED'], 'ACTIVE'),
   }
 }
