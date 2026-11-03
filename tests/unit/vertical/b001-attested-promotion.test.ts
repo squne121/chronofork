@@ -4,6 +4,7 @@ import { createExperimentalWorld } from '../../../src/scenario/experimental/inde
 import { createB001PromotionEvaluator } from '../../../src/simulation/rules/b/index.ts'
 import type { B001PromotionInput } from '../../../src/simulation/rules/b/index.ts'
 import { runYear } from '../../../src/simulation/engine/index.ts'
+import { createAutonomousCalibrationEvaluators } from '../../../src/simulation/autonomy/index.ts'
 import type { WorldState } from '../../../src/simulation/contracts/index.ts'
 
 const personId='person:attested:east-commons-001'
@@ -90,6 +91,29 @@ describe('DEC-024/058 B-001 証拠に基づく人口集団からの人物昇格'
     expect(createB001PromotionEvaluator({
       cohorts:[COHORT],identities:[{...INDIVIDUAL,memberOrdinal:COHORT.memberCount}],
     }).ok).toBe(false)
+  })
+  it('明示した昇格人物は同年のB-009関係・B-004縁談候補へ接続する（結婚自体は強制しない）',()=>{
+    const w=createExperimentalWorld()
+    const evidence:B001PromotionInput={
+      cohorts:[{...COHORT,birthYear:1230,censusEvidenceId:'census:eldia-east-1235',recordedYear:1235}],
+      identities:[{...INDIVIDUAL,recordedYear:1235}],
+    }
+    const cfg=createAutonomousCalibrationEvaluators({
+      branchStartWorld:w,ledger:[],trustBase:[],promotion:evidence,
+    })
+    if(!cfg.ok)throw Error(cfg.issues.join(','))
+    const r=complete(runYear(w,{seed:42,branchId:'A0',evaluators:cfg.evaluators}))
+    expect(r.world.persons.some(p=>p.personId===personId)).toBe(true)
+    expect(r.events.some(e=>e.eventType==='PERSON_PROMOTE')).toBe(true)
+    expect(r.traces.some(t=>t.ruleId==='B-009'&&t.actorRef.kind==='PERSON_PAIR'&&
+      t.actorRef.ids.includes(personId))).toBe(true)
+    expect(r.traces.some(t=>t.ruleId==='B-004'&&t.actorRef.kind==='PERSON_PAIR'&&
+      t.actorRef.ids.includes(personId))).toBe(true)
+    expect(r.world.legal.marriages).toEqual(w.legal.marriages)
+    const without=createAutonomousCalibrationEvaluators({branchStartWorld:w,ledger:[],trustBase:[]})
+    if(!without.ok)throw Error(without.issues.join(','))
+    const unchanged=complete(runYear(w,{seed:42,branchId:'A0',evaluators:without.evaluators}))
+    expect(unchanged.world.persons.some(p=>p.personId===personId)).toBe(false)
   })
   it('出典が一件もない世界では昇格者・Eventを捏造しない',()=>{
     const empty=evaluator({cohorts:[],identities:[]})
