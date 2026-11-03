@@ -140,7 +140,8 @@ function build(): WorldState {
       person(2, '試験人物02（ナルヴェン嫡男）', 'MALE', 1230, 'group-central-elite', 'house-nalven', NALVEN_DYNASTY_ID, { fatherId: 'person-exp-01' }),
       person(3, '試験人物03（ナルヴェン娘）', 'FEMALE', 1233, 'group-central-elite', 'house-nalven', NALVEN_DYNASTY_ID, { fatherId: 'person-exp-01' }),
       person(4, '試験人物04（ヴァルガス当主）', 'MALE', 1215, 'group-west-elite', 'house-vargas', 'dynasty-vargas'),
-      person(5, '試験人物05（カルドン当主）', 'MALE', 1210, 'group-east-elite', 'house-cardon', 'dynasty-cardon'),
+      // 人物05は縁談試験のため女性・1230 年生とする試験設定（Issue #53、ユーザー採用の実験案）。正式設定ではない。
+      person(5, '試験人物05（カルドン当主）', 'FEMALE', 1230, 'group-east-elite', 'house-cardon', 'dynasty-cardon'),
       person(6, '試験人物06（ロウエン当主）', 'MALE', 1220, 'group-south-elite', 'house-rowen', 'dynasty-rowen'),
       person(7, '試験人物07（ベルド当主）', 'MALE', 1218, 'group-versa', 'house-berd', 'dynasty-berd'),
       person(8, '試験人物08（マルガルド王）', 'MALE', 1212, 'group-margald', 'house-margald-royal', 'dynasty-margald-royal'),
@@ -210,7 +211,7 @@ export const EXPERIMENTAL_PROVENANCE: readonly ProvenanceEntry[] = Object.freeze
   { subject: '家門 6 の名称', origin: 'SPEC_KNOWN', source: SPEC },
   { subject: '国庫 45/100・正統性 50/100', origin: 'SPEC_KNOWN', source: SPEC, note: '表示上の初期傾向。45BU とは断定せず、台帳の現金残高とは未対応' },
   { subject: '不満 西部 70・東部 55・南部 35', origin: 'SPEC_KNOWN', source: SPEC, note: '地域値のため、当該地域の 2 集団へ同値を仮置き' },
-  { subject: '人物の氏名・生年・続柄・家門・所属集団', origin: 'PLACEHOLDER', source: GAP, note: '試験データ。実在人物設定ではない' },
+  { subject: '人物の氏名・生年・続柄・家門・所属集団', origin: 'PLACEHOLDER', source: GAP, note: '試験データ。実在人物設定ではない。人物05は縁談試験のため女性・1230 年生の試験設定' },
   { subject: '人口・繁栄度・上記以外の不満・家門支持 bps', origin: 'PLACEHOLDER', source: GAP },
   { subject: '地域の隣接関係', origin: 'PLACEHOLDER', source: GAP },
   { subject: 'Title の配置・授与根拠・承認 authority', origin: 'PLACEHOLDER', source: GAP, note: '法的根拠は試験データ。勝利条件の判定対象として正式化されていない' },
