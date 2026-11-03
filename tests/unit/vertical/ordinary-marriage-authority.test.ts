@@ -115,6 +115,31 @@ describe('DEC-057: 国内婚姻の権限と当年合意',()=>{
     expect(a.ok).toBe(true) // 実照会時にAgreement ID照合できなければDEFER
   })
 
+  it('同一年に一人へ複数の縁談が成立候補となるとき、人物ID順で相手を選ばず保留',()=>{
+    const other:OrdinaryMarriageReview={...REVIEW,reviewId:'trial-other-p2p5',
+      personIds:['person-exp-02',P5],contractCandidateId:null}
+    const result=createALeg01OrdinaryEvaluator(ordinary({reviews:[REVIEW,other]}))
+    if(!result.ok)throw new Error(result.issues.join(','))
+    const world=createExperimentalWorld()
+    const makeQuery=(ids:readonly [string,string],n:number)=>({
+      kind:'LEGAL_MARRIAGE_QUERY' as const,targetDomain:'A' as const,
+      requiredResponseYear:1250,source:{requestId:'q'+n,year:1250,phase:3 as const,
+        sourceRuleId:'B-005' as const,sourceTraceId:'trace:1250:p3:B-005:'+n},
+      payload:{kind:'LEGAL_MARRIAGE_QUERY' as const,personIds:ids},
+    })
+    const out=result.evaluator(world,{
+      year:1250,phase:3,ruleId:'A-LEG-01',seed:CFG.seed,
+      branchId:'A0',traceId:(i:number)=>'trace:1250:p3:A-LEG-01:'+i,
+      random:()=>0,marriageQueries:[
+        makeQuery(['person-exp-02',P5],0),
+        makeQuery([P4,P5],1),
+      ],
+    })
+    expect(out.commands).toHaveLength(0)
+    expect(out.responses?.map(q=>q.status)).toEqual(['DEFER','DEFER'])
+    expect(out.traceDrafts.every(t=>t.reasonCodes.includes('SAME_YEAR_COMPETING_PROPOSALS'))).toBe(true)
+  })
+
   it('委任権限は地域・Title・初期Grant・当年実効統治主体を照合',()=>{
     const world=createExperimentalWorld()
     const a=reviewOrdinaryDelegation(world,book(),[DELEGATION_LAW],'title-exp-central',1285)
