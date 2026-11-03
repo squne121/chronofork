@@ -8,18 +8,18 @@ import {
 import type { ControlMandate, WorldState } from '../../../src/simulation/contracts/index.ts'
 import type { LegalEvidenceBook } from '../../../src/simulation/legal/evidence.ts'
 import {
-  resolveChildLegalDynasty, reviewApprovalAuthority, reviewMandateBeneficiary, reviewNewDelegation, verifyLegalEvidence,
+  resolveChildLegalDynasty, reviewApprovalAuthority, reviewMandateBeneficiary, reviewNewDelegation, verifyInitialLegalEvidence,
 } from '../../../src/simulation/legal/evidence.ts'
 import { validateWorldState } from '../../../src/simulation/validation/index.ts'
 
-const codesOf = (w: WorldState, b: LegalEvidenceBook) => verifyLegalEvidence(w, b).map((i) => i.code)
+const codesOf = (w: WorldState, b: LegalEvidenceBook) => verifyInitialLegalEvidence(w, b).map((i) => i.code)
 const dynasties = (w: WorldState) => new Set(w.legal.dynasties.map((d) => d.dynastyId))
 
 describe('experimental 1250 世界と法的証拠の整合', () => {
   it('世界は validateWorldState で受理され、証拠記録との相互参照に不整合がない', () => {
     const w = createExperimentalWorld()
     expect(validateWorldState(w).ok).toBe(true)
-    expect(verifyLegalEvidence(w, createExperimentalLegalEvidence())).toEqual([])
+    expect(verifyInitialLegalEvidence(w, createExperimentalLegalEvidence())).toEqual([])
   })
 
   it('初期家系: 01 当主、02 嫡男(男)、03 娘(女)、05 は女性・1230 年生の試験設定、全 8 人', () => {
@@ -76,6 +76,12 @@ describe('証拠の欠落・不一致を診断し、補完しない', () => {
     expect(mk((b) => { b.marriageCandidates = [{ ...c, personIds: ['person-exp-02', 'person-zzz'] }] })).toContain('CANDIDATE_PERSON_INVALID')
     expect(mk((b) => { b.marriageCandidates = [c, c] })).toContain('DUPLICATE_EVIDENCE_ID')
   })
+  it('後年の合法相続で保有者が変わった世界を GRANT_GRANTEE_MISMATCH と誤検出しない（初期世界専用）', () => {
+    const w = createExperimentalWorld()
+    const later = { ...w, year: 1285, titles: w.titles.map((t) => (t.titleId === 'title-exp-central' ? { ...t, holder: { status: 'HELD' as const, personId: 'person-exp-02' } } : t)) }
+    const issues = verifyInitialLegalEvidence(later, createExperimentalLegalEvidence())
+    expect(issues.map((i) => i.code)).toEqual(['NOT_INITIAL_WORLD'])
+  })
   it('世界側を不一致にしても検出する（Title の保有者を変更）', () => {
     const w = createExperimentalWorld()
     const edited = { ...w, titles: w.titles.map((t) => (t.titleId === 'title-exp-central' ? { ...t, holder: { status: 'HELD' as const, personId: 'person-exp-02' } } : t)) }
@@ -89,6 +95,12 @@ describe('GAME-01: 子の法的王朝は有効な明示条項があるときの�
     expect(EXPERIMENTAL_MARRIAGE_CANDIDATES.map((c) => c.personIds)).toEqual([['person-exp-02', 'person-exp-05'], ['person-exp-02', 'person-exp-05']])
     expect(resolveChildLegalDynasty(EXPERIMENTAL_MARRIAGE_CANDIDATES[0]!.contract, known)).toEqual({ status: 'UNDETERMINED', reasonCodes: ['GAME_01_DYNASTY_CLAUSE_MISSING'] })
     expect(resolveChildLegalDynasty(undefined, known)).toMatchObject({ status: 'UNDETERMINED' })
+  })
+  it('契約 ID・証拠 ID・条項 ID の欠落した契約から王朝を確定しない', () => {
+    const base = EXPERIMENTAL_MARRIAGE_CANDIDATES[1]!.contract!
+    expect(resolveChildLegalDynasty({ ...base, evidenceId: '' }, known)).toEqual({ status: 'UNDETERMINED', reasonCodes: ['MARRIAGE_CONTRACT_EVIDENCE_MISSING'] })
+    expect(resolveChildLegalDynasty({ ...base, contractId: '' }, known)).toMatchObject({ status: 'UNDETERMINED' })
+    expect(resolveChildLegalDynasty({ ...base, clauses: [{ ...base.clauses[0]!, clauseId: '' }] }, known)).toEqual({ status: 'UNDETERMINED', reasonCodes: ['CLAUSE_ID_MISSING'] })
   })
   it('明示条項があれば DETERMINED。矛盾・未知王朝は UNDETERMINED', () => {
     expect(resolveChildLegalDynasty(EXPERIMENTAL_MARRIAGE_CANDIDATES[1]!.contract, known)).toEqual({ status: 'DETERMINED', dynastyId: NALVEN_DYNASTY_ID })
@@ -134,8 +146,8 @@ describe('GAME-03: 旧委任の受益者を自動付替えしない', () => {
     expect(reviewMandateBeneficiary(afterSuccession, mandate)).toEqual({ status: 'REQUIRES_NEW_DELEGATION', reasonCodes: ['GAME_03_BENEFICIARY_NOT_CURRENT_HOLDER'] })
     expect(mandate).toEqual(before)
   })
-  it('新規委任は現保有者を委任者とする明示根拠があるときのみ有効、旧世界の保有者では PENDING', () => {
-    expect(reviewNewDelegation(afterSuccession, delegation)).toEqual({ status: 'VALID_NEW_BASIS' })
+  it('新規委任は構造整合のみ返し（法的成立とはしない）、旧世界の保有者では PENDING', () => {
+    expect(reviewNewDelegation(afterSuccession, delegation)).toEqual({ status: 'STRUCTURALLY_CONSISTENT', authorityVerified: false })
     expect(reviewNewDelegation(w0, delegation)).toMatchObject({ status: 'PENDING', reasonCodes: ['DELEGATOR_NOT_CURRENT_HOLDER'] })
     expect(reviewNewDelegation(afterSuccession, { ...delegation, evidenceId: '', endExclusiveYear: 1260 })).toMatchObject({ status: 'PENDING', reasonCodes: ['INVALID_PERIOD', 'EVIDENCE_MISSING'] })
   })

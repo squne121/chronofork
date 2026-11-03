@@ -1,6 +1,7 @@
 // 法的証拠の最小共有境界（Issue #53）。WorldState には保存しない独立の証拠定義と、純粋な照合関数のみ。
 // 相続評価器・Goal 公開条件・UI は含まない。GAME-01/02/03 は未承認のため、
 // 明示記録が無いものを補完せず UNDETERMINED / PENDING を返す。1200〜1249 の背景史は EventLog に偽造しない。
+import { START_YEAR } from '../contracts/index.ts'
 import type {
   ControllerRef, ControlMandate, Id, LegalDynastyState, MarriageContract, Person, WorldState, Year,
 } from '../contracts/index.ts'
@@ -76,6 +77,7 @@ export type LegalEvidenceBook = Readonly<{
 }>
 
 export type LegalEvidenceIssueCode =
+  | 'NOT_INITIAL_WORLD'
   | 'DUPLICATE_EVIDENCE_ID'
   | 'GRANT_BASIS_MISSING'
   | 'GRANT_TITLE_MISMATCH'
@@ -100,11 +102,18 @@ const refExists = (w: WorldState, r: ControllerRef) =>
     : r.kind === 'HOUSE' ? w.houses.some((x) => x.houseId === r.id)
       : w.persons.some((x) => x.personId === r.id)
 
-/** 契約の明示条項だけから子の法的王朝を決める。条項なし／矛盾／未知の王朝は UNDETERMINED。父系既定値は持たない。 */
+/**
+ * 契約の明示条項だけから子の法的王朝を決める。条項なし／矛盾／未知の王朝／ID 欠落は UNDETERMINED。父系既定値は持たない。
+ * 境界: これは契約オブジェクトの構造検証のみ。その契約が登録・承認済みの有効な婚姻（親の婚姻）に属するかは
+ * この引数では確認できないため、呼び出し側が登録済み婚姻（Marriage.status=ACTIVE と契約の対応）を確認した後にだけ使うこと。
+ * 未登録の婚姻契約候補（MarriageContractCandidate）の契約を渡して出生の帰属を確定してはならない。
+ */
 export function resolveChildLegalDynasty(
   contract: MarriageContract | undefined, knownDynastyIds: ReadonlySet<Id>,
 ): LegalDynastyState {
   if (contract === undefined) return { status: 'UNDETERMINED', reasonCodes: ['GAME_01_NO_CONTRACT'] }
+  if (!contract.contractId || !contract.evidenceId) return { status: 'UNDETERMINED', reasonCodes: ['MARRIAGE_CONTRACT_EVIDENCE_MISSING'] }
+  if (contract.clauses.some((c) => !c.clauseId)) return { status: 'UNDETERMINED', reasonCodes: ['CLAUSE_ID_MISSING'] }
   const ids = new Set(contract.clauses.filter((c) => c.kind === 'CHILD_LEGAL_DYNASTY').map((c) => c.dynastyId))
   if (ids.size === 0) return { status: 'UNDETERMINED', reasonCodes: ['GAME_01_DYNASTY_CLAUSE_MISSING'] }
   if (ids.size > 1) return { status: 'UNDETERMINED', reasonCodes: ['AMBIGUOUS_DYNASTY_CLAUSES'] }
@@ -113,8 +122,15 @@ export function resolveChildLegalDynasty(
   return { status: 'DETERMINED', dynastyId }
 }
 
-/** 世界と証拠記録の相互参照を検証する。補完・修正はしない。 */
-export function verifyLegalEvidence(world: WorldState, book: LegalEvidenceBook): readonly LegalEvidenceIssue[] {
+/**
+ * 1250 年の初期世界専用: 世界と初期証拠記録の相互参照を検証する。補完・修正はしない。
+ * 初期授与記録の被授与者（initialGranteePersonId）は初期保有者であり、合法相続後の現在の保有者とは別。
+ * 後年の世界では保有者・支配・徴税先が合法に変わるため、照合せず NOT_INITIAL_WORLD のみ返す（誤検出しない）。
+ */
+export function verifyInitialLegalEvidence(world: WorldState, book: LegalEvidenceBook): readonly LegalEvidenceIssue[] {
+  if (world.year !== START_YEAR) {
+    return [{ code: 'NOT_INITIAL_WORLD', path: 'year', message: `初期世界(${START_YEAR})専用です。後年の保有・支配の変化は初期記録と照合しません`, related: [] }]
+  }
   const issues: LegalEvidenceIssue[] = []
   const add = (code: LegalEvidenceIssueCode, path: string, message: string, related: readonly Id[] = []) =>
     issues.push({ code, path, message, related })
@@ -251,10 +267,15 @@ export function reviewMandateBeneficiary(world: WorldState, mandate: ControlMand
 }
 
 export type DelegationReview =
-  | Readonly<{ status: 'VALID_NEW_BASIS' }>
+  /** 構造上の整合のみ。法的に有効な委任の成立ではない（evidenceId の実在・権限・主権/支配の検証は未実施）。 */
+  | Readonly<{ status: 'STRUCTURALLY_CONSISTENT'; authorityVerified: false }>
   | Readonly<{ status: 'PENDING'; reasonCodes: readonly string[] }>
 
-/** 新規委任の根拠審査。現在の保有者が委任者で、地域・期間・対象人物が整合するときのみ有効。旧委任は変更しない。 */
+/**
+ * 新規委任の構造審査（非権威）。現在の保有者が委任者で、地域・期間・対象人物が整合するかだけを見る。旧委任は変更しない。
+ * 未検証: evidenceId が実在する承認記録か、地域の主権・実効支配者がその委任を許すか（GAME-03 は未承認領域）。
+ * 呼び出し側は STRUCTURALLY_CONSISTENT を ControlMandate の成立として扱わず、別途の権限確認を経ること。
+ */
 export function reviewNewDelegation(world: WorldState, d: ControlDelegationBasis): DelegationReview {
   const reasons: string[] = []
   const title = world.titles.find((t) => t.titleId === d.titleId)
@@ -268,5 +289,5 @@ export function reviewNewDelegation(world: WorldState, d: ControlDelegationBasis
   if (!person(d.delegatorPersonId)?.alive || !person(d.delegateePersonId)?.alive) reasons.push('PERSON_NOT_ALIVE')
   if (!(d.effectiveFromYear < d.endExclusiveYear)) reasons.push('INVALID_PERIOD')
   if (!d.evidenceId) reasons.push('EVIDENCE_MISSING')
-  return reasons.length === 0 ? { status: 'VALID_NEW_BASIS' } : { status: 'PENDING', reasonCodes: reasons }
+  return reasons.length === 0 ? { status: 'STRUCTURALLY_CONSISTENT', authorityVerified: false } : { status: 'PENDING', reasonCodes: reasons }
 }
