@@ -60,7 +60,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   const marriage=input.ordinaryMarriage
     ? createALeg01OrdinaryEvaluator(input.ordinaryMarriage)
     : createALeg01CalibrationEvaluator(input.marriageEvidence??[])
-  if(!marriage.ok)return {ok:false,issues:marriage.issues.map(x=>x.code+':'+x.path)}
+  if(!marriage.ok)return {ok:false,issues:marriage.issues.map(x=>typeof x==='string'?x:x.code+':'+x.path)}
   const reviewed=input.reviewedLegal?createReviewedLegalEvaluators(input.reviewedLegal):undefined
   if(reviewed&&!reviewed.ok)return {ok:false,issues:[...reviewed.issues]}
   const evaluators:EvaluatorMap={
