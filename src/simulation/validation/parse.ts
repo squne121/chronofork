@@ -262,7 +262,7 @@ function person(d: Sink, v: unknown, p: string): Person {
   return {
     personId: str(d, o, 'personId', p),
     name: str(d, o, 'name', p),
-    ...(o['interactionRole']===undefined?{}:{interactionRole:oneOf(d,o,'interactionRole',p,['KEY','SUPPORTING'],'KEY')}),
+    ...(o['interactionRole']===undefined?{}:{interactionRole:oneOf(d,o,'interactionRole',p,['KEY','SUPPORTING'],'KEY') as 'KEY'|'SUPPORTING'}),
     sex: oneOf(d, o, 'sex', p, ['MALE', 'FEMALE'], 'MALE'),
     birthYear: num(d, o, 'birthYear', p),
     alive: bool(d, o, 'alive', p),
