@@ -53,9 +53,28 @@ export type WorldIndex = Readonly<{
   title: (id: Id) => Title | undefined
   countryName: (id: Id) => string
   houseName: (id: Id) => string
+  dynastyName: (id: Id) => string | undefined
   link: (kind: EntityKind, id: Id) => Link
   controller: (ref: ControllerRef) => Link
 }>
+
+/**
+ * 年内Eventが指す人物の参照解決用。表示年の年初に未存在の人物（その年に生まれた子など）を、
+ * 計算済みの他年snapshotから補う。どのsnapshotにもいない人物は補われず、参照不明のまま残る。
+ */
+export function worldWithHistoricPersons(world: WorldState, snapshots: readonly WorldState[]): WorldState {
+  const known = new Set(world.persons.map((p) => p.personId))
+  const extra: Person[] = []
+  for (const s of snapshots) {
+    for (const p of s.persons) {
+      if (!known.has(p.personId)) {
+        known.add(p.personId)
+        extra.push(p)
+      }
+    }
+  }
+  return extra.length === 0 ? world : { ...world, persons: [...world.persons, ...extra] }
+}
 
 export function indexWorld(world: WorldState): WorldIndex {
   const regions = new Map(world.regions.map((r) => [r.regionId, r]))
@@ -64,6 +83,7 @@ export function indexWorld(world: WorldState): WorldIndex {
   const titles = new Map(world.titles.map((t) => [t.titleId, t]))
   const countries = new Map(world.countries.map((c) => [c.countryId, c]))
   const houses = new Map(world.houses.map((h) => [h.houseId, h]))
+  const dynasties = new Map(world.legal.dynasties.map((d) => [d.dynastyId, d.name]))
 
   const countryName = (id: Id) => countries.get(id)?.name ?? missingLabel(id)
   const houseName = (id: Id) => houses.get(id)?.name ?? missingLabel(id)
@@ -88,6 +108,7 @@ export function indexWorld(world: WorldState): WorldIndex {
     title: (id) => titles.get(id),
     countryName,
     houseName,
+    dynastyName: (id) => dynasties.get(id),
     link: (kind, id) => {
       const label = entityLabel(kind, id)
       return { kind, id, label: label ?? missingLabel(id), resolved: label !== undefined }

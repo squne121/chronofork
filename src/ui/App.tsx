@@ -6,12 +6,13 @@ import type { BranchChoice, PlayComparison, PlayInput } from './branch-play-sour
 import { Inspector } from './Inspector.tsx'
 import { RegionMap } from './RegionMap.tsx'
 import { RunPanel } from './RunPanel.tsx'
-import { indexWorld } from './inspection-source.ts'
+import { indexWorld, worldWithHistoricPersons } from './inspection-source.ts'
 import type { EntityKind, InspectionSource, Selection } from './inspection-source.ts'
 import {
   DEFAULT_SEED,
   YEAR_RANGE,
   eventsOfYear,
+  goalStatusLabel,
   indexHistory,
   lastComputedYear,
   runExperimentalTimeline,
@@ -39,6 +40,8 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
   const year = last === undefined ? run.initialWorld.year : Math.min(Math.max(requestedYear, YEAR_RANGE.min), last)
   const world = snapshotOf(result, year) ?? run.initialWorld
   const index = useMemo(() => indexWorld(world), [world])
+  // 年内Eventが指す新生児など、年初snapshotに無い人物を他年snapshotから補って参照解決する。
+  const refIndex = useMemo(() => indexWorld(worldWithHistoricPersons(world, result.snapshots)), [world, result.snapshots])
 
   const [tab, setTab] = useState<EntityKind>('region')
   const [selection, setSelection] = useState<Selection | undefined>(undefined)
@@ -127,6 +130,8 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
     setEventId(id)
     setTraceId(undefined)
     setSelection(undefined)
+    // 幅が狭く1列になる場合でも詳細へ辿れるよう、理由欄へ移動する。
+    setTimeout(() => document.getElementById('reasons')?.scrollIntoView?.({ block: 'start' }), 0)
   }
 
   const source: InspectionSource = {
@@ -139,41 +144,44 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
   const allEvents = scope === 'all' ? result.eventLog : eventsOfYear(result, year)
   const shown = targetKey ? allEvents.filter((e) => involves(e, targetKey)) : allEvents
 
+  const branchLabel = comparison ? (activeBranch === 'A0' ? 'A0（介入なしの歴史）' : 'A1（介入ありの歴史）') : '原史（試験計算）'
   return (
     <div className="app">
       <header className="topbar">
         <h1>Project Chronofork</h1>
         <p className="badge badge-warn" role="status" data-testid="experimental-banner">
-          {comparison ? 'experimental / 仮データ / 人口・人物・法制の試験計算（partial）' : 'experimental / 仮データ / 人口コホートのみの試験計算（partial）'}
+          EXPERIMENTAL / CALIBRATION_ONLY ・試験計算（仮データ・partial）
         </p>
         <dl className="status-list">
           <div>
-            <dt>表示年</dt>
+            <dt>観測中の年</dt>
             <dd data-testid="current-year">{world.year}年（年初の状態）</dd>
           </div>
           <div>
-            <dt>現在の歴史</dt>
-            <dd data-testid="history-status">正式な歴史は未成立（{result.autonomousHistory.status}）</dd>
+            <dt>観測中の歴史</dt>
+            <dd data-testid="history-status">{branchLabel}</dd>
+          </div>
+          <div>
+            <dt>1350年の正式勝敗</dt>
+            <dd data-testid="goal-status">{goalStatusLabel(result)}</dd>
           </div>
         </dl>
+        <p className="lead" data-testid="trial-guide">
+          この試験版でできること: 2人の人物の信頼に介入して再計算し、同じ年の「介入なし(A0)」と「介入あり(A1)」を比べ、婚姻や出生がなぜ変わったかをEventと判断根拠で確認できます。正式な歴史・勝敗はまだ評価できません。
+        </p>
       </header>
 
       <main className="layout">
-        <RegionMap
-          source={source}
-          index={index}
-          selectedRegionId={selection?.kind === 'region' ? selection.id : undefined}
-          onSelect={(id) => select({ kind: 'region', id })}
-        />
-
-        <div className="mid-col">
+        <div className="flow-col">
           <InterventionComparePanel seedText={seedText} year={year} comparison={comparison} error={playError}
             activeBranch={activeBranch} onRun={runComparison} onViewBranch={switchBranch}
             onInspectEvent={openComparisonEvent} />
-          <RunPanel inputs={run.inputs} result={result} seedText={seedText} onSeedText={setSeedText} onRerun={rerun} />
+        </div>
+
+        <div className="reason-col" id="reasons">
           <section aria-labelledby="year-heading" className="panel">
-            <h2 id="year-heading">年</h2>
-            <label htmlFor="year-slider">年</label>
+            <h2 id="year-heading"><span className="step-no">4</span>理由を確認する: 年を選ぶ</h2>
+            <label htmlFor="year-slider">観測する年</label>
             <input
               id="year-slider"
               type="range"
@@ -198,6 +206,7 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
             result={result}
             history={history}
             index={index}
+            refIndex={refIndex}
             year={year}
             scope={scope}
             targetKey={targetKey}
@@ -217,8 +226,21 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
           />
         </div>
 
-        <div className="right-col">
+        <div className="world-row">
+          <RegionMap
+            source={source}
+            index={index}
+            selectedRegionId={selection?.kind === 'region' ? selection.id : undefined}
+            onSelect={(id) => select({ kind: 'region', id })}
+          />
           <Inspector source={source} index={index} tab={tab} selection={selection} onTab={changeTab} onSelect={select} />
+        </div>
+
+        <div className="dev-row">
+          <details className="panel dev-details" data-testid="dev-info">
+            <summary>開発・検証情報（RuleID・バージョン・seed・未実装ルール）</summary>
+            <RunPanel inputs={run.inputs} result={result} seedText={seedText} onSeedText={setSeedText} onRerun={rerun} />
+          </details>
 
           <section aria-labelledby="reserved-heading" className="panel">
             <h2 id="reserved-heading">未実装の機能</h2>

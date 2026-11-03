@@ -1,5 +1,4 @@
 import type { TimelineResult } from '../simulation/engine/index.ts'
-import { goalStatusLabel } from './timeline-source.ts'
 import type { RunInputs } from './timeline-source.ts'
 
 type Props = Readonly<{
@@ -16,7 +15,7 @@ export function RunPanel({ inputs, result, seedText, onSeedText, onRerun }: Prop
   const seedValid = /^\d+$/.test(seedText.trim()) && Number.isSafeInteger(Number(seedText.trim()))
   return (
     <section aria-labelledby="run-heading" className="panel" data-testid="run-panel">
-      <h2 id="run-heading">試験計算（CALIBRATION_ONLY・partial）</h2>
+      <h2 id="run-heading">試験計算の入力と状態（CALIBRATION_ONLY・partial）</h2>
       <p className="note">
         {inputs.evaluatedRuleIds.length===1 ? '人口コホート（RULE-C-004）のみを試験係数で計算した結果です。' : '人口・人物・法制の試験用評価器を明示注入した計算結果です。'}正式なゲーム規則による歴史ではありません。
       </p>
@@ -39,8 +38,6 @@ export function RunPanel({ inputs, result, seedText, onSeedText, onRerun }: Prop
           TODO {result.coverage.todoRuleIds.length}件 / 実行済み {result.coverage.executedRuleIds.join('、') || 'なし'}
           {result.coverage.injectedTodoRuleIds.length > 0 && '（試験注入であり実装済みを意味しません）'}
         </dd>
-        <dt>1350年の勝敗</dt>
-        <dd data-testid="goal-status">{goalStatusLabel(result)}</dd>
         {result.technicalGoal !== null && (
           <>
             <dt>technicalGoal</dt>

@@ -163,7 +163,7 @@ test('Event 切替・対象フィルタ変更で古い Trace/詳細が残らな�
   const list = page.getByTestId('chronicle-list').getByRole('button')
   await list.nth(0).click()
   await page.getByTestId('event-detail').getByRole('button', { name: /判断根拠を開く/ }).click()
-  const traceText = (await page.getByTestId('trace-detail').locator('dd').first().textContent()) ?? ''
+  const traceText = (await page.getByTestId('trace-detail').getByTestId('trace-id').textContent()) ?? ''
   expect(traceText).toContain('trace:')
   await list.nth(1).click()
   await expect(page.getByTestId('trace-detail')).not.toContainText(traceText)
@@ -179,6 +179,7 @@ test('Event 切替・対象フィルタ変更で古い Trace/詳細が残らな�
   await expect(page.getByTestId('event-detail')).toContainText('事件を選ぶと')
   expect(first).toBeTruthy()
 
+  await page.getByTestId('dev-info').locator('summary').click()
   await page.getByTestId('seed-input').fill('-1')
   await expect(page.getByTestId('rerun')).toBeDisabled()
   await page.getByTestId('seed-input').fill('7')
@@ -216,3 +217,77 @@ test('介入→実再計算→同一年比較→A0/A1切替→Event/Traceを辿�
   await expect(page.getByTestId('branch-event-diffs')).toContainText('PERSON_BIRTH')
   await expect(page.getByTestId('branch-comparison-year')).toContainText('1261年')
 })
+
+for (const width of [1280, 960]) {
+  test(`${width}px: 介入→A0 REJECT/A1 ACCEPT→婚姻→出生→Event→Trace を横スクロールなしで操作できる`, async ({ page }, testInfo) => {
+    test.setTimeout(90000)
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/')
+    // 初期表示: 目標・観測年・歴史・正式勝敗未成立・CALIBRATION_ONLY が先に読める。内部診断は折りたたみ。
+    await expect(page.getByTestId('trial-guide')).toBeVisible()
+    await expect(page.getByTestId('experimental-banner')).toContainText('CALIBRATION_ONLY')
+    await expect(page.getByTestId('goal-status')).toBeVisible()
+    await expect(page.getByTestId('goal-status')).toContainText('未成立')
+    await expect(page.getByTestId('dev-info')).not.toHaveAttribute('open', '')
+    await expect(page.getByTestId('run-inputs')).toBeHidden()
+    await page.screenshot({ path: testInfo.outputPath(`initial-${width}.png`), fullPage: true })
+
+    await page.getByTestId('branch-run').click()
+    const results = page.getByTestId('branch-results')
+    await expect(results).toBeVisible()
+    await expect(page.getByTestId('branch-headline')).toContainText('A0 REJECT → A1 ACCEPT')
+    await expect(page.getByTestId('branch-b004-a0')).toContainText('REJECT')
+    await expect(page.getByTestId('branch-b004-a1')).toContainText('ACCEPT')
+    await expect(page.getByTestId('branch-b004-a1')).toContainText('41')
+    await expect(page.getByTestId('branch-b004-a0')).toContainText('21')
+    await expect(page.getByTestId('branch-trace-ids')).toBeHidden()
+    // 比較欄が画面外へ切れず、本文が横スクロールしない
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    expect(overflow).toBeLessThanOrEqual(0)
+    for (const id of ['branch-snapshot-a0', 'branch-snapshot-a1', 'branch-event-diffs']) {
+      const box = await page.getByTestId(id).boundingBox()
+      expect(box && box.x >= 0 && box.x + box.width <= width).toBe(true)
+    }
+    await page.screenshot({ path: testInfo.outputPath(`compare-${width}.png`), fullPage: true })
+
+    // A1 婚姻 Event → Trace
+    await page.getByTestId('branch-event-diffs').getByRole('button', { name: /MARRIAGE_REGISTER/ }).first().click()
+    await expect(page.getByTestId('event-detail')).toContainText('MARRIAGE_REGISTER')
+    await expect(page.getByTestId('event-backlink')).toContainText('一致（')
+    await page.getByTestId('event-detail').getByRole('button', { name: /判断根拠を開く/ }).click()
+    await expect(page.getByTestId('trace-detail')).toContainText('CALIBRATION_ONLY')
+    await expect(page.getByTestId('trace-forwardlink')).toContainText('一致（')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
+    // 1261 出生
+    await page.getByRole('slider').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByTestId('branch-event-diffs')).toContainText('PERSON_BIRTH')
+    await expect(page.getByTestId('branch-comparison-year')).toContainText('1261年')
+    // 出生Event: 新生児は参照不明にならず、判断根拠を開くとTrace詳細へ移動・フォーカスする
+    const diffs = page.getByTestId('branch-event-diffs')
+    await expect(page.getByTestId('headline-focused')).toContainText('A1にだけ記録')
+    await diffs.getByRole('button', { name: /人物の出生/ }).first().click()
+    await expect(page.getByTestId('event-summary')).toContainText('両親')
+    await expect(page.getByTestId('event-detail')).not.toContainText('参照不明')
+    await page.getByTestId('event-detail').getByRole('button', { name: /判断根拠を開く/ }).click()
+    await expect(page.getByTestId('trace-detail')).toContainText('B-002')
+    await expect(page.getByTestId('trace-detail').getByRole('heading', { level: 3 })).toBeInViewport()
+    await expect(page.getByTestId('trace-detail')).toBeFocused()
+    await diffs.getByRole('button', { name: /法的王朝の確定/ }).first().click()
+    await page.getByTestId('event-detail').getByRole('button', { name: /判断根拠を開く/ }).click()
+    await expect(page.getByTestId('trace-detail')).toContainText('A-DYN-02')
+    await expect(page.getByTestId('trace-detail').getByRole('heading', { level: 3 })).toBeInViewport()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
+    // 枝切替と年変更
+    await page.getByTestId('view-a0').click()
+    await expect(page.getByTestId('active-branch')).toContainText('A0')
+    await expect(page.getByTestId('history-status')).toContainText('A0')
+    await page.getByTestId('view-a1').click()
+    await expect(page.getByTestId('active-branch')).toContainText('A1')
+    // 開発・検証情報は展開して読める
+    await page.getByTestId('dev-info').locator('summary').click()
+    await expect(page.getByTestId('run-inputs')).toContainText('A1-play')
+    await expect(page.getByTestId('todo-rules')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
+  })
+}

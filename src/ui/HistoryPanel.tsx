@@ -1,6 +1,9 @@
+import { useEffect, useRef } from 'react'
 import type { DecisionTrace, EventLogEntry, Id, TargetRef } from '../simulation/contracts/index.ts'
 import type { TimelineResult } from '../simulation/engine/index.ts'
 import type { EntityKind, Selection, WorldIndex } from './inspection-source.ts'
+import { describeEvent } from './event-summary.ts'
+import type { EventNames } from './event-summary.ts'
 import { formatDelta, formatJson, numericChanges } from './timeline-source.ts'
 import type { TraceIndex } from './timeline-source.ts'
 
@@ -10,12 +13,17 @@ function refKey(r: TargetRef): string {
   return r.kind === 'PERSON_PAIR' ? `PERSON_PAIR:${r.ids.join('+')}` : `${r.kind}:${r.id}`
 }
 
-function RefView({ r, index, onSelect }: { r: TargetRef; index: WorldIndex; onSelect: (s: Selection) => void }) {
+function RefView({ r, index, worldIndex, onSelect }: { r: TargetRef; index: WorldIndex; worldIndex: WorldIndex; onSelect: (s: Selection) => void }) {
   if (r.kind === 'PERSON_PAIR') return <span>{r.ids.join('・')}</span>
   const kind = REF_KIND[r.kind]
   if (!kind) return <span>{r.kind}:{r.id}</span>
   const link = index.link(kind, r.id)
   if (!link.resolved) return <span className="missing">{link.label}</span>
+  // 表示年の年初にはまだ存在しない人物（その年に生まれた子）: 実在は確認済みだが年初の詳細は無い。
+  if (kind === 'person' && !worldIndex.person(r.id)) {
+    const born = index.person(r.id)?.birthYear
+    return <span>{link.label}（{born !== undefined ? `${born}年生まれ・` : ''}この年の年初にはまだ世界にいません）</span>
+  }
   return (
     <button type="button" className="link" onClick={() => onSelect({ kind, id: r.id })}>
       {link.label}
@@ -32,7 +40,7 @@ export function targetOptions(events: readonly EventLogEntry[], index: WorldInde
       const key = refKey(r)
       if (seen.has(key)) continue
       const kind = r.kind === 'PERSON_PAIR' ? undefined : REF_KIND[r.kind]
-      const label = r.kind === 'PERSON_PAIR' ? key : kind ? index.link(kind, r.id).label : key
+      const label = r.kind === 'PERSON_PAIR' ? r.ids.map((id) => index.link('person', id).label).join('・') : kind ? index.link(kind, r.id).label : key
       seen.set(key, { key, ref: r, label })
     }
   }
@@ -45,6 +53,8 @@ type Props = Readonly<{
   result: TimelineResult
   history: TraceIndex
   index: WorldIndex
+  /** 年内Eventの参照解決用（年初snapshotに無い新生児を含む）。 */
+  refIndex: WorldIndex
   year: number
   scope: 'year' | 'all'
   targetKey: string
@@ -63,10 +73,22 @@ export function HistoryPanel(p: Props) {
   const { history, index } = p
   const event = p.eventId ? history.event(p.eventId) : undefined
   const trace = p.traceId ? history.trace(p.traceId) : undefined
-  const options = targetOptions(p.allEvents, index)
+  const options = targetOptions(p.allEvents, p.refIndex)
+  const names: EventNames = {
+    person: (id) => p.refIndex.person(id)?.name,
+    group: (id) => p.refIndex.group(id)?.name,
+    dynasty: (id) => p.refIndex.dynastyName(id),
+  }
+  const traceRef = useRef<HTMLDivElement>(null)
+  // Eventから判断根拠を開いたとき、Trace詳細の先頭へ表示とフォーカスを移す（1列表示でも見失わない）。
+  useEffect(() => {
+    if (!p.traceId) return
+    traceRef.current?.scrollIntoView?.({ block: 'start' })
+    traceRef.current?.focus({ preventScroll: true })
+  }, [p.traceId])
   return (
     <section aria-labelledby="chronicle-heading" className="panel">
-      <h2 id="chronicle-heading">年表（EventLog）と判断根拠（DecisionTrace）</h2>
+      <h2 id="chronicle-heading">年表（Event）と判断根拠（DecisionTrace）</h2>
       <p className="note">
         EventLog に記録された確定済みの状態差分のみを表示します。
         {p.year >= 1350
@@ -107,9 +129,10 @@ export function HistoryPanel(p: Props) {
                 data-testid={`event-${e.eventId}`}
                 onClick={() => p.onEvent(e.eventId)}
               >
+                {describeEvent(e, names)?.headline ?? <>
                 {e.year}年 {e.eventType}
                 {' / '}
-                {e.involvedRefs.map((r) => (r.kind === 'PERSON_PAIR' ? refKey(r) : (REF_KIND[r.kind] ? index.link(REF_KIND[r.kind]!, r.id).label : refKey(r)))).join('、')}
+                {e.involvedRefs.map((r) => (r.kind === 'PERSON_PAIR' ? r.ids.map((id) => p.refIndex.link('person', id).label).join('・') : (REF_KIND[r.kind] ? p.refIndex.link(REF_KIND[r.kind]!, r.id).label : refKey(r)))).join('、')}</>}
                 {numericChanges(e)
                   .filter((c) => c.path.endsWith('population'))
                   .map((c) => ` / 人口 ${c.before.toLocaleString('ja-JP')}→${c.after.toLocaleString('ja-JP')}（${formatDelta(c.delta)}）`)
@@ -124,17 +147,17 @@ export function HistoryPanel(p: Props) {
         {p.eventId && !event ? (
           <p className="missing">参照不明（Event {p.eventId}）</p>
         ) : event ? (
-          <EventDetail event={event} history={history} index={index} traceId={p.traceId} onTrace={p.onTrace} onSelect={p.onSelect} />
+          <EventDetail event={event} history={history} index={index} refIndex={p.refIndex} names={names} traceId={p.traceId} onTrace={p.onTrace} onSelect={p.onSelect} />
         ) : (
           <p className="note">事件を選ぶと、確定した状態差分と判断根拠への参照を表示します。</p>
         )}
       </div>
 
-      <div data-testid="trace-detail" aria-live="polite" className="detail">
+      <div data-testid="trace-detail" aria-live="polite" className="detail" ref={traceRef} tabIndex={-1}>
         {p.traceId && !trace ? (
           <p className="missing">参照不明（Trace {p.traceId}）</p>
         ) : trace ? (
-          <TraceDetail trace={trace} history={history} index={index} eventId={p.eventId} onEvent={p.onEvent} onSelect={p.onSelect} />
+          <TraceDetail trace={trace} history={history} index={index} refIndex={p.refIndex} eventId={p.eventId} onEvent={p.onEvent} onSelect={p.onSelect} />
         ) : (
           <p className="note">Event の「判断根拠を開く」から DecisionTrace を表示します。</p>
         )}
@@ -144,22 +167,30 @@ export function HistoryPanel(p: Props) {
 }
 
 function EventDetail({
-  event, history, index, traceId, onTrace, onSelect,
+  event, history, index, refIndex, names, traceId, onTrace, onSelect,
 }: Readonly<{
   event: EventLogEntry
   history: TraceIndex
   index: WorldIndex
+  refIndex: WorldIndex
+  names: EventNames
   traceId: Id | undefined
   onTrace: (id: Id) => void
   onSelect: (s: Selection) => void
 }>) {
   const ok = history.backlinkConsistent(event)
+  const sum = describeEvent(event, names)
   return (
     <>
-      <h3>Event: {event.eventType}</h3>
+      <h3>{sum ? sum.headline : `Event: ${event.eventType}`}</h3>
+      {sum && (
+        <ul data-testid="event-summary">
+          {sum.lines.map((l) => (
+            <li key={l}>{l}</li>
+          ))}
+        </ul>
+      )}
       <dl>
-        <dt>eventId</dt>
-        <dd>{event.eventId}</dd>
         <dt>年・フェーズ</dt>
         <dd>
           {event.year}年 フェーズ{event.phase}
@@ -169,13 +200,14 @@ function EventDetail({
           <ul className="inline-list">
             {event.involvedRefs.map((r) => (
               <li key={refKey(r)}>
-                <RefView r={r} index={index} onSelect={onSelect} />
+                <RefView r={r} index={refIndex} worldIndex={index} onSelect={onSelect} />
               </li>
             ))}
           </ul>
         </dd>
-        <dt>状態差分</dt>
-        <dd>
+      </dl>
+      <details open={!sum} className="dev-details" data-testid="event-state-details">
+        <summary>{sum ? '開発・検証情報（確定した状態差分の全文）' : '状態差分'}</summary>
           <table data-testid="state-changes">
             <thead>
               <tr>
@@ -199,7 +231,8 @@ function EventDetail({
               })}
             </tbody>
           </table>
-        </dd>
+      </details>
+      <dl>
         <dt>判断根拠（sourceTraceIds）</dt>
         <dd>
           {event.sourceTraceIds.length === 0 ? (
@@ -220,19 +253,29 @@ function EventDetail({
             </ul>
           )}
         </dd>
-        <dt>逆参照の一致</dt>
-        <dd data-testid="event-backlink">{ok ? '一致（Trace.eventIds がこの Event を含む）' : '不一致または未確認'}</dd>
       </dl>
+      <details className="dev-details">
+        <summary>開発・検証情報（Event）</summary>
+        <dl>
+          <dt>eventType</dt>
+          <dd>{event.eventType}</dd>
+          <dt>eventId</dt>
+          <dd data-testid="event-id">{event.eventId}</dd>
+          <dt>逆参照の一致</dt>
+          <dd data-testid="event-backlink">{ok ? '一致（Trace.eventIds がこの Event を含む）' : '不一致または未確認'}</dd>
+        </dl>
+      </details>
     </>
   )
 }
 
 function TraceDetail({
-  trace, history, index, eventId, onEvent, onSelect,
+  trace, history, index, refIndex, eventId, onEvent, onSelect,
 }: Readonly<{
   trace: DecisionTrace
   history: TraceIndex
   index: WorldIndex
+  refIndex: WorldIndex
   eventId: Id | undefined
   onEvent: (id: Id) => void
   onSelect: (s: Selection) => void
@@ -242,22 +285,18 @@ function TraceDetail({
     <>
       <h3>DecisionTrace: {trace.ruleId}</h3>
       <dl>
-        <dt>traceId</dt>
-        <dd>{trace.traceId}</dd>
         <dt>年・フェーズ</dt>
         <dd>
           {trace.year}年 フェーズ{trace.phase}
         </dd>
         <dt>判断主体</dt>
         <dd>
-          <RefView r={trace.actorRef} index={index} onSelect={onSelect} />
+          <RefView r={trace.actorRef} index={refIndex} worldIndex={index} onSelect={onSelect} />
         </dd>
         <dt>判定</dt>
         <dd>{trace.status}</dd>
         <dt>理由コード</dt>
         <dd>{trace.reasonCodes.join('、') || 'なし'}</dd>
-        <dt>ruleVersion</dt>
-        <dd>{trace.ruleVersion}</dd>
         <dt>候補と入力</dt>
         <dd>
           <ul>
@@ -287,9 +326,18 @@ function TraceDetail({
             ))}
           </ul>
         </dd>
-        <dt>順参照の一致</dt>
-        <dd data-testid="trace-forwardlink">{ok ? '一致（Event.sourceTraceIds がこの Trace を含む）' : '不一致または未確認'}</dd>
       </dl>
+      <details className="dev-details">
+        <summary>開発・検証情報（Trace）</summary>
+        <dl>
+          <dt>traceId</dt>
+          <dd data-testid="trace-id">{trace.traceId}</dd>
+          <dt>ruleVersion</dt>
+          <dd>{trace.ruleVersion}</dd>
+          <dt>順参照の一致</dt>
+          <dd data-testid="trace-forwardlink">{ok ? '一致（Event.sourceTraceIds がこの Trace を含む）' : '不一致または未確認'}</dd>
+        </dl>
+      </details>
     </>
   )
 }
