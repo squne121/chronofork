@@ -12,6 +12,7 @@ import type { OrdinaryLaw } from '../../../src/simulation/legal/ordinary-authori
 import type { OrdinaryMarriageReview } from '../../../src/simulation/rules/a/index.ts'
 import type { WorldState } from '../../../src/simulation/contracts/index.ts'
 import { TRUST_BOOST,P4,P5,SEED } from './b004-branch-fixture.ts'
+const EARLY_BOOST={...TRUST_BOOST,modifierId:'mod-trial-1250',interventionId:'int-trial-1250',startYear:1250,endExclusiveYear:1255}
 
 const ELDIA={kind:'COUNTRY' as const,id:'country-eldia'}
 const law=(id:string,action:OrdinaryLaw['action']):OrdinaryLaw=>({
@@ -60,9 +61,9 @@ const evaluators=make(world,[])
 const root=runTimeline(world,{seed:SEED,branchId:'A0',evaluators,
   goal:{dynastyId:NALVEN_DYNASTY_ID},technicalGoalEvaluation:true})
 const rootB=createRootBranch(root,[],evaluators)
-const branch=rootB.ok?forkHistory({parent:rootB.branch,forkYear:1260,branchId:'A1',
-  modifiers:[TRUST_BOOST],evaluatorsFor:({ledger})=>
-    make(rootB.branch.snapshots[10]!,ledger)}):null
+const branch=rootB.ok?forkHistory({parent:rootB.branch,forkYear:1250,branchId:'A1',
+  modifiers:[EARLY_BOOST],evaluatorsFor:({ledger})=>
+    make(rootB.branch.snapshots[0]!,ledger)}):null
 
 describe('DEC-057: 国内通常権限による1250〜1350年A0/A1通し試験',()=>{
   it('初期世界から同一seedで100年計算し、正式goalを公開しない',()=>{
@@ -77,7 +78,7 @@ describe('DEC-057: 国内通常権限による1250〜1350年A0/A1通し試験',(
     if(!branch?.ok||!rootB.ok)return
     expect(branch.branch.status).toBe('COMPLETED')
     expect(branch.branch.snapshots).toHaveLength(101)
-    expect(branch.branch.snapshots.slice(0,11)).toEqual(root.snapshots.slice(0,11))
+    expect(branch.branch.snapshots[0]).toEqual(root.snapshots[0])
     expect(branch.branch.goal).toBeNull()
     expect(evaluateGoal(branch.branch.snapshots.at(-1)!,{dynastyId:NALVEN_DYNASTY_ID}).status).toBe('NOT_ACHIEVED')
   })
@@ -85,11 +86,12 @@ describe('DEC-057: 国内通常権限による1250〜1350年A0/A1通し試験',(
     if(!branch?.ok)return
     const marriages=branch.branch.eventLog.filter(e=>e.eventType==='MARRIAGE_REGISTER')
     const a0Marriages=root.eventLog.filter(e=>e.eventType==='MARRIAGE_REGISTER')
-    expect(a0Marriages).toHaveLength(0)
+    expect(a0Marriages.every(e=>e.year!==1250)).toBe(true) // A0も信頼の年次累積により後年婚姻し得る
     expect(marriages.length).toBeGreaterThan(0)
     const event=marriages.find(e=>e.involvedRefs.some(r=>
       r.kind==='PERSON_PAIR'&&r.ids[0]===P4&&r.ids[1]===P5))
     expect(event).toBeDefined()
+    expect(event?.year).toBe(1250) // 介入なしの原史と、成立年が変化
     const trace=branch.branch.decisionTraces.find(t=>t.traceId===event?.sourceTraceIds[0])
     expect(trace?.status).toBe('ACCEPT')
     expect(trace?.reasonCodes).toContain('DEC_057_NORMAL_MARRIAGE')
