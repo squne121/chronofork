@@ -121,6 +121,8 @@ export type Marriage = Readonly<{
   personIds: readonly [Id, Id] // ID 昇順
   registeredYear: Year
   status: 'ACTIVE' | 'DISSOLVED'
+  /** 配偶者死亡により婚姻が終了した年。旧DISSOLVED状態では省略を許可。 */
+  dissolvedYear?: Year
   /** 未設定は「契約条項なし／証拠なし」であり、帰属を推定しない（子の帰属は UNDETERMINED のまま）。 */
   contract?: MarriageContract
 }>
