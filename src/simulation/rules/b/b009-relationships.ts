@@ -99,7 +99,7 @@ export function createB009WorldStateEvaluator(
       const aToB=(groupA.support.houseBps[b.houseId]??0)-(groupA.support.houseBps[a.houseId]??0)
       const bToA=(groupB.support.houseBps[a.houseId]??0)-(groupB.support.houseBps[b.houseId]??0)
       const supportSignal=roundHalfAwayFromZero((aToB+bToA)/1000)
-      const houseSupportDelta=supportSignal*(c.houseSupportWeight??0)
+      const houseSupportDelta=supportSignal*(c.houseSupportWeight??0)||0 // -0を正規化し決定Traceを安定化
       const houseAffinityDelta=a.houseId===b.houseId?(c.sameHouseBonus??0):0
       const rawDelta=c.annualDelta+houseSupportDelta+houseAffinityDelta
       const next=Math.min(PAIR_TRUST_DEFINITION.max,Math.max(PAIR_TRUST_DEFINITION.min,prev+rawDelta))
