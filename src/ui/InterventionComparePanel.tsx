@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { compareYear, directlyInvolvesPair, playPersonOptions, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
 import { childIdsOfPair } from './event-summary.ts'
 import type { BranchChoice, PlayComparison, PlayInput } from './branch-play-source.ts'
+import type { GoalEvaluation, GoalFailureCode } from '../simulation/goal.ts'
 
 type Props=Readonly<{
   seedText:string
@@ -21,6 +22,28 @@ const EVENT_LABEL:Readonly<Record<string,string>>={MARRIAGE_REGISTER:'婚姻の�
 const eventLabel=(t:string)=>EVENT_LABEL[t]?`${EVENT_LABEL[t]}（${t}）`:t
 const kindLabel=(k:'A0_ONLY'|'A1_ONLY'|'CHANGED')=>k==='A0_ONLY'?'A0にだけ記録':k==='A1_ONLY'?'A1にだけ記録':'A0/A1で内容が違う'
 const personName=(id:string)=>persons.find(x=>x.id===id)?.label??id
+const GOAL_FAILURE_LABEL:Record<GoalFailureCode,string>={
+  NOT_TERRITORIAL:'土地領主権ではない',TITLE_INVALID:'Titleが無効',
+  TITLE_NOT_HEREDITARY:'世襲権がない',TITLE_NOT_RECOGNIZED:'承認根拠が不足',
+  REQUIRES_RECOGNITION:'現在の主権による承認が不足',
+  HOLDER_UNDETERMINED:'保持者が未確定',HOLDER_NOT_FOUND:'保持者の参照がない',
+  HOLDER_DEAD:'保持者が死亡',DYNASTY_UNDETERMINED:'王朝所属が未確定',
+  DYNASTY_MISMATCH:'ナルヴェン王朝の合法な構成員ではない',
+  REGION_NOT_FOUND:'対象地域が存在しない',NO_CONTROL:'有効な実効統治・委任がない',
+}
+/** 表示専用。勝敗は再計算せず、runTimeline/forkWorldの厳格なGoal結果だけを読む。 */
+const trialGoalStatus=(g:GoalEvaluation|null):string=>{
+  if(g===null)return '未検証'
+  if(g.status==='ACHIEVED')return '条件に一致（技術検証）'
+  if(g.status==='NOT_ACHIEVED')return '条件に不一致（技術検証）'
+  return g.status==='INVALID_INPUT'?'データ不正で評価不能':'対象年ではない'
+}
+const centralTitleEvidence=(g:GoalEvaluation|null):string=>{
+  if(g===null||g.status==='INVALID_INPUT'||g.status==='NOT_EVALUABLE')return '判定根拠なし'
+  const a=g.assessments.find(x=>x.titleId==='title-exp-central')
+  if(!a)return '中央世襲所領の評価記録なし'
+  return a.qualifies?'中央世襲所領は条件に一致':`中央世襲所領: ${a.failures.map(x=>GOAL_FAILURE_LABEL[x]).join('、')}`
+}
 const countAlive=(c:readonly {alive:boolean}[])=>c.filter(x=>x.alive).length
 const countMarried=(w:{legal:{marriages:readonly {status:string}[]}})=>w.legal.marriages.filter(m=>m.status==='ACTIVE').length
 const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filter(t=>t.holder.status==='HELD').length
@@ -120,6 +143,17 @@ export function InterventionComparePanel(p:Props){
         </ul>
         <p className="note">「A1にだけ記録」は、介入ありの歴史にだけ確定したEventです（A0にだけ記録はその逆）。</p>
         <p className="note">正式勝敗: 未成立。これは試験版の差分であり、単独原因の断定ではありません。</p>
+      </div>
+      <div className="headline" data-testid="trial-goal-summary">
+        <h4>1350年のナルヴェン王朝存続条件（試験判定）</h4>
+        <p data-testid="trial-goal-a0">A0（介入なし）: {trialGoalStatus(p.comparison.a0.result.technicalGoal)}</p>
+        <p data-testid="trial-goal-a1">A1（介入あり）: {trialGoalStatus(p.comparison.a1.result.technicalGoal)}</p>
+        <details>
+          <summary>中央世襲所領について、判定根拠を見る</summary>
+          <p data-testid="trial-goal-reasons-a0">A0: {centralTitleEvidence(p.comparison.a0.result.technicalGoal)}</p>
+          <p data-testid="trial-goal-reasons-a1">A1: {centralTitleEvidence(p.comparison.a1.result.technicalGoal)}</p>
+        </details>
+        <p className="note">実計算した1350年のWorldStateを既存の厳格Goalで照合した非権威の検証値です。婚姻・相続・統治の正式な承認権限が未確定なので、正式勝敗を表しません。</p>
       </div>
       <div className="filters" aria-label="観測する歴史">
         <button type="button" aria-pressed={p.activeBranch==='A0'} onClick={()=>p.onViewBranch('A0')} data-testid="view-a0">A0 原史を観測</button>
