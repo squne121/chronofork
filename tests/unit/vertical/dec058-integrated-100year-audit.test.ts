@@ -8,6 +8,7 @@ import type { B001PromotionInput } from '../../../src/simulation/rules/b/index.t
 import { runTimeline } from '../../../src/simulation/engine/index.ts'
 import { evaluateGoal } from '../../../src/simulation/goal.ts'
 import { observeDynastyContinuity } from '../../../src/ui/dynasty-continuity.ts'
+import { reviewDomesticMarriageEligibility } from '../../../src/simulation/legal/nextgen-marriage.ts'
 import type { NextgenContractCalibration } from '../../../src/simulation/legal/nextgen-contract.ts'
 import { EXPERIMENTAL_NEXTGEN_CONTRACT } from '../../../src/simulation/legal/nextgen-contract.ts'
 import { EXPERIMENTAL_B009_CALIBRATION } from '../../../src/simulation/rules/b/index.ts'
@@ -109,6 +110,85 @@ describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格�
         ?goal.assessments.map(t=>({id:t.titleId,qualifies:t.qualifies,failures:t.failures})):[],
     }
     console.info('CHRONOFORK_100YR_INTEGRATION_AUDIT='+JSON.stringify(audit))
+    // Aggregate evidence is for diagnosis only. It cannot change simulated state.
+    const reasonTable=(ruleId:string,fromYear=1250,toYear=1349)=>{
+      const counts=new Map<string,number>()
+      for(const t of result.decisionTraces){
+        if(t.ruleId!==ruleId||t.year<fromYear||t.year>toYear)continue
+        const why=t.reasonCodes.at(-1)??'NONE'
+        const k=t.status+'/'+why
+        counts.set(k,(counts.get(k)??0)+1)
+      }
+      return [...counts].sort((a,b)=>b[1]-a[1]).slice(0,16).map(([k,n])=>({key:k,count:n}))
+    }
+    const marriageRecords=final.legal.marriages.map(m=>({
+      year:m.registeredYear,ends:m.dissolvedYear??null,pair:m.personIds,
+      dynastyClauses:m.contract?.clauses.map(c=>c.dynastyId)??[],
+    })).sort((a,b)=>a.year-b.year)
+    const descendants=final.persons.filter(p=>p.birthYear>=1250).map(p=>({
+      id:p.personId,born:p.birthYear,sex:p.sex,
+      dead:p.deathYear??null,father:p.fatherId??null,mother:p.motherId??null,
+      dynasty:p.legalDynasty.status==='DETERMINED'?p.legalDynasty.dynastyId:'UNDETERMINED',
+    }))
+    const deathAges=final.persons.filter(p=>p.deathYear!==undefined)
+      .reduce<Record<string,number>>((a,p)=>{const k=String(p.deathYear!-p.birthYear);a[k]=(a[k]??0)+1;return a},{})
+    const yearsToAudit=[1250,1267,1275,1280,1290,1300,1310,1320,1330,1340,1349,1350]
+    const yearSamples=yearsToAudit.map(y=>{
+      const state=result.snapshots.find(w=>w.year===y)!
+      const activeMarriageIds=new Set(state.legal.marriages.filter(m=>m.status==='ACTIVE').flatMap(m=>m.personIds))
+      const living=state.persons.filter(p=>p.alive)
+      const adults=living.filter(p=>y-p.birthYear>=18)
+      const available=adults.filter(p=>!activeMarriageIds.has(p.personId))
+      const men=available.filter(p=>p.sex==='MALE'),women=available.filter(p=>p.sex==='FEMALE')
+      let eligiblePairs=0
+      for(const male of men)for(const female of women){
+        const pair=(male.personId<female.personId?[male.personId,female.personId]:
+          [female.personId,male.personId]) as [string,string]
+        if(reviewDomesticMarriageEligibility(state,pair).status==='ELIGIBLE')eligiblePairs++
+      }
+      return {
+        year:y,people:state.persons.length,living:living.length,adults:adults.length,
+        unmarriedMen:men.length,unmarriedWomen:women.length,eligiblePairs,
+        activeMarriages:state.legal.marriages.filter(m=>m.status==='ACTIVE').length,
+        pendingCases:state.legal.cases.filter(c=>c.kind==='SUCCESSION'&&c.status==='PENDING').length,
+        validTitleHolders:state.titles.filter(t=>t.kind==='TERRITORIAL'&&t.holder.status==='HELD').length,
+      }
+    })
+    const titleChanges=[] as {year:number,title:string,from:string,to:string}[]
+    for(let i=1;i<result.snapshots.length;i++){
+      const before=result.snapshots[i-1]!,after=result.snapshots[i]!
+      for(const title of after.titles){
+        const old=before.titles.find(t=>t.titleId===title.titleId)
+        const holder=(x:typeof title)=>x.holder.status==='HELD'?x.holder.personId:'UNDETERMINED'
+        if(old&&holder(title)!==holder(old)) titleChanges.push({
+          year:after.year-1,title:title.titleId,from:holder(old),to:holder(title),
+        })
+      }
+    }
+    const details={
+      marriages:marriageRecords,
+      descendants:descendants.map(p=>({
+        born:p.born,sex:p.sex,dead:p.dead,
+        generation:familyChildren.some(c=>c.personId===p.id)?1:
+          grandchildren.some(c=>c.personId===p.id)?2:0,
+        mother:p.mother===P5?'P5':p.mother===attestedId?'PROMOTED':p.mother?.startsWith('person:b002:')?'CHILD':'OTHER',
+      })).sort((a,b)=>a.born-b.born),
+      deathAges,yearSamples,titleChanges,
+      finalCases:final.legal.cases.map(c=>({title:c.titleId,caseId:c.caseId,
+        status:c.status,candidates:c.candidatePersonIds,reasonCodes:c.reasonCodes})),
+      b004Reasons:reasonTable('B-004'),
+      b005Reasons:reasonTable('B-005'),
+      b002Reasons:reasonTable('B-002'),
+      b003Reasons:reasonTable('B-003'),
+      successionReasons:reasonTable('A-SUC-04'),
+      delegationReasons:reasonTable('A-TIT-07'),
+      b005LateReasons:reasonTable('B-005',1300,1349),
+      successionLateReasons:reasonTable('A-SUC-04',1300,1349),
+      bornYears:[Math.min(...descendants.map(p=>p.born)),Math.max(...descendants.map(p=>p.born))],
+      aliveByDynasty1350:final.persons.filter(p=>p.alive).map(p=>p.legalDynasty.status==='DETERMINED'?p.legalDynasty.dynastyId:'UNKNOWN'),
+    }
+    console.info('CHRONOFORK_100YR_CAUSAL_DIAGNOSTIC='+JSON.stringify(details))
+
     expect(promotionEvents.length).toBeGreaterThanOrEqual(1)
     expect(promotedPairs.length).toBeGreaterThan(0)
     expect(dissolutionEvents.length).toBeGreaterThanOrEqual(1)
