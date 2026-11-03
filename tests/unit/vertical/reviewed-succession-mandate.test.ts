@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createExperimentalWorld, createExperimentalLegalEvidence, NALVEN_DYNASTY_ID } from '../../../src/scenario/experimental/index.ts'
 import type { LegalEvidenceBook } from '../../../src/simulation/legal/evidence.ts'
+import type { OrdinaryLaw } from '../../../src/simulation/legal/ordinary-authority.ts'
 import type { WorldState } from '../../../src/simulation/contracts/index.ts'
 import { runYear } from '../../../src/simulation/engine/index.ts'
 import { evaluateGoal } from '../../../src/simulation/goal.ts'
@@ -211,5 +212,102 @@ describe('DEC-055 / G-03/04: 明示権限に限る通常相続・後年再審査
       book: TEST_BOOK(), successionDecisions: [DECISION, DECISION],
     })
     expect(res.ok).toBe(false)
+  })
+})
+
+
+const ORDINARY_SUCCESSION_LAW:OrdinaryLaw={
+  lawId:'law:experimental-eldia-land-succession', action:'NORMAL_LAND_SUCCESSION',
+  issuerRef:controller,sovereignCountryId:controller.id,
+  effectiveFromYear:1250,endExclusiveYear:1351,
+  origin:'BACKGROUND_PRE_1250',provenance:'CALIBRATION_ONLY',
+}
+const ORDINARY_CONTROL_LAW:OrdinaryLaw={
+  ...ORDINARY_SUCCESSION_LAW,lawId:'law:experimental-eldia-central-control',
+  action:'NEW_CONTROL_MANDATE',regionId:'region-eldia-central',
+  titleId:TITLE_ID,grantBasisId:'exp-basis-central',
+}
+function ordinaryYear(w:WorldState, laws:readonly OrdinaryLaw[]=[
+  ORDINARY_SUCCESSION_LAW,ORDINARY_CONTROL_LAW,
+]) {
+  const base=createExperimentalLegalEvidence()
+  const book:LegalEvidenceBook={...base,approvalAuthorities:[{
+    authorityBasisId:ORDINARY_SUCCESSION_LAW.lawId, action:'NORMAL_LAND_SUCCESSION',
+    holderRef:controller,sovereignCountryId:controller.id,provenance:'CALIBRATION_ONLY',
+  }]}
+  const res=createReviewedLegalEvaluators({book,ordinaryLaws:laws})
+  if(!res.ok)throw new Error(res.issues.join(','))
+  return runYear(w,{seed:1,branchId:'ordinary-legal',evaluators:res.evaluators})
+}
+describe('DEC-057: 背景法令による通常相続と新規委任の自律年次処理',()=>{
+  it('1286年に順位と授権が一致して初めてAPPROVED→Title移転→独立の新Mandate',()=>{
+    const before=pendingWorld()
+    const r=ordinaryYear(before)
+    const after=nextWorld(r)
+    expect(after.legal.cases[0]?.status).toBe('APPROVED')
+    expect(after.legal.cases[0]?.candidatePersonIds).toEqual([P2])
+    expect(after.titles.find(t=>t.titleId===TITLE_ID)?.holder).toEqual({status:'HELD',personId:P2})
+    const mandate=after.legal.controlMandates.find(m=>m.authorizingTitleId===TITLE_ID)
+    expect(mandate).toMatchObject({
+      beneficiaryPersonId:P2,controllerRef:controller,effectiveFromYear:1286,
+      endExclusiveYear:1351,
+    })
+    expect(after.regions).toEqual(before.regions)
+    expect(after.legal.taxMandates).toEqual(before.legal.taxMandates)
+    if(r.status==='COMPLETED'){
+      const event=r.events.find(e=>e.eventType==='LEGAL_TITLE_TRANSFER')!
+      expect(event).toBeDefined()
+      expect(mandate?.sourceEventId).toEqual(event.eventId)
+      expect(r.traces.some(t=>t.ruleId==='A-SUC-04'&&t.status==='ACCEPT'&&
+        t.reasonCodes.includes('EXPLICIT_AUTHORITY_AND_HEIR_VERIFIED'))).toBe(true)
+    }
+    expect(ordinaryYear(before)).toEqual(r)
+  })
+
+  it('旧保持者死亡で無効になった委任が記録に残っても、後継への新委任を妨げない',()=>{
+    const w=pendingWorld()
+    const old= {
+      mandateId:'mandate:historical-p1',regionId:'region-eldia-central',
+      controllerRef:controller,beneficiaryPersonId:P1,
+      authorizingTitleId:TITLE_ID,sourceEventId:'event:background-p1',
+      effectiveFromYear:1250,endExclusiveYear:1351,
+    }
+    const withOld:WorldState={...w,legal:{...w.legal,controlMandates:[old]}}
+    const r=ordinaryYear(withOld)
+    const after=nextWorld(r)
+    expect(after.legal.controlMandates).toHaveLength(2)
+    expect(after.legal.controlMandates[0]).toEqual(old)
+    expect(after.legal.controlMandates[1]?.beneficiaryPersonId).toBe(P2)
+  })
+
+  it('相続の法令欠落ならPENDINGのまま、新委任法令欠落ならTitle移転のみ',()=>{
+    const w=pendingWorld()
+    const noSucc=nextWorld(ordinaryYear(w,[ORDINARY_CONTROL_LAW]))
+    expect(noSucc.legal.cases[0]?.status).toBe('PENDING')
+    expect(noSucc.titles.find(t=>t.titleId===TITLE_ID)?.holder.status).toBe('UNDETERMINED')
+    const noDelegationResult=ordinaryYear(w,[ORDINARY_SUCCESSION_LAW])
+    const noDelegation=nextWorld(noDelegationResult)
+    expect(noDelegation.titles.find(t=>t.titleId===TITLE_ID)?.holder).toEqual({status:'HELD',personId:P2})
+    expect(noDelegation.legal.controlMandates).toHaveLength(0)
+    if(noDelegationResult.status==='COMPLETED')
+      expect(noDelegationResult.traces.some(t=>t.reasonCodes.includes('GAME_03_NEW_DELEGATION_EVIDENCE_MISSING'))).toBe(true)
+  })
+
+  it('明示済みの競合する相続決定を一般法令で上書きしない',()=>{
+    const w=pendingWorld()
+    const base=createExperimentalLegalEvidence()
+    const book:LegalEvidenceBook={...base,approvalAuthorities:[{
+      authorityBasisId:ORDINARY_SUCCESSION_LAW.lawId,action:'NORMAL_LAND_SUCCESSION',
+      holderRef:controller,sovereignCountryId:controller.id,provenance:'CALIBRATION_ONLY',
+    }]}
+    const wrong:SuccessionReviewEvidence={
+      ...DECISION,successorPersonId:P3,availableFromYear:1286,
+      authorityBasisId:ORDINARY_SUCCESSION_LAW.lawId,
+    }
+    const legal=createReviewedLegalEvaluators({book,ordinaryLaws:[ORDINARY_SUCCESSION_LAW],successionDecisions:[wrong]})
+    if(!legal.ok)throw new Error(legal.issues.join(','))
+    const r=runYear(w,{seed:1,evaluators:legal.evaluators})
+    const after=nextWorld(r)
+    expect(after.legal.cases[0]?.status).toBe('PENDING')
   })
 })
