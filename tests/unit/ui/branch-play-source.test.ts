@@ -2,6 +2,8 @@
 import { describe,expect,it } from 'vitest'
 import { compareYear, directlyInvolvesPair, PLAY_DEMO_PAIR, runPlayComparison } from '../../../src/ui/branch-play-source.ts'
 import type { PlayInput } from '../../../src/ui/branch-play-source.ts'
+import { EXPERIMENTAL_NALVEN_GOAL } from '../../../src/scenario/experimental/index.ts'
+import { evaluateGoal } from '../../../src/simulation/goal.ts'
 const REQUEST:PlayInput={seed:20260101,year:1260,firstPersonId:PLAY_DEMO_PAIR[0],
   secondPersonId:PLAY_DEMO_PAIR[1],signedDelta:20,durationYears:5}
 const result=runPlayComparison(REQUEST)
@@ -23,6 +25,15 @@ describe('UI向け実歴史比較アダプタ（CALIBRATION_ONLY）',()=>{
     expect(data.a0.result.snapshots.slice(0,11)).toEqual(data.a1.result.snapshots.slice(0,11))
     expect(data.a0.result.goal).toBeNull()
     expect(data.a1.result.goal).toBeNull()
+    // 1250年の法制台帳を使った100年実計算の末に、既存の厳格なGoalを試験としてだけ評価する。
+    for (const run of [data.a0, data.a1]) {
+      const last = run.result.snapshots.at(-1)!
+      expect(last.year).toBe(1350)
+      expect(run.result.technicalGoal).toEqual(evaluateGoal(last, EXPERIMENTAL_NALVEN_GOAL))
+      expect(run.result.technicalGoal?.status).toBe('NOT_ACHIEVED')
+      expect(run.result.coverage.todoRuleIds).toHaveLength(37)
+      expect(run.result.goal).toBeNull() // GAME-02/03未承認。正式勝敗は公開しない。
+    }
     expect(data.a1.result.autonomousHistory.status).toBe('NOT_ESTABLISHED')
     expect(data.a1.result.coverage.todoRuleIds).toHaveLength(37)
     expect(data.a1.result.eventLog).toEqual(data.branch.eventLog)

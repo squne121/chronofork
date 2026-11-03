@@ -1,6 +1,8 @@
 // 実シミュレーションを利用したUI専用のA0/A1分岐実験。
 // 未来の出来事や勝敗をハードコードしない。法的承認証拠・係数はsynthetic/CALIBRATION_ONLY。
-import { createExperimentalWorld } from '../scenario/experimental/index.ts'
+import { createExperimentalWorld, prepareExperimentalGoalContext, EXPERIMENTAL_NALVEN_GOAL } from '../scenario/experimental/index.ts'
+import type { LegalEvidenceBook } from '../simulation/legal/evidence.ts'
+import { evaluateGoal } from '../simulation/goal.ts'
 import { createAutonomousCalibrationEvaluators } from '../simulation/autonomy/index.ts'
 import type { AutonomyCalibration } from '../simulation/autonomy/index.ts'
 import { createRootBranch, forkHistory } from '../simulation/branching/index.ts'
@@ -58,17 +60,18 @@ export type PlayResult=
   | Readonly<{ok:false;code:string;message:string}>
 
 export function playInitialWorld():WorldState{
-  const w=createExperimentalWorld()
-  return { ...w, persons:w.persons.map(p=>p.personId===P5?{...p,sex:'FEMALE' as const,birthYear:1230}:p) }
+  // PR #54で人物05はexperimental初期世界に反映済み。UIだけの二重変更は行わない。
+  return createExperimentalWorld()
 }
 export const playPersonOptions=()=>playInitialWorld().persons.map(p=>({
   id:p.personId,label:p.name+(p.sex==='MALE'?'（男）':'（女）'),
 }))
 const reject=(code:string,message:string):PlayResult=>({ok:false,code,message})
-function createEvaluators(w:WorldState,ledger:readonly StatModifier[]):EvaluatorMap{
+function createEvaluators(w:WorldState,ledger:readonly StatModifier[],book:LegalEvidenceBook):EvaluatorMap{
   const r=createAutonomousCalibrationEvaluators({
     branchStartWorld:w,ledger,trustBase:TRUST_BASE,marriageEvidence:[TEST_MARRIAGE_APPROVAL],
     autonomy:BIRTH_MORTALITY_CALIBRATION,
+    reviewedLegal:{book}, // PR #61の後年相続・新規委任を実計算。権限台帳は空のままPENDING。
   })
   if(!r.ok)throw new Error('EVALUATOR_FACTORY_FAILED:'+r.issues.join(','))
   return r.evaluators
@@ -83,12 +86,15 @@ function buildInputs(seed:number,ids:readonly string[],branchId:string):Timeline
 /** Branchは正式な勝敗・coverage全域を持たないので、試験表示専用の読取TimelineResultに明示変換する。 */
 function asTimelineRun(branch:Branch,parent:TimelineRun):TimelineRun{
   const coverage=branch.recompute?.suffixCoverage??parent.result.coverage
+  const finalWorld=branch.snapshots[branch.snapshots.length-1]
+  const technicalGoal=branch.status==='COMPLETED'&&finalWorld?.year===GOAL_YEAR
+    ? evaluateGoal(finalWorld,EXPERIMENTAL_NALVEN_GOAL):null
   const result:TimelineResult={
     status:branch.status,seed:branch.seed,branchId:branch.branchId,
     rngVersion:branch.rngVersion,startYear:branch.startYear,
     snapshots:branch.snapshots,transitions:Math.max(0,branch.snapshots.length-1),
     eventLog:branch.eventLog,decisionTraces:branch.decisionTraces,
-    halt:branch.halt,coverage,goal:null,technicalGoal:null,
+    halt:branch.halt,coverage,goal:null,technicalGoal,
     autonomousHistory:{
       status:'NOT_ESTABLISHED',
       blockers:[...parent.result.autonomousHistory.blockers,'FORK_CALIBRATION_ONLY'],
@@ -111,6 +117,8 @@ export function runPlayComparison(input:PlayInput):PlayResult{
   const pair=normalizePersonPair(input.firstPersonId,input.secondPersonId)
   if(pair===null)return reject('INVALID_PERSON_PAIR','異なる2人の人物を選択してください')
   const initial=playInitialWorld()
+  const legal=prepareExperimentalGoalContext(initial)
+  if(!legal.ok)return reject('INITIAL_LEGAL_EVIDENCE_INVALID',legal.issues.map(i=>i.code+':'+i.path).join(' / '))
   if(pair.some(id=>!initial.persons.some(p=>p.personId===id)))
     return reject('UNKNOWN_PERSON','対象人物が1250年の試験世界に存在しません')
   const modifier:StatModifier={
@@ -122,8 +130,9 @@ export function runPlayComparison(input:PlayInput):PlayResult{
     decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
   }
   try{
-    const rootEvaluators=createEvaluators(initial,[])
-    const timeline=runTimeline(initial,{seed:input.seed,branchId:'A0-play',evaluators:rootEvaluators})
+    const rootEvaluators=createEvaluators(initial,[],legal.book)
+    const timeline=runTimeline(initial,{seed:input.seed,branchId:'A0-play',evaluators:rootEvaluators,
+      goal:legal.goal,technicalGoalEvaluation:true})
     if(timeline.status!=='COMPLETED')return reject('A0_HALTED',JSON.stringify(timeline.halt))
     const root=createRootBranch(timeline,[],rootEvaluators)
     if(!root.ok)return reject('A0_ROOT_REJECTED',root.code+':'+root.message)
@@ -132,7 +141,7 @@ export function runPlayComparison(input:PlayInput):PlayResult{
       modifiers:[modifier],
       evaluatorsFor:({ledger})=>{
         const state=root.branch.snapshots[input.year-root.branch.startYear]!
-        return createEvaluators(state,ledger)
+        return createEvaluators(state,ledger,legal.book)
       },
     })
     if(!rerun.ok)return reject('FORK_REJECTED',rerun.code+':'+rerun.message)
