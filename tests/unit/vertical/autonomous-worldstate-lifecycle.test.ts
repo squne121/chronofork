@@ -204,6 +204,8 @@ describe('実WorldState起点の自律人物・世代交代（CALIBRATION_ONLY�
     expect(b.decisionTraces).toEqual(a1.decisionTraces)
     expect(b.ledger).toEqual(a1.ledger)
     expect(a1.evaluatorProfile).toEqual(a0.evaluatorProfile)
+  })
+  it('同一seed・同じ枝IDで再計算するとEvent/Traceを含め完全一致する',()=>{
     expect(fork(a0)).toEqual(a1)
   })
 })
