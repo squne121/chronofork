@@ -47,6 +47,25 @@ describe('App', () => {
     expect(screen.getByTestId('reserved-areas').textContent).toContain('未実装')
   })
 
+  it('ブラウザ操作から実A0/A1を再計算し、現在の地図・年表へ枝の切替を反映する', () => {
+    render(<App />)
+    fireEvent.click(screen.getByTestId('branch-run'))
+    expect(screen.getByTestId('branch-status').textContent).toContain('A1 COMPLETED')
+    expect(screen.getByTestId('branch-b004-a0').textContent).toContain('REJECT')
+    expect(screen.getByTestId('branch-b004-a1').textContent).toContain('ACCEPT')
+    expect(screen.getByTestId('branch-event-diffs').textContent).toContain('MARRIAGE_REGISTER')
+    expect(screen.getByTestId('current-year').textContent).toContain('1260年')
+    expect(screen.getByTestId('active-branch').textContent).toContain('A1')
+    fireEvent.click(screen.getByTestId('view-a0'))
+    expect(screen.getByTestId('active-branch').textContent).toContain('A0')
+    expect(screen.getByTestId('run-inputs').textContent).toContain('A0-play')
+    fireEvent.click(screen.getByTestId('view-a1'))
+    expect(screen.getByTestId('active-branch').textContent).toContain('A1')
+    setYear(1261)
+    expect(screen.getByTestId('branch-event-diffs').textContent).toContain('PERSON_BIRTH')
+    expect(screen.getByTestId('goal-status').textContent).toContain('未成立')
+  },30000)
+
   it('年スライダーで 1250→1251→1350 を選べ、人口が実際に変化する', () => {
     render(<App />)
     const slider = screen.getByRole('slider') as HTMLInputElement
