@@ -3,7 +3,8 @@
 import type { Id, RuleOutcome, WorldState } from '../../contracts/index.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
-import type { PairTrustView } from '../../intervention/index.ts'
+import { createPairTrustView } from '../../intervention/index.ts'
+import type { PairTrustView, StatModifierLedger } from '../../intervention/index.ts'
 import type { AutonomyCalibration } from '../../autonomy/config.ts'
 import { checkAutonomyCalibration } from '../../autonomy/config.ts'
 import type { B004Calibration } from './b004-candidate.ts'
@@ -14,6 +15,7 @@ const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0
 /** 人物の存在・年齢・婚姻状態から毎年候補を導出。超過は黙って捨てず停止する。 */
 export function createB004WorldStateEvaluator(
   view:PairTrustView, input:AutonomyCalibration, calibration?:B004Calibration,
+  ledger:StatModifierLedger=[],
 ):RuleEvaluator {
   const match=checkAutonomyCalibration(input).marriage
   return (world:WorldState,ctx:EvaluationContext):RuleOutcome=>{
@@ -34,7 +36,21 @@ export function createB004WorldStateEvaluator(
     for(const a of men)for(const b of women){
       pairs.push(cmp(a.personId,b.personId)<0?[a.personId,b.personId]:[b.personId,a.personId])
     }
-    const ev=createB004CalibrationEvaluator({pairs,view,calibration})
+    // B-009実行後の年次WorldStateに信頼が存在すれば、動的基礎値＋当年介入を一度だけ解決する。
+    // B-009を注入しない従来の試験では、元の静的PairTrustViewをそのまま利用する。
+    let activeView=view
+    if(world.pairTrust!==undefined){
+      const known=new Set(world.persons.map(p=>p.personId))
+      const resolved=createPairTrustView({
+        base:world.pairTrust.map(r=>({personIds:r.personIds,value:r.value})),
+        ledger,
+        knownPersonIds:known,
+      })
+      if(!resolved.ok)throw new EvaluationFailure('B009の年次信頼と介入台帳を解決できません',
+        resolved.issues.map(e=>({code:e.code,message:e.message})))
+      activeView=resolved.view
+    }
+    const ev=createB004CalibrationEvaluator({pairs,view:activeView,calibration})
     if(!ev.ok)throw new EvaluationFailure('B004候補評価器を生成できません',ev.issues.map(i=>({code:i.code,message:i.message})))
     const out=ev.evaluator(world,ctx)
     return {
@@ -44,7 +60,7 @@ export function createB004WorldStateEvaluator(
         reasonCodes:[...d.reasonCodes,'DISCOVERED_FROM_WORLDSTATE','ELIGIBILITY_STILL_UNREVIEWED'],
         candidates:d.candidates.map(c=>({
           ...c,
-          inputs:{...c.inputs,discoveredFromWorldState:true},
+          inputs:{...c.inputs,discoveredFromWorldState:true,trustSource:world.pairTrust===undefined?'STATIC_VIEW':'B009_WORLDSTATE'},
         })),
       })),
     }
