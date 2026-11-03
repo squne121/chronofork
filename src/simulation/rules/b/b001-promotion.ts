@@ -52,8 +52,13 @@ export function createB001PromotionEvaluator(input:B001PromotionInput):B001Promo
     !integer(maxPromotionsPerYear)||maxPromotionsPerYear<1||maxPromotionsPerYear>100)
     issues.push('B001_CALIBRATION_INVALID')
   const cohorts=new Map<Id,PopulationCohortAttestation>()
+  const cohortKeys=new Set<string>()
   for(const [i,c] of input.cohorts.entries()){
-    if(!c||!present(c.cohortId)||!present(c.groupId)||!integer(c.birthYear)||
+    if(!c || typeof c!=='object'){issues.push('B001_COHORT_RECORD_INVALID:'+i);continue}
+    const cohortKey=JSON.stringify([c.groupId,c.birthYear])
+    if(cohortKeys.has(cohortKey))issues.push('B001_COHORT_GROUP_YEAR_DUPLICATE:'+i)
+    cohortKeys.add(cohortKey)
+    if(!present(c.cohortId)||!present(c.groupId)||!integer(c.birthYear)||
       !integer(c.memberCount)||c.memberCount<1||!present(c.censusEvidenceId)||
       !integer(c.recordedYear)||c.recordedYear<c.birthYear||
       c.provenance!=='CALIBRATION_ONLY')issues.push('B001_COHORT_RECORD_INVALID:'+i)
@@ -64,7 +69,11 @@ export function createB001PromotionEvaluator(input:B001PromotionInput):B001Promo
   }
   const identityIds=new Set<Id>(),personIds=new Set<Id>(),ordinalIds=new Set<string>()
   for(const [i,p] of input.identities.entries()){
-    if(!p||!present(p.identityEvidenceId)||!present(p.cohortId)||
+    if(!p || typeof p!=='object'){
+      issues.push('B001_IDENTITY_RECORD_INVALID:'+i)
+      continue
+    }
+    if(!present(p.identityEvidenceId)||!present(p.cohortId)||
       !integer(p.memberOrdinal)||p.memberOrdinal<0||!present(p.personId)||
       !present(p.personName)||!['MALE','FEMALE'].includes(p.sex)||
       !present(p.houseId)||!integer(p.recordedYear)||p.provenance!=='CALIBRATION_ONLY')
