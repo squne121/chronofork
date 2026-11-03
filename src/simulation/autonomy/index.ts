@@ -6,7 +6,8 @@ import { createPairTrustView } from '../intervention/index.ts'
 import type { StatModifierLedger } from '../intervention/index.ts'
 import { createALeg01CalibrationEvaluator, createADyn02EvidenceEvaluator, createASuc04WorldStateEvaluator, createATit07EvidenceEvaluator } from '../rules/a/index.ts'
 import type { MarriageApprovalEvidence } from '../rules/a/index.ts'
-import { createReviewedLegalEvaluators } from '../rules/a/index.ts'
+import { createReviewedLegalEvaluators, createALeg01OrdinaryEvaluator } from '../rules/a/index.ts'
+import type { OrdinaryMarriageInput } from '../rules/a/index.ts'
 import type { ReviewedLegalInput } from '../rules/a/index.ts'
 import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB009WorldStateEvaluator } from '../rules/b/index.ts'
 import type { B009Calibration } from '../rules/b/index.ts'
@@ -25,6 +26,8 @@ export type AutonomousEvaluatorInput = Readonly<{
   ledger: StatModifierLedger
   trustBase: readonly PairTrustBase[]
   marriageEvidence?: readonly MarriageApprovalEvidence[]
+  /** DEC-057 国内通常婚姻。年指定で法的成功を強制しないオプトイン。 */
+  ordinaryMarriage?: OrdinaryMarriageInput
   /** 明示されたCALIBRATION_ONLY権限に限る後年相続審査・新委任（既定は非適用）。 */
   reviewedLegal?: ReviewedLegalInput
   autonomy?: AutonomyCalibration
@@ -53,7 +56,10 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   const known=new Set(input.branchStartWorld.persons.map(p=>p.personId))
   const trust=createPairTrustView({base:input.trustBase,ledger:input.ledger,knownPersonIds:known})
   if(!trust.ok)return {ok:false,issues:trust.issues.map(x=>x.code+':'+x.path)}
-  const marriage=createALeg01CalibrationEvaluator(input.marriageEvidence??[])
+  if(input.ordinaryMarriage && input.marriageEvidence?.length) return {ok:false,issues:['CANNOT_MIX_SYNTHETIC_MARRIAGE_WITH_ORDINARY']}
+  const marriage=input.ordinaryMarriage
+    ? createALeg01OrdinaryEvaluator(input.ordinaryMarriage)
+    : createALeg01CalibrationEvaluator(input.marriageEvidence??[])
   if(!marriage.ok)return {ok:false,issues:marriage.issues.map(x=>x.code+':'+x.path)}
   const reviewed=input.reviewedLegal?createReviewedLegalEvaluators(input.reviewedLegal):undefined
   if(reviewed&&!reviewed.ok)return {ok:false,issues:[...reviewed.issues]}
