@@ -30,7 +30,8 @@ export function withSpouseDeathDissolution(marriage:RuleEvaluator):RuleEvaluator
         !p.alive&&p.deathYear===ctx.year).sort((a,b)=>cmp(a.personId,b.personId))
       if(deceased.length===0)continue
       const deathProofs=deceased.map(p=>confirmedDeath(prior,p.personId,ctx.year))
-      const canDissolve=deceased.length===1&&deathProofs[0]!==undefined
+      // 同じ年に両配偶者が死亡しても婚姻を未終了のまま残さない。双方の死亡を個別に確認する。
+      const canDissolve=deceased.length>=1&&deathProofs.every(p=>p!==undefined)
       const index=base.traceDrafts.length+drafts.length
       const reason=canDissolve?'CONFIRMED_SPOUSE_DEATH':'SPOUSE_DEATH_PROOF_NOT_UNIQUE'
       const candidateId='aleg01:spouse-death:'+JSON.stringify([ctx.year,m.marriageId])
