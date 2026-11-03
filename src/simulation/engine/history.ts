@@ -26,6 +26,8 @@ function refsOfCommand(c: DomainCommand, world: WorldState): TargetRef[] {
   switch (c.type) {
     case 'MARRIAGE_REGISTER':
       return [{ kind: 'PERSON_PAIR', ids: [c.marriage.personIds[0], c.marriage.personIds[1]] }]
+    case 'MARRIAGE_DISSOLVE':
+      return [{ kind: 'PERSON', id: c.deceasedPersonId }]
     case 'LEGAL_DYNASTY_SET':
     case 'PERSON_DEATH':
       return [{ kind: 'PERSON', id: c.personId }]
