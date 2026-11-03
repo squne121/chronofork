@@ -27,7 +27,7 @@ export function createB003WorldStateEvaluator(input: AutonomyCalibration): RuleE
         c.basePermille + Math.max(0,age-c.riskStartAge)*c.increasePerYearPermille)
       const randomKey = 'b003:age-risk:CALIBRATION_ONLY'
       const draw = ctx.random({ stream:'ENDOGENOUS', actorId:p.personId, eventKey:randomKey })
-      let reason='RNG_NOT_SELECTED'
+      let reason:string
       if (age < c.minAge) reason='BELOW_MIN_MORTALITY_AGE'
       else if (!slot) reason='NATURAL_DEATH_SLOT_MISSING'
       else if (draw >= rate/1000) reason='RNG_NOT_SELECTED'
