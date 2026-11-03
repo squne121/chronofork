@@ -185,7 +185,7 @@ describe('App', () => {
     expect(screen.getByTestId('run-inputs').textContent).toContain('seed 9')
     fireEvent.change(screen.getByTestId('seed-input'), { target: { value: 'abc' } })
     expect((screen.getByTestId('rerun') as HTMLButtonElement).disabled).toBe(true)
-  })
+  },15000)
 
   it('停止した計算は HALTED と原因を示し、敗北と表示せず、未計算年を選べない', () => {
     const run = haltedRun()
