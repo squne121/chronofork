@@ -55,6 +55,11 @@ export type PersonBirthCommand = CommandOf<
   'PERSON_BIRTH',
   { person: Person; cohortGroupId: Id; cohortYear: Year }
 >
+/** B-001: 既存人口集団の年齢コホート・人物身元証拠で匿名住民を記名Personへ昇格。 */
+export type PersonPromotionCommand = CommandOf<'PERSON_PROMOTE', {
+  person: Person; cohortId: Id; cohortBirthYear: Year;
+  cohortSize: number; memberOrdinal: number; identityEvidenceId: Id
+}>
 /** B-009だけが更新できる人物ペアの累積信頼基礎値。介入修正値は含めない。 */
 export type PersonPairTrustSetCommand = CommandOf<'PERSON_PAIR_TRUST_SET', { relation: PersonPairTrust }>
 export type PersonDeathCommand = CommandOf<
@@ -102,6 +107,7 @@ export type DomainCommand =
   | ControlMandateSetCommand
   | TaxMandateSetCommand
   | PersonBirthCommand
+  | PersonPromotionCommand
   | PersonPairTrustSetCommand
   | PersonDeathCommand
   | PopulationCohortCommand
@@ -133,6 +139,7 @@ export const COMMAND_WRITE_OWNER: Readonly<Record<CommandType, WriteOwner>> = {
   // 現金取引（RESOURCE_TRANSACTION）を行うのみで、mandate 自体の書込 owner ではない（契約 §2.1/§5）。
   TAX_MANDATE_SET: 'A_LEGAL',
   PERSON_BIRTH: 'B_PERSON',
+  PERSON_PROMOTE: 'B_PERSON',
   PERSON_PAIR_TRUST_SET: 'B_PERSON',
   PERSON_DEATH: 'COMMON_DEATH_REDUCER',
   POPULATION_COHORT: 'COMMON_POPULATION_REDUCER',
