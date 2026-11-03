@@ -38,7 +38,7 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
       const sexKey='b002:sex:CALIBRATION_ONLY:'+m.marriageId
       const sexDraw=ctx.random({stream:'ENDOGENOUS',actorId:m.personIds[0],targetId:m.personIds[1],eventKey:sexKey})
       const childSex=sexDraw<0.5?'MALE' as const:'FEMALE' as const
-      let reason='BIRTH_RNG_NOT_SELECTED'
+      let reason:string
       if(!pairValid||!father||!mother||!father.alive||!mother.alive) reason='PARENTS_UNAVAILABLE'
       else if(m.registeredYear>ctx.year) reason='MARRIAGE_NOT_YET_VALID'
       else if(ageMother===null||ageMother<c.minMotherAge||ageMother>c.maxMotherAge||
