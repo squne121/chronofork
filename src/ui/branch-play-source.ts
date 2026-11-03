@@ -1,6 +1,9 @@
 // 実シミュレーションを利用したUI専用のA0/A1分岐実験。
 // 未来の出来事や勝敗をハードコードしない。法的承認証拠・係数はsynthetic/CALIBRATION_ONLY。
-import { createExperimentalWorld, prepareExperimentalGoalContext, EXPERIMENTAL_NALVEN_GOAL } from '../scenario/experimental/index.ts'
+import { createExperimentalWorld, createExperimentalOrdinaryLegalTrial, prepareExperimentalGoalContext, EXPERIMENTAL_NALVEN_GOAL } from '../scenario/experimental/index.ts'
+import { verifyInitialLegalEvidence } from '../simulation/legal/evidence.ts'
+import type { OrdinaryLaw } from '../simulation/legal/ordinary-authority.ts'
+import type { OrdinaryMarriageReview } from '../simulation/rules/a/index.ts'
 import type { LegalEvidenceBook } from '../simulation/legal/evidence.ts'
 import { evaluateGoal } from '../simulation/goal.ts'
 import { createAutonomousCalibrationEvaluators } from '../simulation/autonomy/index.ts'
@@ -38,7 +41,13 @@ const TEST_MARRIAGE_APPROVAL:MarriageApprovalEvidence={
     clauses:[{clauseId:'ui-synthetic-child-clause',kind:'CHILD_LEGAL_DYNASTY',dynastyId:'dynasty-vargas'}],
   },
 }
+/** 試験用法制の切替。変更できるのは試験用シナリオ構成で、ゲーム内の法的状態ではない。 */
+export type PlayMode='FIXED_APPROVAL'|'ORDINARY_LAW'
+export const PLAY_DEFAULT_MODE:PlayMode='FIXED_APPROVAL'
+export const playModeLabel=(mode:PlayMode):string=>mode==='ORDINARY_LAW'
+  ? '通常法制（experimental）':'旧・1260年の明示承認試験'
 export type PlayInput=Readonly<{
+  mode?:PlayMode
   seed:number
   year:number
   firstPersonId:Id
@@ -48,6 +57,7 @@ export type PlayInput=Readonly<{
 }>
 export type BranchChoice='A0'|'A1'
 export type PlayComparison=Readonly<{
+  mode:PlayMode
   input:PlayInput
   modifier:StatModifier
   root:Branch
@@ -67,24 +77,33 @@ export const playPersonOptions=()=>playInitialWorld().persons.map(p=>({
   id:p.personId,label:p.name+(p.sex==='MALE'?'（男）':'（女）'),
 }))
 const reject=(code:string,message:string):PlayResult=>({ok:false,code,message})
-function createEvaluators(w:WorldState,ledger:readonly StatModifier[],book:LegalEvidenceBook):EvaluatorMap{
+type OrdinaryTrial=Readonly<{book:LegalEvidenceBook;laws:readonly OrdinaryLaw[];marriageReviews:readonly OrdinaryMarriageReview[]}>
+function createEvaluators(w:WorldState,ledger:readonly StatModifier[],book:LegalEvidenceBook,mode:PlayMode,
+  ordinaryTrial?:OrdinaryTrial):EvaluatorMap{
   const r=createAutonomousCalibrationEvaluators({
-    branchStartWorld:w,ledger,trustBase:TRUST_BASE,marriageEvidence:[TEST_MARRIAGE_APPROVAL],
+    branchStartWorld:w,ledger,trustBase:TRUST_BASE,
+    ...(mode==='ORDINARY_LAW'&&ordinaryTrial?{
+      // 初期の法律・人物適格性と、その年の実際のB-005照会を照合する（固定年婚姻は作らない）。
+      ordinaryMarriage:{book:ordinaryTrial.book,laws:ordinaryTrial.laws,reviews:ordinaryTrial.marriageReviews},
+      reviewedLegal:{book:ordinaryTrial.book,ordinaryLaws:ordinaryTrial.laws},
+    }:{
+      marriageEvidence:[TEST_MARRIAGE_APPROVAL],
+      reviewedLegal:{book},
+    }),
     autonomy:BIRTH_MORTALITY_CALIBRATION,
-    reviewedLegal:{book}, // PR #61の後年相続・新規委任を実計算。権限台帳は空のままPENDING。
   })
   if(!r.ok)throw new Error('EVALUATOR_FACTORY_FAILED:'+r.issues.join(','))
   return r.evaluators
 }
-function buildInputs(seed:number,ids:readonly string[],branchId:string):TimelineRun['inputs']{
+function buildInputs(seed:number,ids:readonly string[],branchId:string,mode:PlayMode):TimelineRun['inputs']{
   return {
-    seed,scenarioId:'synthetic / 亡国の王冠・縦断試験 / '+branchId,
+    seed,scenarioId:'experimental / 亡国の王冠 / '+playModeLabel(mode)+' / '+branchId,
     rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,rngVersion:'chronofork-rng-2',
     evaluatedRuleIds:ids,
   }
 }
 /** Branchは正式な勝敗・coverage全域を持たないので、試験表示専用の読取TimelineResultに明示変換する。 */
-function asTimelineRun(branch:Branch,parent:TimelineRun):TimelineRun{
+function asTimelineRun(branch:Branch,parent:TimelineRun,mode:PlayMode):TimelineRun{
   const coverage=branch.recompute?.suffixCoverage??parent.result.coverage
   const finalWorld=branch.snapshots[branch.snapshots.length-1]
   const technicalGoal=branch.status==='COMPLETED'&&finalWorld?.year===GOAL_YEAR
@@ -101,12 +120,14 @@ function asTimelineRun(branch:Branch,parent:TimelineRun):TimelineRun{
     },
   }
   return {
-    inputs:buildInputs(branch.seed,branch.evaluatorProfile.ruleIds,branch.branchId),
+    inputs:buildInputs(branch.seed,branch.evaluatorProfile.ruleIds,branch.branchId,mode),
     initialWorld:parent.initialWorld,result,
   }
 }
 /** 決定的再計算の本物の結果だけ返す。停止時は部分結果を表示用「成功」と扱わない。 */
 export function runPlayComparison(input:PlayInput):PlayResult{
+  const mode=input.mode??PLAY_DEFAULT_MODE
+  if(mode!=='FIXED_APPROVAL'&&mode!=='ORDINARY_LAW')return reject('INVALID_MODE','試験用法制モードが不正です')
   if(!Number.isSafeInteger(input.seed)||input.seed<0)return reject('INVALID_SEED','seedは0以上の安全整数が必要です')
   if(!Number.isSafeInteger(input.year)||input.year<START_YEAR||input.year>=GOAL_YEAR)
     return reject('INVALID_YEAR','介入年は1250〜1349年の整数が必要です')
@@ -119,6 +140,12 @@ export function runPlayComparison(input:PlayInput):PlayResult{
   const initial=playInitialWorld()
   const legal=prepareExperimentalGoalContext(initial)
   if(!legal.ok)return reject('INITIAL_LEGAL_EVIDENCE_INVALID',legal.issues.map(i=>i.code+':'+i.path).join(' / '))
+  const ordinaryTrial=mode==='ORDINARY_LAW'?createExperimentalOrdinaryLegalTrial():undefined
+  if(ordinaryTrial){
+    const issues=verifyInitialLegalEvidence(initial,ordinaryTrial.book)
+    if(issues.length>0)return reject('INITIAL_ORDINARY_EVIDENCE_INVALID',
+      issues.map(i=>i.code+':'+i.path).join(' / '))
+  }
   if(pair.some(id=>!initial.persons.some(p=>p.personId===id)))
     return reject('UNKNOWN_PERSON','対象人物が1250年の試験世界に存在しません')
   const modifier:StatModifier={
@@ -130,7 +157,7 @@ export function runPlayComparison(input:PlayInput):PlayResult{
     decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
   }
   try{
-    const rootEvaluators=createEvaluators(initial,[],legal.book)
+    const rootEvaluators=createEvaluators(initial,[],legal.book,mode,ordinaryTrial)
     const timeline=runTimeline(initial,{seed:input.seed,branchId:'A0-play',evaluators:rootEvaluators,
       goal:legal.goal,technicalGoalEvaluation:true})
     if(timeline.status!=='COMPLETED')return reject('A0_HALTED',JSON.stringify(timeline.halt))
@@ -141,15 +168,15 @@ export function runPlayComparison(input:PlayInput):PlayResult{
       modifiers:[modifier],
       evaluatorsFor:({ledger})=>{
         const state=root.branch.snapshots[input.year-root.branch.startYear]!
-        return createEvaluators(state,ledger,legal.book)
+        return createEvaluators(state,ledger,legal.book,mode,ordinaryTrial)
       },
     })
     if(!rerun.ok)return reject('FORK_REJECTED',rerun.code+':'+rerun.message)
     if(rerun.branch.status!=='COMPLETED')return reject('A1_HALTED',JSON.stringify(rerun.branch.halt))
-    const a0:TimelineRun={inputs:buildInputs(input.seed,Object.keys(rootEvaluators),'A0-play'),
+    const a0:TimelineRun={inputs:buildInputs(input.seed,Object.keys(rootEvaluators),'A0-play',mode),
       result:timeline,initialWorld:initial}
-    const a1=asTimelineRun(rerun.branch,a0)
-    return {ok:true,comparison:{input,modifier,root:root.branch,branch:rerun.branch,a0,a1}}
+    const a1=asTimelineRun(rerun.branch,a0,mode)
+    return {ok:true,comparison:{mode,input,modifier,root:root.branch,branch:rerun.branch,a0,a1}}
   }catch(error){
     return reject('CALCULATION_EXCEPTION',error instanceof Error?error.message:String(error))
   }
