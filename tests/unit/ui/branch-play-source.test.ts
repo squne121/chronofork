@@ -4,6 +4,7 @@ import { compareYear, directlyInvolvesPair, PLAY_DEMO_PAIR, runPlayComparison } 
 import type { PlayInput } from '../../../src/ui/branch-play-source.ts'
 import { EXPERIMENTAL_NALVEN_GOAL } from '../../../src/scenario/experimental/index.ts'
 import { evaluateGoal } from '../../../src/simulation/goal.ts'
+import { observeDynastyContinuity } from '../../../src/ui/dynasty-continuity.ts'
 const REQUEST:PlayInput={seed:20260101,year:1260,firstPersonId:PLAY_DEMO_PAIR[0],
   secondPersonId:PLAY_DEMO_PAIR[1],signedDelta:20,durationYears:5}
 const result=runPlayComparison(REQUEST)
@@ -83,5 +84,88 @@ describe('UI向け実歴史比較アダプタ（CALIBRATION_ONLY）',()=>{
     ['1350年を越える',{...REQUEST,durationYears:95},'INVALID_DURATION'],
   ] as const)('不正な入力% sを完走と偽らず拒否',(_label,bad,code)=>{
     expect(runPlayComparison(bad)).toMatchObject({ok:false,code})
+  })
+})
+
+describe('DEC-057 通常法制・実計算による世代継承と1350年Goal（非権威試験）',()=>{
+  const ordinaryInput:PlayInput={
+    ...REQUEST,mode:'ORDINARY_LAW',year:1250,signedDelta:20,durationYears:5,
+  }
+  const ordinary=runPlayComparison(ordinaryInput)
+  it('ゲームUIと同じ入力で、通常法制の初期法令からA0/A1の100年を実計算する',()=>{
+    expect(ordinary.ok).toBe(true)
+    if(!ordinary.ok)return
+    const c=ordinary.comparison
+    expect(c.mode).toBe('ORDINARY_LAW')
+    expect(c.a0.inputs.scenarioId).toContain('通常法制')
+    expect(c.a1.inputs.scenarioId).toContain('通常法制')
+    expect(c.a0.result.snapshots).toHaveLength(101)
+    expect(c.a1.result.snapshots).toHaveLength(101)
+    expect(c.a0.result.status).toBe('COMPLETED')
+    expect(c.a1.result.status).toBe('COMPLETED')
+    expect(c.branch.recompute).toMatchObject({fromYear:1250,transitions:100,status:'COMPLETED'})
+    for(const history of [c.a0,c.a1]){
+      expect(history.result.goal).toBeNull()
+      expect(history.result.coverage.todoRuleIds).toHaveLength(37)
+      expect(history.result.technicalGoal).toEqual(
+        evaluateGoal(history.result.snapshots.at(-1)!,EXPERIMENTAL_NALVEN_GOAL))
+      expect(history.result.technicalGoal?.status).toBe('NOT_ACHIEVED')
+    }
+  })
+
+  it('固定年の婚姻承認を用いず、信頼介入でB-005→国内婚姻を前倒しし、子の王朝を推測しない',()=>{
+    if(!ordinary.ok)return
+    const c=ordinary.comparison
+    const firstYear=compareYear(c,1250)
+    const event=firstYear.events.find(e=>e.event.eventType==='MARRIAGE_REGISTER')
+    expect(event?.kind).toBe('A1_ONLY')
+    const wedding=c.a1.result.eventLog.find(e=>e.eventId===event?.event.eventId)!
+    const trace=c.a1.result.decisionTraces.find(t=>t.traceId===wedding.sourceTraceIds[0])
+    expect(trace?.reasonCodes).toContain('DEC_057_NORMAL_MARRIAGE')
+    expect(trace?.candidates[0]?.inputs.lawId).toBe('exp-law-domestic-marriage')
+    expect(c.a1.result.snapshots.at(-1)!.legal.marriages[0]?.contract).toBeUndefined()
+    expect(c.a1.result.eventLog.filter(e=>e.eventType==='PERSON_BIRTH').length).toBeGreaterThan(0)
+  })
+
+  it('世代の観測は実親子・法的王朝・死亡・Eventだけから算出し、未到達の孫や勝利を捏造しない',()=>{
+    if(!ordinary.ok)return
+    const c=ordinary.comparison
+    const a0=observeDynastyContinuity(c.a0.initialWorld,c.a0.result,EXPERIMENTAL_NALVEN_GOAL.dynastyId)
+    const a1=observeDynastyContinuity(c.a1.initialWorld,c.a1.result,EXPERIMENTAL_NALVEN_GOAL.dynastyId)
+    expect([a0.status,a1.status]).toEqual(['OBSERVED','OBSERVED'])
+    expect(a1.finalYear).toBe(1350)
+    expect(a1.birthEvents).toBe(c.a1.result.eventLog.filter(e=>e.eventType==='PERSON_BIRTH').length)
+    expect(a1.controlMandateEvents).toBe(c.a1.result.eventLog.filter(e=>e.eventType==='CONTROL_MANDATE_SET').length)
+    expect(a1.familyDepth).toBe(1) // この仮の国内法令で孫以降の婚姻審査はない
+    expect(a1.birthsWithUndeterminedDynasty).toBeGreaterThan(0)
+    expect(a1.legalTargetDescendants).toBe(0)
+    expect(a1.livingLegalTargetMembers).toBe(0)
+    expect(a1.titleTransferEvents).toBeGreaterThan(0)
+    expect(a1.controlMandateEvents).toBeGreaterThan(0)
+    expect(a1.bornAfterStart).toBeGreaterThanOrEqual(a0.bornAfterStart)
+    // この時点の形式的なGoalは試験用の別フィールド。評価失敗の理由は既存Goalだけから読む。
+    expect(c.a1.result.goal).toBeNull()
+  })
+
+  it('実WorldStateに親子の次の世代が追加された場合だけ深さ2と数える（人工入力単体試験）',()=>{
+    if(!ordinary.ok)return
+    const c=ordinary.comparison
+    const result=c.a1.result
+    const last=result.snapshots.at(-1)!
+    const child=last.persons.find(p=>p.birthYear>=1250&&(p.fatherId===PLAY_DEMO_PAIR[0]||p.motherId===PLAY_DEMO_PAIR[1]))
+    expect(child).toBeDefined()
+    if(!child)return
+    const grandchild={...child,personId:'synthetic-grandchild-analysis-test',birthYear:child.birthYear+20,
+      fatherId:child.personId,motherId:undefined,legalDynasty:{status:'UNDETERMINED' as const,reasonCodes:['UNIT_TEST_ONLY']}}
+    const mocked={...result,snapshots:[...result.snapshots.slice(0,-1),{...last,persons:[...last.persons,grandchild]}]}
+    const observed=observeDynastyContinuity(c.a1.initialWorld,mocked,EXPERIMENTAL_NALVEN_GOAL.dynastyId)
+    expect(observed.familyDepth).toBe(2)
+    const unchanged=observeDynastyContinuity(c.a1.initialWorld,c.a1.result,EXPERIMENTAL_NALVEN_GOAL.dynastyId)
+    expect(unchanged.familyDepth).toBe(1)
+  })
+
+  it('不正モードは既定の旧試験にフォールバックせず拒否',()=>{
+    const bad={...ordinaryInput,mode:'UNKNOWN'} as unknown as PlayInput
+    expect(runPlayComparison(bad)).toMatchObject({ok:false,code:'INVALID_MODE'})
   })
 })
