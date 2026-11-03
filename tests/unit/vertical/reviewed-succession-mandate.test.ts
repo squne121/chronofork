@@ -181,6 +181,21 @@ describe('DEC-055 / G-03/04: 明示権限に限る通常相続・後年再審査
     expect(after.titles.find(t => t.titleId === TITLE_ID)?.holder).toEqual({ status: 'HELD', personId: P2 })
     expect(after.legal.controlMandates).toHaveLength(0)
     expect(after.regions).toEqual(w1287.regions)
+    if (r.status === 'COMPLETED') {
+      expect(r.traces.some(t => t.ruleId === 'A-TIT-07' && t.status === 'DEFER' &&
+        t.reasonCodes.includes('GAME_03_NEW_DELEGATION_EVIDENCE_MISSING'))).toBe(true)
+    }
+  })
+
+  it('初期Title承認の外部記録が欠落している場合は権限記録だけでは承認しない', () => {
+    const w: WorldState = { ...pendingWorld(), year: 1287 }
+    const b = TEST_BOOK()
+    const withoutTitleRecognition: LegalEvidenceBook = {
+      ...b, titleRecognitions: b.titleRecognitions.filter(r => r.titleId !== TITLE_ID),
+    }
+    const after = nextWorld(year(w, { book: withoutTitleRecognition }))
+    expect(after.legal.cases[0]?.status).toBe('PENDING')
+    expect(after.titles.find(t=>t.titleId===TITLE_ID)?.holder.status).toBe('UNDETERMINED')
   })
 
   it('相続の明示決定が順位と食い違う場合はPENDINGのまま', () => {
