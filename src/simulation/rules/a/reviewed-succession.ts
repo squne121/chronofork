@@ -179,7 +179,11 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
     if (ctx.ruleId !== 'A-TIT-07' || ctx.phase !== 4 || ctx.year !== world.year) {
       throw new EvaluationFailure('Title再審査のRuleID/年/フェーズが不一致', [{ code: 'RULE_MISMATCH', message: 'A-TIT-07 Phase4' }])
     }
-    const original = baseTitle(world, ctx)
+    // 旧A-TIT-07は「死亡当年のA-SUC-04 Trace」のみ想定する。
+    // 後年再審査Traceはその検証へ渡さず、直後の専用処理で個別に審査する。
+    const priorTraces = (ctx.priorTraces ?? []).filter(t =>
+      !(t.ruleId === 'A-SUC-04' && t.reasonCodes.includes('DEC_055_PENDING_REVIEW')))
+    const original = baseTitle(world, { ...ctx, priorTraces })
     const traceDrafts: DecisionTraceDraft[] = [...original.traceDrafts]
     const commands: DomainCommand[] = [...original.commands]
     const cases = world.legal.cases.filter(c => c.kind === 'SUCCESSION' && c.status === 'APPROVED')
