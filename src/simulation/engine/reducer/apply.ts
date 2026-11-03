@@ -13,6 +13,7 @@ import {
   legalDynastySet,
   legalTitleTransfer,
   marriageRegister,
+  marriageDissolve,
   taxMandateSet,
   titleRecognitionSet,
 } from './handlers-legal.ts'
@@ -37,6 +38,7 @@ type HandlerMap = { [K in Implemented]: Handler<Extract<DomainCommand, { type: K
 
 const HANDLERS: HandlerMap = {
   MARRIAGE_REGISTER: marriageRegister,
+  MARRIAGE_DISSOLVE: marriageDissolve,
   LEGAL_DYNASTY_SET: legalDynastySet,
   LEGAL_TITLE_TRANSFER: legalTitleTransfer,
   TITLE_RECOGNITION_SET: titleRecognitionSet,

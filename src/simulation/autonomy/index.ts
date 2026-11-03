@@ -6,7 +6,7 @@ import { createPairTrustView } from '../intervention/index.ts'
 import type { StatModifierLedger } from '../intervention/index.ts'
 import { createALeg01CalibrationEvaluator, createADyn02EvidenceEvaluator, createASuc04WorldStateEvaluator, createATit07EvidenceEvaluator } from '../rules/a/index.ts'
 import type { MarriageApprovalEvidence } from '../rules/a/index.ts'
-import { createReviewedLegalEvaluators, createALeg01OrdinaryEvaluator, createALeg01NextgenEvaluator } from '../rules/a/index.ts'
+import { createReviewedLegalEvaluators, createALeg01OrdinaryEvaluator, createALeg01NextgenEvaluator, withSpouseDeathDissolution } from '../rules/a/index.ts'
 import type { NextgenMarriageInput } from '../rules/a/index.ts'
 import type { OrdinaryMarriageInput } from '../rules/a/index.ts'
 import type { ReviewedLegalInput } from '../rules/a/index.ts'
@@ -33,6 +33,8 @@ export type AutonomousEvaluatorInput = Readonly<{
   nextgenMarriage?: NextgenMarriageInput
   /** DEC-024/058: 出典付き人口コホート・身元の二重照合後のみ記名Personへ昇格。 */
   promotion?: B001PromotionInput
+  /** DEC-058: B-003で確定した当年の配偶者死亡を婚姻の法的終了へ接続。既定false。 */
+  spouseDeathDissolution?: boolean
   /** 明示されたCALIBRATION_ONLY権限に限る後年相続審査・新委任（既定は非適用）。 */
   reviewedLegal?: ReviewedLegalInput
   autonomy?: AutonomyCalibration
@@ -72,6 +74,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     :input.ordinaryMarriage?createALeg01OrdinaryEvaluator(input.ordinaryMarriage)
     : createALeg01CalibrationEvaluator(input.marriageEvidence??[])
   if(!marriage.ok)return {ok:false,issues:marriage.issues.map(x=>typeof x==='string'?x:x.code+':'+x.path)}
+  const marriageEvaluator=input.spouseDeathDissolution?withSpouseDeathDissolution(marriage.evaluator):marriage.evaluator
   const promotion=input.promotion?createB001PromotionEvaluator(input.promotion):undefined
   if(promotion&&!promotion.ok)return {ok:false,issues:[...promotion.issues]}
   const reviewed=input.reviewedLegal?createReviewedLegalEvaluators(input.reviewedLegal):undefined
@@ -85,7 +88,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     ...(promotion?.ok?{'B-001':promotion.evaluator}:{}),
     'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,input.ledger),
     'B-005':input.nextgenMarriage?createB005NextgenEvaluator(input.nextgenMarriage.calibration):createB005CalibrationEvaluator(),
-    'A-LEG-01':marriage.evaluator,
+    'A-LEG-01':marriageEvaluator,
     'A-SUC-04':createASuc04WorldStateEvaluator(),
     'A-TIT-07':createATit07EvidenceEvaluator(),
     ...(reviewed?.ok?reviewed.evaluators:{}),

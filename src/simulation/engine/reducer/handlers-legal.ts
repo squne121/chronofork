@@ -7,6 +7,7 @@ import type {
   LegalDynastySetCommand,
   LegalTitleTransferCommand,
   MarriageRegisterCommand,
+  MarriageDissolveCommand,
   TaxMandateSetCommand,
   TitleRecognitionSetCommand,
 } from '../../contracts/index.ts'
@@ -31,6 +32,22 @@ export const marriageRegister: Handler<MarriageRegisterCommand> = (d, c) => {
     if (active) return fail('PERSON_ALREADY_MARRIED', `人物 ${id} は有効な婚姻 ${active.marriageId} があります`, [id, active.marriageId])
   }
   d.world = { ...w, legal: { ...w.legal, marriages: [...w.legal.marriages, m] } }
+  return null
+}
+
+/** A-LEG-01がB-003で確定済みの配偶者死亡だけを根拠に行う。翌年までは新婚姻候補へ戻さない。 */
+export const marriageDissolve: Handler<MarriageDissolveCommand> = (d, c) => {
+  const w = d.world
+  const m = w.legal.marriages.find(x => x.marriageId === c.marriageId)
+  if (!m) return fail('NOT_FOUND', `婚姻 ${c.marriageId} が見つかりません`, [c.marriageId])
+  if (m.status !== 'ACTIVE') return fail('INVALID_COMMAND', '既に終了した婚姻は再度終了できません', [m.marriageId])
+  if (c.cause !== 'SPOUSE_DEATH' || c.dissolvedYear !== w.year) return fail('INVALID_COMMAND', '当年の配偶者死亡のみで終了できます')
+  if (!m.personIds.includes(c.deceasedPersonId)) return fail('INVALID_COMMAND', '死亡者が婚姻の当事者ではありません')
+  const p = findPerson(w, c.deceasedPersonId)
+  if (!p || p.alive || p.deathYear !== w.year) return fail('LEGAL_BASIS_MISSING', '当年の確定死亡記録がありません')
+  if (!c.source.sourceIntentId) return fail('LEGAL_BASIS_MISSING', 'B-003の死亡判断根拠が必要です')
+  d.world = { ...w, legal: { ...w.legal, marriages: w.legal.marriages.map(x =>
+    x.marriageId === m.marriageId ? { ...x, status: 'DISSOLVED' as const, dissolvedYear: w.year } : x) } }
   return null
 }
 

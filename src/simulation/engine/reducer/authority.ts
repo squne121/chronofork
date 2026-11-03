@@ -24,6 +24,7 @@ const MIL_PHASES: readonly Phase[] = [5, 6]
 function allowances(c: DomainCommand): readonly Allowance[] {
   switch (c.type) {
     case 'MARRIAGE_REGISTER':
+    case 'MARRIAGE_DISSOLVE':
       return [{ domain: 'A', phases: [3] }]
     case 'LEGAL_DYNASTY_SET':
       return [{ domain: 'A', phases: [3, 4] }]
@@ -92,6 +93,9 @@ export function checkCommandAuthority(
 
   if (!Object.hasOwn(COMMAND_WRITE_OWNER, c.type)) return reject('INVALID_COMMAND', `未知の command 種別: ${String((c as { type: unknown }).type)}`)
   const owner = COMMAND_WRITE_OWNER[c.type]
+  if (c.type === 'MARRIAGE_DISSOLVE' && s.sourceRuleId !== 'A-LEG-01') {
+    return reject('WRITE_OWNER_VIOLATION', '婚姻終了はA-LEG-01のみが確定します')
+  }
   if (c.type === 'PERSON_PROMOTE' && s.sourceRuleId !== 'B-001') {
     return reject('WRITE_OWNER_VIOLATION', '昇格によるPerson登録はB-001だけが実行できます')
   }

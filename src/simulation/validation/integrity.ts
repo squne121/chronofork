@@ -243,6 +243,12 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
     ref('PERSON', a, `${p}.personIds[0]`, o)
     ref('PERSON', b, `${p}.personIds[1]`, o)
     intYear(m.registeredYear, `${p}.registeredYear`, o)
+    if (m.dissolvedYear !== undefined) {
+      intYear(m.dissolvedYear, `${p}.dissolvedYear`, o)
+      if (m.status === 'ACTIVE' || m.dissolvedYear < m.registeredYear || m.dissolvedYear > world.year) {
+        add('INVALID_PERIOD', `${p}.dissolvedYear`, '婚姻終了年は登録年以降の過去・現在でDISSOLVEDに限ります', o)
+      }
+    }
     if (m.contract !== undefined) {
       const clauseIds = new Set<Id>()
       const attributed = new Set<Id>()
