@@ -10,6 +10,8 @@ import { EvaluationFailure } from '../../engine/evaluators.ts'
 import { eventIdOf } from '../../engine/ids.ts'
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
 import { reviewApprovalAuthority } from '../../legal/evidence.ts'
+import type { OrdinaryLaw } from '../../legal/ordinary-authority.ts'
+import { mandateEffectiveNow, reviewOrdinaryAuthority, reviewOrdinaryDelegation, validateOrdinaryLaws } from '../../legal/ordinary-authority.ts'
 import { createASuc04WorldStateEvaluator } from './asuc04-worldstate.ts'
 import { createATit07EvidenceEvaluator } from './atit07-title-transfer.ts'
 import { reviewLandHeir } from './legal-heirs.ts'
@@ -59,6 +61,8 @@ export type ReviewedLegalInput = Readonly<{
   successionDecisions?: readonly SuccessionReviewEvidence[]
   delegationAuthorities?: readonly DelegationAuthorityEvidence[]
   delegationDecisions?: readonly DelegationDecisionEvidence[]
+  /** DEC-057: 背景法令がある場合だけ実WorldStateから通常相続の認証・新委任を生成する。 */
+  ordinaryLaws?: readonly OrdinaryLaw[]
 }>
 export type ReviewedLegalFactoryResult =
   | Readonly<{ ok: true; evaluators: EvaluatorMap }>
@@ -75,6 +79,9 @@ const safe = (x: unknown) => x !== null && typeof x === 'object'
 /** 構造・固有IDだけを入口で検査。真正な権限は毎年、現WorldStateとbookの記録で判定する。 */
 export function createReviewedLegalEvaluators(input: ReviewedLegalInput): ReviewedLegalFactoryResult {
   if (!safe(input) || !safe(input.book)) return { ok: false, issues: ['INVALID_EVIDENCE_BOOK'] }
+  const laws = input.ordinaryLaws ?? []
+  const lawIssues = validateOrdinaryLaws(laws)
+  if (lawIssues.length > 0) return { ok: false, issues: lawIssues }
   const decisions = input.successionDecisions ?? []
   const rights = input.delegationAuthorities ?? []
   const delegations = input.delegationDecisions ?? []
@@ -89,6 +96,7 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
   const stableRights = structuredClone(rights) as DelegationAuthorityEvidence[]
   const stableDelegations = structuredClone(delegations) as DelegationDecisionEvidence[]
   const book = structuredClone(input.book) as LegalEvidenceBook
+  const stableLaws = structuredClone(laws) as OrdinaryLaw[]
   const baseSuc = createASuc04WorldStateEvaluator()
   const baseTitle = createATit07EvidenceEvaluator()
 
@@ -109,20 +117,39 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
         title.recognition.sovereignCountryId !== region.sovereignCountryId ||
         recognition.sovereignCountryId !== region.sovereignCountryId ||
         !sameRef(recognition.authority, title.recognition.authority)) return undefined
-    const matches = stableDecisions.filter(d =>
+    const mentioned = stableDecisions.filter(d =>
       d.titleId === titleId && d.predecessorPersonId === predecessorId &&
-      d.successorPersonId === successorId && d.grantBasisId === grant.grantBasisId &&
-      Number.isSafeInteger(d.availableFromYear) && d.availableFromYear <= year &&
-      present(d.decisionId) && present(d.authorityBasisId) &&
-      present(d.issuerRef?.id) && ['COUNTRY', 'HOUSE', 'PERSON'].includes(d.issuerRef?.kind))
-    if (matches.length !== 1) return undefined
-    const record = matches[0]!
-    const authority = reviewApprovalAuthority(world, book, {
-      action: 'NORMAL_LAND_SUCCESSION', issuerRef: record.issuerRef,
-      sovereignCountryId: region.sovereignCountryId,
+      Number.isSafeInteger(d.availableFromYear) && d.availableFromYear <= year)
+    // 明示された競合・不適格決定がある場合、一般授権で上書きして成功扱いしない。
+    if (mentioned.length > 0) {
+      const matches = mentioned.filter(d =>
+        d.successorPersonId === successorId && d.grantBasisId === grant.grantBasisId &&
+        present(d.decisionId) && present(d.authorityBasisId) &&
+        present(d.issuerRef?.id) && ['COUNTRY','HOUSE','PERSON'].includes(d.issuerRef.kind))
+      if (mentioned.length !== 1 || matches.length !== 1) return undefined
+      const record = matches[0]!
+      const authority = reviewApprovalAuthority(world, book, {
+        action: 'NORMAL_LAND_SUCCESSION', issuerRef: record.issuerRef,
+        sovereignCountryId: region.sovereignCountryId,
+      })
+      if (authority.status !== 'AUTHORIZED' || authority.authorityBasisId !== record.authorityBasisId) return undefined
+      return record
+    }
+    // 第1縦断の国内通常法制。事前の背景法令・権限台帳・Grant・Title認定が揃い、
+    // 現年の実WorldStateで唯一の適格後継を得られた時にだけ当年の決定IDを生成する。
+    const country: ControllerRef = { kind: 'COUNTRY', id: region.sovereignCountryId }
+    const authority = reviewOrdinaryAuthority(world, book, stableLaws, {
+      action: 'NORMAL_LAND_SUCCESSION', issuerRef: country,
+      sovereignCountryId: region.sovereignCountryId, year,
     })
-    if (authority.status !== 'AUTHORIZED' || authority.authorityBasisId !== record.authorityBasisId) return undefined
-    return record
+    if (authority.status !== 'AUTHORIZED') return undefined
+    return {
+      decisionId: 'decision:ordinary-succession:' + JSON.stringify([year,titleId,predecessorId,successorId,authority.lawId]),
+      titleId, predecessorPersonId: predecessorId, successorPersonId: successorId,
+      grantBasisId: grant.grantBasisId, issuerRef: country,
+      authorityBasisId: authority.authorityBasisId, availableFromYear: year,
+      provenance: 'CALIBRATION_ONLY' as const,
+    }
   }
 
   const succession: RuleEvaluator = (world, ctx) => {
@@ -241,9 +268,33 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
         d.beneficiaryPersonId === successorId && Number.isSafeInteger(d.availableFromYear) &&
         d.availableFromYear <= ctx.year && Number.isSafeInteger(d.endExclusiveYear) &&
         d.endExclusiveYear > ctx.year && present(d.decisionId) && present(d.authorizationId))
-      const mandateDecision = approvedMandates.length === 1 ? approvedMandates[0] : undefined
+      // 明示済み委任と一般法令を混用しない。同じ地域の未整合な明示意思があれば保留。
+      const lawReview = reviewOrdinaryDelegation(world, book, stableLaws, title.titleId, ctx.year)
+      const selectedLaw = lawReview.status === 'AUTHORIZED'
+        ? stableLaws.find(l => l.lawId === lawReview.lawId) : undefined
+      const conflictingExplicit = stableDelegations.some(d =>
+        d.titleId === title.titleId && d.regionId === title.regionId &&
+        d.availableFromYear <= ctx.year)
+      const derivedDecision: DelegationDecisionEvidence | undefined =
+        approvedMandates.length === 0 && !conflictingExplicit && selectedLaw && region &&
+        region.deFactoControllerRef.kind === 'COUNTRY'
+        ? {
+          decisionId: 'decision:ordinary-delegation:' + JSON.stringify([ctx.year,title.titleId,successorId,selectedLaw.lawId]),
+          authorizationId: selectedLaw.lawId, titleId: title.titleId, regionId: region.regionId,
+          beneficiaryPersonId: successorId, issuerRef: region.deFactoControllerRef,
+          availableFromYear: ctx.year, endExclusiveYear: selectedLaw.endExclusiveYear,
+          provenance: 'CALIBRATION_ONLY',
+        } : undefined
+      const mandateDecision = approvedMandates.length === 1 ? approvedMandates[0] : derivedDecision
+      const derivedRight: DelegationAuthorityEvidence | undefined =
+        derivedDecision && selectedLaw && region ? {
+          authorizationId: selectedLaw.lawId, titleId:title.titleId,regionId:region.regionId,
+          grantBasisId:title.grantBasisId, issuerRef:region.deFactoControllerRef,
+          sovereignCountryId:region.sovereignCountryId, sourceLawOrGrantId:title.grantBasisId,
+          provenance:'CALIBRATION_ONLY',
+        } : undefined
       const matchingRights = mandateDecision ? stableRights.filter(r => r.authorizationId === mandateDecision.authorizationId) : []
-      const right = matchingRights.length === 1 ? matchingRights[0] : undefined
+      const right = derivedRight ?? (matchingRights.length === 1 ? matchingRights[0] : undefined)
       const basis = book.titleGrants.find(g => g.grantBasisId === title.grantBasisId)
       const authorized = !!(region && mandateDecision && right && basis &&
         right.titleId === title.titleId && right.regionId === title.regionId &&
@@ -252,8 +303,11 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
         sameRef(right.issuerRef, region.deFactoControllerRef) &&
         sameRef(mandateDecision.issuerRef, right.issuerRef) &&
         title.recognition.sovereignCountryId === region.sovereignCountryId &&
+        // 古い保持者が死亡・Title喪失した委任は履歴のみ。実効な競合だけ阻止する。
         !world.legal.controlMandates.some(m => m.regionId === region.regionId &&
-          m.effectiveFromYear < mandateDecision.endExclusiveYear && ctx.year < m.endExclusiveYear))
+          mandateEffectiveNow(world,m,ctx.year) &&
+          m.effectiveFromYear < mandateDecision.endExclusiveYear &&
+          ctx.year < m.endExclusiveYear))
       if (!authorized || !region || !mandateDecision || !right) {
         const pendingId = 'atit07:mandate-pending:' + JSON.stringify([ctx.year, legalCase.caseId])
         traceDrafts.push({
