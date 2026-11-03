@@ -15,6 +15,11 @@ type Props=Readonly<{
   onInspectEvent:(choice:BranchChoice,id:string)=>void
 }>
 const persons=playPersonOptions()
+/** 既知のEvent種別だけ平易な見出しを付ける。未知の種別は生の種別名をそのまま出す（用語を創作しない）。 */
+const EVENT_LABEL:Readonly<Record<string,string>>={MARRIAGE_REGISTER:'婚姻の成立',PERSON_BIRTH:'人物の出生'}
+const eventLabel=(t:string)=>EVENT_LABEL[t]?`${EVENT_LABEL[t]}（${t}）`:t
+const kindLabel=(k:'A0_ONLY'|'A1_ONLY'|'CHANGED')=>k==='A0_ONLY'?'A0のみ':k==='A1_ONLY'?'A1のみ':'同IDで内容変化'
+const personName=(id:string)=>persons.find(x=>x.id===id)?.label??id
 const countAlive=(c:readonly {alive:boolean}[])=>c.filter(x=>x.alive).length
 const countMarried=(w:{legal:{marriages:readonly {status:string}[]}})=>w.legal.marriages.filter(m=>m.status==='ACTIVE').length
 const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filter(t=>t.holder.status==='HELD').length
@@ -53,96 +58,109 @@ export function InterventionComparePanel(p:Props){
       <dt>相続案件</dt><dd>{w.legal.cases.length}件</dd>
     </dl>
   ):<p className="missing">未計算の年です</p>
+  const count=(rows:typeof eventRows,type:string)=>rows.filter(x=>x.event.eventType===type).length
+  const marriages=count(focused,'MARRIAGE_REGISTER'),births=count(eventRows,'PERSON_BIRTH')
+  const decisionChanged=traceA0?.status!==traceA1?.status
+  const eventButton=(x:typeof eventRows[number])=><li key={x.event.eventId+x.kind}>
+    <button type="button" onClick={()=>p.onInspectEvent(x.kind==='A0_ONLY'?'A0':'A1',x.event.eventId)}>
+      {kindLabel(x.kind)} / {x.event.year}年 {eventLabel(x.event.eventType)}
+    </button>
+  </li>
   return <section className="panel intervention-panel" aria-labelledby="branch-heading" data-testid="branch-compare-panel">
-    <h2 id="branch-heading">歴史に介入する・A0/A1比較（試験版）</h2>
-    <p className="note">1250〜1350年の実WorldStateを再計算します。婚姻の法的承認は1260年の試験用P4/P5証拠だけで、正式な勝敗や全自律歴史ではありません。</p>
-    <form className="filters compare-form" onSubmit={e=>{
+    <h2 id="branch-heading">介入して歴史を比べる（試験版）</h2>
+    <p className="note">対象の2人の信頼を一定期間だけ動かし、1250〜1350年を再計算して「介入なし(A0)」と「介入あり(A1)」を同じ年で比べます。婚姻の法的承認は1260年の試験用証拠だけで、正式な勝敗や全自律歴史ではありません。</p>
+    <h3 className="step-title"><span className="step-no">1</span>対象と介入を選ぶ</h3>
+    <form className="compare-form" onSubmit={e=>{
       e.preventDefault()
       if(valid)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
         signedDelta:delta,durationYears:duration})
     }}>
-      <label>介入年
-        <input type="number" min={1250} max={1349} step={1} value={yearText} onChange={e=>setYearText(e.target.value)} data-testid="branch-fork-year"/>
-      </label>
-      <label>人物1
-        <select value={firstId} onChange={e=>setFirstId(e.target.value)} data-testid="branch-person-one">
-          {persons.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
-        </select>
-      </label>
-      <label>人物2
-        <select value={secondId} onChange={e=>setSecondId(e.target.value)} data-testid="branch-person-two">
-          {persons.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
-        </select>
-      </label>
-      <label>pair.trust補正（試験値）
-        <input type="number" min={-200} max={200} step={1} value={deltaText} onChange={e=>setDeltaText(e.target.value)} data-testid="branch-trust-delta"/>
-      </label>
-      <label>持続年数
-        <input type="number" min={1} max={100} step={1} value={durationText} onChange={e=>setDurationText(e.target.value)} data-testid="branch-duration"/>
-      </label>
-      <button type="submit" disabled={!valid} data-testid="branch-run">介入して再計算</button>
+      <div className="form-grid">
+        <label>対象の人物1
+          <select value={firstId} onChange={e=>setFirstId(e.target.value)} data-testid="branch-person-one">
+            {persons.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
+          </select>
+        </label>
+        <label>対象の人物2
+          <select value={secondId} onChange={e=>setSecondId(e.target.value)} data-testid="branch-person-two">
+            {persons.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
+          </select>
+        </label>
+        <label>2人の信頼の補正（試験値）
+          <input type="number" min={-200} max={200} step={1} value={deltaText} onChange={e=>setDeltaText(e.target.value)} data-testid="branch-trust-delta"/>
+        </label>
+        <label>介入する年
+          <input type="number" min={1250} max={1349} step={1} value={yearText} onChange={e=>setYearText(e.target.value)} data-testid="branch-fork-year"/>
+        </label>
+        <label>続ける年数
+          <input type="number" min={1} max={100} step={1} value={durationText} onChange={e=>setDurationText(e.target.value)} data-testid="branch-duration"/>
+        </label>
+      </div>
+      <h3 className="step-title"><span className="step-no">2</span>再計算する</h3>
+      <button type="submit" disabled={!valid} data-testid="branch-run" className="cta">介入して再計算</button>
+      <span className="note"> 既定値（{personName(PLAY_DEMO_PAIR[0])}と{personName(PLAY_DEMO_PAIR[1])}、1260年、+20、5年）でそのまま試せます。</span>
     </form>
     {!valid&&<p role="status" className="missing" data-testid="branch-invalid">seed、介入年、相異なる2人、0以外の補正値、1350年を超えない期間を指定してください。</p>}
     {p.error&&<p role="alert" className="halt" data-testid="branch-error">計算不成立（敗北ではありません）: {p.error.code} / {p.error.message}</p>}
+    {!p.comparison&&<p className="note" data-testid="branch-empty">まだ比較結果はありません。上の「介入して再計算」を押すと、ここにA0/A1の違いが表示されます。</p>}
     {p.comparison&&input&&before&&after&&<div data-testid="branch-results" className="compare-results">
-      <p data-testid="branch-status" className="note">
-        A0 {p.comparison.a0.result.status} / A1 {p.comparison.a1.result.status} /
-        seed {input.seed} / 介入 {input.year}年〜{input.year+input.durationYears-1}年 / 補正 {input.signedDelta>0?'+':''}{input.signedDelta} /
-        正式勝敗: 未成立（goal=null）
-      </p>
+      <h3 className="step-title"><span className="step-no">3</span>同じ年のA0/A1を比べる</h3>
+      <div className="headline" data-testid="branch-headline">
+        <p><strong>{personName(pair[0])}と{personName(pair[1])}</strong>（{p.year}年）</p>
+        <ul>
+          <li>対象の判断: A0 {traceA0?.status??'判定なし'} → A1 {traceA1?.status??'判定なし'}{decisionChanged?'（変化あり）':'（変化なし）'}</li>
+          <li>対象の婚姻: {marriages}件 / 出生: {births}件（この年に差分のあるEvent）</li>
+          <li>他の対象への影響: {other.length}件の変化Event</li>
+        </ul>
+        <p className="note">正式勝敗: 未成立。これは試験版の差分であり、単独原因の断定ではありません。</p>
+      </div>
       <div className="filters" aria-label="観測する歴史">
         <button type="button" aria-pressed={p.activeBranch==='A0'} onClick={()=>p.onViewBranch('A0')} data-testid="view-a0">A0 原史を観測</button>
         <button type="button" aria-pressed={p.activeBranch==='A1'} onClick={()=>p.onViewBranch('A1')} data-testid="view-a1">A1 改変史を観測</button>
-        <span data-testid="active-branch">既存の地図・年表を表示中: {p.activeBranch}</span>
+        <span data-testid="active-branch">地図・年表で表示中: {p.activeBranch}</span>
       </div>
       <p className="note" data-testid="branch-comparison-year">
-        比較年: {p.year}年（年初WorldState）。年内Event/Traceは右の年スライダーに同期。1350年は評価専用です。
+        比較年: {p.year}年（年初WorldState）。年を変えるには右の「④ 理由を確認する」の年スライダーを使います。1350年は評価専用です。
       </p>
       <div className="comparison-columns">
-        <div data-testid="branch-snapshot-a0"><h3>A0 介入なし</h3>{summarize(before)}
-          <p data-testid="branch-b004-a0">B-004対象判断: {traceA0?.status??'判定なし'} / 試験スコア {score(traceA0)} / {traceA0?.traceId??'—'}</p>
+        <div data-testid="branch-snapshot-a0"><h4>A0 介入なし</h4>{summarize(before)}
+          <p data-testid="branch-b004-a0">対象の判断: {traceA0?.status??'判定なし'}（試験スコア {score(traceA0)}）</p>
         </div>
-        <div data-testid="branch-snapshot-a1"><h3>A1 介入あり</h3>{summarize(after)}
-          <p data-testid="branch-b004-a1">B-004対象判断: {traceA1?.status??'判定なし'} / 試験スコア {score(traceA1)} / {traceA1?.traceId??'—'}</p>
+        <div data-testid="branch-snapshot-a1"><h4>A1 介入あり</h4>{summarize(after)}
+          <p data-testid="branch-b004-a1">対象の判断: {traceA1?.status??'判定なし'}（試験スコア {score(traceA1)}）</p>
         </div>
       </div>
-      <h3>確定Eventの差分（{p.year}年）</h3>
+      <h4>この年に変わったEvent</h4>
       <p className="note" data-testid="branch-event-count">
-        選んだ人物に直接関与: {focused.length}件 / その他の世界変化: {other.length}件。Event差分は変更の証拠であり、単独原因の断定ではありません。
+        選んだ2人に直接関与: {focused.length}件 / その他の世界変化: {other.length}件。押すと右の「④ 理由を確認する」に詳細を開きます。
       </p>
       {eventRows.length===0?<p data-testid="branch-no-diff">この年に異なるEventはありません。</p>:(
         <div data-testid="branch-event-diffs">
-          {([['注目人物への変化',focused],['それ以外の変化',other]] as const).map(([label,rows])=><div key={label}>
-            <h4>{label}（{rows.length}件）</h4>
-            <ul className="compare-event-list">
-              {rows.slice(0,12).map(({kind,event},i)=><li key={event.eventId+kind+i}>
-                <button type="button" onClick={()=>p.onInspectEvent(kind==='A0_ONLY'?'A0':'A1',event.eventId)}>
-                  {kind==='A0_ONLY'?'A0のみ':kind==='A1_ONLY'?'A1のみ':'同IDで内容変化'} /
-                  {event.year}年 {event.eventType} / 根拠Trace {event.sourceTraceIds.join('、')}
-                </button>
-              </li>)}
-            </ul>
-            {rows.length>12&&<details><summary>その他{rows.length-12}件を開く</summary><ul className="compare-event-list">
-              {rows.slice(12).map(({kind,event},i)=><li key={event.eventId+kind+i}>
-                <button type="button" onClick={()=>p.onInspectEvent(kind==='A0_ONLY'?'A0':'A1',event.eventId)}>
-                  {kind} / {event.year}年 {event.eventType} / {event.eventId}
-                </button>
-              </li>)}
-            </ul></details>}
+          {([['選んだ2人への変化',focused],['それ以外の変化',other]] as const).map(([label,rows])=><div key={label}>
+            <h5>{label}（{rows.length}件）</h5>
+            <ul className="compare-event-list">{rows.slice(0,12).map(eventButton)}</ul>
+            {rows.length>12&&<details><summary>その他{rows.length-12}件を開く</summary>
+              <ul className="compare-event-list">{rows.slice(12).map(eventButton)}</ul></details>}
           </div>)}
         </div>
       )}
-      <h3>DecisionTraceの差分（{data?.traces.length??0}件）</h3>
-      {data?.traces.length===0?<p>この年の判断Traceに差分はありません。</p>:
-        <ul data-testid="branch-trace-diffs" className="compare-trace-list">
-          {data?.traces.slice(0,12).map(tr=><li key={tr.traceId}>{tr.ruleId} / {tr.traceId} /
-            A0 {tr.before?.status??'なし'} → A1 {tr.after?.status??'なし'}
-          </li>)}
-          {(data?.traces.length??0)>12&&<li><details><summary>残り{data!.traces.length-12}件</summary>
-            <ul>{data!.traces.slice(12).map(tr=><li key={tr.traceId}>{tr.ruleId} / {tr.traceId} / A0 {tr.before?.status??'なし'} → A1 {tr.after?.status??'なし'}</li>)}</ul>
-          </details></li>}
-        </ul>}
-      <p className="note">Eventを選ぶと、選択した枝の既存年表で状態差分と判断Traceの参照を開きます。未承認の法制判断はDEFER/PENDINGを維持します。</p>
+      <details className="dev-details" data-testid="branch-dev-details">
+        <summary>開発・検証情報（Trace差分・seed・状態）</summary>
+        <p data-testid="branch-status" className="note">
+          A0 {p.comparison.a0.result.status} / A1 {p.comparison.a1.result.status} /
+          seed {input.seed} / 介入 {input.year}年〜{input.year+input.durationYears-1}年 / 補正 {input.signedDelta>0?'+':''}{input.signedDelta} /
+          正式勝敗: 未成立（goal=null）/ CALIBRATION_ONLY
+        </p>
+        <p className="note" data-testid="branch-trace-ids">対象のTrace: A0 {traceA0?.traceId??'—'} / A1 {traceA1?.traceId??'—'}</p>
+        <h5>DecisionTraceの差分（{data?.traces.length??0}件）</h5>
+        {data?.traces.length===0?<p>この年の判断Traceに差分はありません。</p>:
+          <ul data-testid="branch-trace-diffs" className="compare-trace-list">
+            {data?.traces.map(tr=><li key={tr.traceId}>{tr.ruleId} / {tr.traceId} /
+              A0 {tr.before?.status??'なし'} → A1 {tr.after?.status??'なし'}
+            </li>)}
+          </ul>}
+        <p className="note">未承認の法制判断はDEFER/PENDINGを維持します。</p>
+      </details>
     </div>}
   </section>
 }

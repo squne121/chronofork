@@ -277,4 +277,33 @@ describe('App', () => {
     expect(h).toBeTruthy()
     expect(screen.getByTestId('detail').textContent).not.toContain('を選ぶと詳細を表示します')
   })
+
+  it('目標・観測年・歴史・正式勝敗未成立を先に示し、内部診断は折りたたみに置く', () => {
+    render(<App />)
+    expect(screen.getByTestId('trial-guide').textContent).toContain('A0')
+    expect(screen.getByTestId('experimental-banner').textContent).toContain('CALIBRATION_ONLY')
+    expect(screen.getByTestId('history-status').textContent).toContain('原史')
+    expect(screen.getByTestId('goal-status').textContent).toContain('未成立')
+    const dev = screen.getByTestId('dev-info') as HTMLDetailsElement
+    expect(dev.open).toBe(false)
+    expect(dev.contains(screen.getByTestId('run-inputs'))).toBe(true)
+    expect(dev.contains(screen.getByTestId('todo-rules'))).toBe(true)
+    expect(screen.getByTestId('branch-empty').textContent).toContain('介入して再計算')
+  })
+
+  it('比較結果は人間可読の見出しを示し、Traceの技術情報は折りたたみに置く', () => {
+    render(<App />)
+    fireEvent.click(screen.getByTestId('branch-run'))
+    const headline = screen.getByTestId('branch-headline').textContent ?? ''
+    expect(headline).toContain('A0 REJECT → A1 ACCEPT')
+    expect(headline).toContain('婚姻')
+    expect(headline).toContain('正式勝敗: 未成立')
+    expect(screen.getByTestId('branch-dev-details').contains(screen.getByTestId('branch-trace-ids'))).toBe(true)
+    fireEvent.click(within(screen.getByTestId('branch-event-diffs')).getAllByRole('button', { name: /婚姻の成立/ })[0])
+    expect(screen.getByTestId('event-detail').textContent).toContain('MARRIAGE_REGISTER')
+    fireEvent.click(within(screen.getByTestId('event-detail')).getByRole('button', { name: /判断根拠を開く/ }))
+    expect(screen.getByTestId('trace-detail').textContent).toContain('CALIBRATION_ONLY')
+    setYear(1261)
+    expect(screen.getByTestId('branch-event-diffs').textContent).toContain('PERSON_BIRTH')
+  }, 30000)
 })

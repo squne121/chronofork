@@ -32,7 +32,7 @@ export function targetOptions(events: readonly EventLogEntry[], index: WorldInde
       const key = refKey(r)
       if (seen.has(key)) continue
       const kind = r.kind === 'PERSON_PAIR' ? undefined : REF_KIND[r.kind]
-      const label = r.kind === 'PERSON_PAIR' ? key : kind ? index.link(kind, r.id).label : key
+      const label = r.kind === 'PERSON_PAIR' ? r.ids.map((id) => index.link('person', id).label).join('・') : kind ? index.link(kind, r.id).label : key
       seen.set(key, { key, ref: r, label })
     }
   }
@@ -66,7 +66,7 @@ export function HistoryPanel(p: Props) {
   const options = targetOptions(p.allEvents, index)
   return (
     <section aria-labelledby="chronicle-heading" className="panel">
-      <h2 id="chronicle-heading">年表（EventLog）と判断根拠（DecisionTrace）</h2>
+      <h2 id="chronicle-heading">年表（Event）と判断根拠（DecisionTrace）</h2>
       <p className="note">
         EventLog に記録された確定済みの状態差分のみを表示します。
         {p.year >= 1350
@@ -158,8 +158,6 @@ function EventDetail({
     <>
       <h3>Event: {event.eventType}</h3>
       <dl>
-        <dt>eventId</dt>
-        <dd>{event.eventId}</dd>
         <dt>年・フェーズ</dt>
         <dd>
           {event.year}年 フェーズ{event.phase}
@@ -220,9 +218,16 @@ function EventDetail({
             </ul>
           )}
         </dd>
-        <dt>逆参照の一致</dt>
-        <dd data-testid="event-backlink">{ok ? '一致（Trace.eventIds がこの Event を含む）' : '不一致または未確認'}</dd>
       </dl>
+      <details className="dev-details">
+        <summary>開発・検証情報（Event）</summary>
+        <dl>
+          <dt>eventId</dt>
+          <dd data-testid="event-id">{event.eventId}</dd>
+          <dt>逆参照の一致</dt>
+          <dd data-testid="event-backlink">{ok ? '一致（Trace.eventIds がこの Event を含む）' : '不一致または未確認'}</dd>
+        </dl>
+      </details>
     </>
   )
 }
@@ -242,8 +247,6 @@ function TraceDetail({
     <>
       <h3>DecisionTrace: {trace.ruleId}</h3>
       <dl>
-        <dt>traceId</dt>
-        <dd>{trace.traceId}</dd>
         <dt>年・フェーズ</dt>
         <dd>
           {trace.year}年 フェーズ{trace.phase}
@@ -256,8 +259,6 @@ function TraceDetail({
         <dd>{trace.status}</dd>
         <dt>理由コード</dt>
         <dd>{trace.reasonCodes.join('、') || 'なし'}</dd>
-        <dt>ruleVersion</dt>
-        <dd>{trace.ruleVersion}</dd>
         <dt>候補と入力</dt>
         <dd>
           <ul>
@@ -287,9 +288,18 @@ function TraceDetail({
             ))}
           </ul>
         </dd>
-        <dt>順参照の一致</dt>
-        <dd data-testid="trace-forwardlink">{ok ? '一致（Event.sourceTraceIds がこの Trace を含む）' : '不一致または未確認'}</dd>
       </dl>
+      <details className="dev-details">
+        <summary>開発・検証情報（Trace）</summary>
+        <dl>
+          <dt>traceId</dt>
+          <dd data-testid="trace-id">{trace.traceId}</dd>
+          <dt>ruleVersion</dt>
+          <dd>{trace.ruleVersion}</dd>
+          <dt>順参照の一致</dt>
+          <dd data-testid="trace-forwardlink">{ok ? '一致（Event.sourceTraceIds がこの Trace を含む）' : '不一致または未確認'}</dd>
+        </dl>
+      </details>
     </>
   )
 }
