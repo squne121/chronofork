@@ -2,6 +2,7 @@
 // GAME-01〜05と正式勝敗は未成立。CALIBRATION_ONLYの明示法的承認だけを試験で注入する。
 import { useState } from 'react'
 import { compareYear, directlyInvolvesPair, playPersonOptions, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
+import { childIdsOfPair } from './event-summary.ts'
 import type { BranchChoice, PlayComparison, PlayInput } from './branch-play-source.ts'
 
 type Props=Readonly<{
@@ -16,9 +17,9 @@ type Props=Readonly<{
 }>
 const persons=playPersonOptions()
 /** 既知のEvent種別だけ平易な見出しを付ける。未知の種別は生の種別名をそのまま出す（用語を創作しない）。 */
-const EVENT_LABEL:Readonly<Record<string,string>>={MARRIAGE_REGISTER:'婚姻の成立',PERSON_BIRTH:'人物の出生'}
+const EVENT_LABEL:Readonly<Record<string,string>>={MARRIAGE_REGISTER:'婚姻の成立',PERSON_BIRTH:'人物の出生',LEGAL_DYNASTY_SET:'法的王朝の確定'}
 const eventLabel=(t:string)=>EVENT_LABEL[t]?`${EVENT_LABEL[t]}（${t}）`:t
-const kindLabel=(k:'A0_ONLY'|'A1_ONLY'|'CHANGED')=>k==='A0_ONLY'?'A0のみ':k==='A1_ONLY'?'A1のみ':'同IDで内容変化'
+const kindLabel=(k:'A0_ONLY'|'A1_ONLY'|'CHANGED')=>k==='A0_ONLY'?'A0にだけ記録':k==='A1_ONLY'?'A1にだけ記録':'A0/A1で内容が違う'
 const personName=(id:string)=>persons.find(x=>x.id===id)?.label??id
 const countAlive=(c:readonly {alive:boolean}[])=>c.filter(x=>x.alive).length
 const countMarried=(w:{legal:{marriages:readonly {status:string}[]}})=>w.legal.marriages.filter(m=>m.status==='ACTIVE').length
@@ -46,8 +47,9 @@ export function InterventionComparePanel(p:Props){
     t.actorRef.ids[0]===pair[0]&&t.actorRef.ids[1]===pair[1])
   const traceA0=b4('A0'),traceA1=b4('A1')
   const score=(t:typeof traceA0)=>t?.candidates[0]?.score===undefined?'—':String(t.candidates[0].score)
+  const children=p.comparison?childIdsOfPair([...p.comparison.a0.result.eventLog,...p.comparison.a1.result.eventLog],pair):new Set<string>()
   const eventRows=(data?.events??[]).map(x=>({
-    ...x,focus:directlyInvolvesPair(x.event,pair),
+    ...x,focus:directlyInvolvesPair(x.event,pair)||x.event.involvedRefs.some(r=>r.kind==='PERSON'&&children.has(r.id)),
   }))
   const focused=eventRows.filter(x=>x.focus),other=eventRows.filter(x=>!x.focus)
   const summarize=(w:typeof before)=>w?(
@@ -58,8 +60,12 @@ export function InterventionComparePanel(p:Props){
       <dt>相続案件</dt><dd>{w.legal.cases.length}件</dd>
     </dl>
   ):<p className="missing">未計算の年です</p>
-  const count=(rows:typeof eventRows,type:string)=>rows.filter(x=>x.event.eventType===type).length
-  const marriages=count(focused,'MARRIAGE_REGISTER'),births=count(eventRows,'PERSON_BIRTH')
+  const tally=(rows:typeof eventRows)=>{
+    const n=(k:string)=>rows.filter(x=>x.kind===k).length
+    return `A1にだけ記録 ${n('A1_ONLY')}件 / A0にだけ記録 ${n('A0_ONLY')}件 / 内容が違う ${n('CHANGED')}件`
+  }
+  const byType=(rows:typeof eventRows)=>[...new Set(rows.map(x=>x.event.eventType))].map(t=>
+    `${eventLabel(t)}: ${tally(rows.filter(x=>x.event.eventType===t))}`)
   const decisionChanged=traceA0?.status!==traceA1?.status
   const eventButton=(x:typeof eventRows[number])=><li key={x.event.eventId+x.kind}>
     <button type="button" onClick={()=>p.onInspectEvent(x.kind==='A0_ONLY'?'A0':'A1',x.event.eventId)}>
@@ -108,10 +114,11 @@ export function InterventionComparePanel(p:Props){
       <div className="headline" data-testid="branch-headline">
         <p><strong>{personName(pair[0])}と{personName(pair[1])}</strong>（{p.year}年）</p>
         <ul>
-          <li>対象の判断: A0 {traceA0?.status??'判定なし'} → A1 {traceA1?.status??'判定なし'}{decisionChanged?'（変化あり）':'（変化なし）'}</li>
-          <li>対象の婚姻: {marriages}件 / 出生: {births}件（この年に差分のあるEvent）</li>
-          <li>他の対象への影響: {other.length}件の変化Event</li>
+          <li>対象の判断（B-004）: A0 {traceA0?.status??'判定なし'} → A1 {traceA1?.status??'判定なし'}{decisionChanged?'（変化あり）':'（変化なし）'}</li>
+          <li data-testid="headline-focused">選んだ2人とその子のEvent差分（{p.year}年・{focused.length}件）: {focused.length===0?'なし':byType(focused).join(' ／ ')}</li>
+          <li data-testid="headline-other">その他の人物・集団のEvent差分（{p.year}年・{other.length}件）: {other.length===0?'なし':tally(other)}</li>
         </ul>
+        <p className="note">「A1にだけ記録」は、介入ありの歴史にだけ確定したEventです（A0にだけ記録はその逆）。</p>
         <p className="note">正式勝敗: 未成立。これは試験版の差分であり、単独原因の断定ではありません。</p>
       </div>
       <div className="filters" aria-label="観測する歴史">
@@ -132,11 +139,11 @@ export function InterventionComparePanel(p:Props){
       </div>
       <h4>この年に変わったEvent</h4>
       <p className="note" data-testid="branch-event-count">
-        選んだ2人に直接関与: {focused.length}件 / その他の世界変化: {other.length}件。押すと右の「④ 理由を確認する」に詳細を開きます。
+        選んだ2人とその子: {focused.length}件 / その他の人物・集団: {other.length}件（いずれも{p.year}年のEvent差分）。押すと右の「④ 理由を確認する」に詳細を開きます。
       </p>
       {eventRows.length===0?<p data-testid="branch-no-diff">この年に異なるEventはありません。</p>:(
         <div data-testid="branch-event-diffs">
-          {([['選んだ2人への変化',focused],['それ以外の変化',other]] as const).map(([label,rows])=><div key={label}>
+          {([['選んだ2人とその子の変化',focused],['その他の人物・集団の変化',other]] as const).map(([label,rows])=><div key={label}>
             <h5>{label}（{rows.length}件）</h5>
             <ul className="compare-event-list">{rows.slice(0,12).map(eventButton)}</ul>
             {rows.length>12&&<details><summary>その他{rows.length-12}件を開く</summary>

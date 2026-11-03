@@ -6,7 +6,7 @@ import type { BranchChoice, PlayComparison, PlayInput } from './branch-play-sour
 import { Inspector } from './Inspector.tsx'
 import { RegionMap } from './RegionMap.tsx'
 import { RunPanel } from './RunPanel.tsx'
-import { indexWorld } from './inspection-source.ts'
+import { indexWorld, worldWithHistoricPersons } from './inspection-source.ts'
 import type { EntityKind, InspectionSource, Selection } from './inspection-source.ts'
 import {
   DEFAULT_SEED,
@@ -40,6 +40,8 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
   const year = last === undefined ? run.initialWorld.year : Math.min(Math.max(requestedYear, YEAR_RANGE.min), last)
   const world = snapshotOf(result, year) ?? run.initialWorld
   const index = useMemo(() => indexWorld(world), [world])
+  // 年内Eventが指す新生児など、年初snapshotに無い人物を他年snapshotから補って参照解決する。
+  const refIndex = useMemo(() => indexWorld(worldWithHistoricPersons(world, result.snapshots)), [world, result.snapshots])
 
   const [tab, setTab] = useState<EntityKind>('region')
   const [selection, setSelection] = useState<Selection | undefined>(undefined)
@@ -204,6 +206,7 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
             result={result}
             history={history}
             index={index}
+            refIndex={refIndex}
             year={year}
             scope={scope}
             targetKey={targetKey}

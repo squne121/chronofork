@@ -306,4 +306,49 @@ describe('App', () => {
     setYear(1261)
     expect(screen.getByTestId('branch-event-diffs').textContent).toContain('PERSON_BIRTH')
   }, 30000)
+
+  it('1261年の出生Eventは新生児を参照不明にせず、人間可読に示し、Traceまで開ける（1262年初の実在も確認）', () => {
+    render(<App />)
+    fireEvent.click(screen.getByTestId('branch-run'))
+    setYear(1261)
+    const diffs = within(screen.getByTestId('branch-event-diffs'))
+    // 比較サマリー: 出生・法的王朝は選んだ2人の子として分類し、A1にだけ記録と明記
+    expect(screen.getByTestId('headline-focused').textContent).toMatch(/人物の出生.*A1にだけ記録 1件/)
+    fireEvent.click(diffs.getAllByRole('button', { name: /人物の出生/ })[0])
+    const ev = screen.getByTestId('event-detail')
+    expect(ev.textContent).not.toContain('参照不明')
+    expect(screen.getByTestId('event-summary').textContent).toContain('両親')
+    expect(ev.textContent).toContain('が生まれた')
+    expect(ev.textContent).toContain('この年の年初にはまだ世界にいません')
+    // 生JSON・内部IDは折りたたみ（既知Eventは閉じている）
+    expect((screen.getByTestId('event-state-details') as HTMLDetailsElement).open).toBe(false)
+    expect(screen.getByTestId('event-id').textContent).toContain('event:1261')
+    fireEvent.click(within(ev).getByRole('button', { name: /判断根拠を開く/ }))
+    expect(screen.getByTestId('trace-detail').textContent).not.toContain('参照不明')
+    expect(screen.getByTestId('trace-detail').textContent).toContain('B-002')
+    // 法的王朝の確定 → A-DYN-02
+    fireEvent.click(diffs.getAllByRole('button', { name: /法的王朝の確定/ })[0])
+    expect(screen.getByTestId('event-summary').textContent).toContain('変更前')
+    expect(screen.getByTestId('event-detail').textContent).toContain('ヴァルガス')
+    fireEvent.click(within(screen.getByTestId('event-detail')).getByRole('button', { name: /判断根拠を開く/ }))
+    expect(screen.getByTestId('trace-detail').textContent).toContain('A-DYN-02')
+    // 1262年初には新生児が実在し、人物一覧に現れる
+    setYear(1262)
+    fireEvent.click(screen.getByRole('tab', { name: '人物' }))
+    expect(screen.getByTestId('detail').closest('section')?.textContent).toContain('試験用自律児 1261')
+  }, 30000)
+
+  it('婚姻Eventは誰に何が起きたかを主表示し、未知Eventは状態差分を開いて残す', () => {
+    render(<App />)
+    fireEvent.click(screen.getByTestId('branch-run'))
+    fireEvent.click(within(screen.getByTestId('branch-event-diffs')).getAllByRole('button', { name: /婚姻の成立/ })[0])
+    expect(screen.getByTestId('event-summary').textContent).toContain('有効')
+    expect(screen.getByTestId('event-detail').querySelector('h3')?.textContent).toMatch(/試験人物04.*試験人物05.*婚姻が成立/)
+    expect((screen.getByTestId('event-state-details') as HTMLDetailsElement).open).toBe(false)
+    expect(screen.getByTestId('state-changes').textContent).toContain('marriageId')
+    // 未知の種別（人口）は差分表が最初から開いている
+    fireEvent.change(screen.getByTestId('event-target'), { target: { value: 'GROUP:group-west-commons' } })
+    fireEvent.click(within(screen.getByTestId('chronicle-list')).getAllByRole('button')[0])
+    expect((screen.getByTestId('event-state-details') as HTMLDetailsElement).open).toBe(true)
+  }, 30000)
 })
