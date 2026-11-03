@@ -1,6 +1,6 @@
 // DEC-058: B-005双方合意の当年Traceを再検証し、DEC-057の法制権限を通してのみ婚姻を登録。
 // 出生児の王朝所属はここで指定しない（A-DYN-02が唯一の明示契約条項から後年確定する）。
-import type { Id, WorldState } from '../../contracts/index.ts'
+import type { WorldState } from '../../contracts/index.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
