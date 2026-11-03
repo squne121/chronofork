@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import { HistoryPanel, involves } from './HistoryPanel.tsx'
+import { InterventionComparePanel } from './InterventionComparePanel.tsx'
+import { runPlayComparison } from './branch-play-source.ts'
+import type { BranchChoice, PlayComparison, PlayInput } from './branch-play-source.ts'
 import { Inspector } from './Inspector.tsx'
 import { RegionMap } from './RegionMap.tsx'
 import { RunPanel } from './RunPanel.tsx'
@@ -24,6 +27,9 @@ function Unconnected({ children }: { children: string }) {
 export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) {
   const [run, setRun] = useState<TimelineRun>(() => injected ?? runExperimentalTimeline(DEFAULT_SEED))
   const [seedText, setSeedText] = useState(String(run.inputs.seed))
+  const [comparison, setComparison] = useState<PlayComparison | undefined>(undefined)
+  const [playError, setPlayError] = useState<{code:string;message:string} | undefined>(undefined)
+  const [activeBranch, setActiveBranch] = useState<BranchChoice>('A1')
   const { result } = run
   const history = useMemo(() => indexHistory(result), [result])
 
@@ -75,8 +81,52 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
   const rerun = () => {
     const seed = Number(seedText.trim())
     setRun(runExperimentalTimeline(seed))
+    setComparison(undefined)
+    setPlayError(undefined)
     setEventId(undefined)
     setTraceId(undefined)
+  }
+
+  const runComparison = (input:PlayInput) => {
+    const outcome = runPlayComparison(input)
+    if (!outcome.ok) {
+      setPlayError({code:outcome.code,message:outcome.message})
+      return
+    }
+    const c=outcome.comparison
+    setPlayError(undefined)
+    setComparison(c)
+    setActiveBranch('A1')
+    setRun(c.a1)
+    setYear(input.year)
+    setScope('year')
+    setTargetKey('')
+    setEventId(undefined)
+    setTraceId(undefined)
+    setSelection(undefined)
+  }
+  const switchBranch = (choice:BranchChoice) => {
+    if (!comparison) return
+    setActiveBranch(choice)
+    setRun(choice==='A0'?comparison.a0:comparison.a1)
+    setTargetKey('')
+    setEventId(undefined)
+    setTraceId(undefined)
+    setSelection(undefined)
+  }
+  const openComparisonEvent = (choice:BranchChoice,id:string) => {
+    if (!comparison) return
+    const other=choice==='A0'?comparison.a0:comparison.a1
+    const e=other.result.eventLog.find(x=>x.eventId===id)
+    if (!e) return
+    setActiveBranch(choice)
+    setRun(other)
+    setYear(e.year)
+    setScope('year')
+    setTargetKey('')
+    setEventId(id)
+    setTraceId(undefined)
+    setSelection(undefined)
   }
 
   const source: InspectionSource = {
@@ -94,7 +144,7 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
       <header className="topbar">
         <h1>Project Chronofork</h1>
         <p className="badge badge-warn" role="status" data-testid="experimental-banner">
-          experimental / 仮データ / 人口コホートのみの試験計算（partial）
+          {comparison ? 'experimental / 仮データ / 人口・人物・法制の試験計算（partial）' : 'experimental / 仮データ / 人口コホートのみの試験計算（partial）'}
         </p>
         <dl className="status-list">
           <div>
@@ -117,6 +167,9 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
         />
 
         <div className="mid-col">
+          <InterventionComparePanel seedText={seedText} year={year} comparison={comparison} error={playError}
+            activeBranch={activeBranch} onRun={runComparison} onViewBranch={switchBranch}
+            onInspectEvent={openComparisonEvent} />
           <RunPanel inputs={run.inputs} result={result} seedText={seedText} onSeedText={setSeedText} onRerun={rerun} />
           <section aria-labelledby="year-heading" className="panel">
             <h2 id="year-heading">年</h2>
@@ -170,15 +223,9 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
           <section aria-labelledby="reserved-heading" className="panel">
             <h2 id="reserved-heading">未実装の機能</h2>
             <ul className="reserved" data-testid="reserved-areas">
-              <li>
-                介入: <Unconnected>介入機能</Unconnected>
-              </li>
-              <li>
-                2つの歴史の比較・分岐・保存: <Unconnected>比較機能</Unconnected>
-              </li>
-              <li>
-                人物・法制の判断: <Unconnected>人物・法制の自律判断</Unconnected>
-              </li>
+              <li>介入・2枝比較: <span className="badge badge-off">試験版で接続済み（CALIBRATION_ONLY）</span></li>
+              <li>保存・3枝以上の比較: <Unconnected>未実装</Unconnected></li>
+              <li>人物・法制の正式自律判断: <Unconnected>未承認</Unconnected></li>
             </ul>
           </section>
         </div>

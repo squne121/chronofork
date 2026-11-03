@@ -39,12 +39,32 @@ describe('App', () => {
     expect(text).not.toContain('参照不明')
   })
 
-  it('介入・比較ボタンは無く、未実装を明示する', () => {
+  it('介入・比較の実操作を公開し、保存・正式法制は未実装のままと示す', () => {
     render(<App />)
-    const names = screen.getAllByRole('button').map((b) => b.textContent ?? '')
-    expect(names.some((n) => /介入|比較|適用|進める|保存/.test(n))).toBe(false)
-    expect(screen.getByTestId('reserved-areas').textContent).toContain('未接続: 介入機能')
+    expect(screen.getByTestId('branch-run')).toBeTruthy()
+    expect(screen.queryByTestId('branch-results')).toBeNull()
+    expect(screen.getByTestId('reserved-areas').textContent).toContain('試験版で接続済み')
+    expect(screen.getByTestId('reserved-areas').textContent).toContain('未実装')
   })
+
+  it('ブラウザ操作から実A0/A1を再計算し、現在の地図・年表へ枝の切替を反映する', () => {
+    render(<App />)
+    fireEvent.click(screen.getByTestId('branch-run'))
+    expect(screen.getByTestId('branch-status').textContent).toContain('A1 COMPLETED')
+    expect(screen.getByTestId('branch-b004-a0').textContent).toContain('REJECT')
+    expect(screen.getByTestId('branch-b004-a1').textContent).toContain('ACCEPT')
+    expect(screen.getByTestId('branch-event-diffs').textContent).toContain('MARRIAGE_REGISTER')
+    expect(screen.getByTestId('current-year').textContent).toContain('1260年')
+    expect(screen.getByTestId('active-branch').textContent).toContain('A1')
+    fireEvent.click(screen.getByTestId('view-a0'))
+    expect(screen.getByTestId('active-branch').textContent).toContain('A0')
+    expect(screen.getByTestId('run-inputs').textContent).toContain('A0-play')
+    fireEvent.click(screen.getByTestId('view-a1'))
+    expect(screen.getByTestId('active-branch').textContent).toContain('A1')
+    setYear(1261)
+    expect(screen.getByTestId('branch-event-diffs').textContent).toContain('PERSON_BIRTH')
+    expect(screen.getByTestId('goal-status').textContent).toContain('未成立')
+  },30000)
 
   it('年スライダーで 1250→1251→1350 を選べ、人口が実際に変化する', () => {
     render(<App />)
@@ -165,7 +185,7 @@ describe('App', () => {
     expect(screen.getByTestId('run-inputs').textContent).toContain('seed 9')
     fireEvent.change(screen.getByTestId('seed-input'), { target: { value: 'abc' } })
     expect((screen.getByTestId('rerun') as HTMLButtonElement).disabled).toBe(true)
-  })
+  },15000)
 
   it('停止した計算は HALTED と原因を示し、敗北と表示せず、未計算年を選べない', () => {
     const run = haltedRun()

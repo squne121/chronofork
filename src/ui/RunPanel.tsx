@@ -18,7 +18,7 @@ export function RunPanel({ inputs, result, seedText, onSeedText, onRerun }: Prop
     <section aria-labelledby="run-heading" className="panel" data-testid="run-panel">
       <h2 id="run-heading">試験計算（CALIBRATION_ONLY・partial）</h2>
       <p className="note">
-        人口コホート（RULE-C-004）のみを試験係数で計算した結果です。正式なゲーム規則による歴史ではありません。
+        {inputs.evaluatedRuleIds.length===1 ? '人口コホート（RULE-C-004）のみを試験係数で計算した結果です。' : '人口・人物・法制の試験用評価器を明示注入した計算結果です。'}正式なゲーム規則による歴史ではありません。
       </p>
       <dl>
         <dt>計算状態</dt>
