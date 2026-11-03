@@ -46,6 +46,13 @@ export type LegalDynastyState =
   | Readonly<{ status: 'DETERMINED'; dynastyId: Id }>
   | Readonly<{ status: 'UNDETERMINED'; reasonCodes: readonly string[] }>
 
+/** B-009が保持する現在の人物ペア信頼基礎値。StatModifierは含まない（CALIBRATION_ONLY）。 */
+export type PersonPairTrust = Readonly<{
+  personIds: readonly [Id, Id]
+  value: number
+  lastUpdatedYear: Year
+}>
+
 export type Person = Readonly<{
   personId: Id
   name: string
@@ -203,6 +210,8 @@ export type WorldState = Readonly<{
   groups: readonly PopulationGroup[]
   houses: readonly House[]
   persons: readonly Person[]
+  /** B-009年次確定の関係値。省略時は旧WorldStateと互換（旧試験では未計算）。 */
+  pairTrust?: readonly PersonPairTrust[]
   titles: readonly Title[]
   legal: LegalState
   resources: readonly ResourceAccount[]
