@@ -56,6 +56,8 @@ export type PersonPairTrust = Readonly<{
 export type Person = Readonly<{
   personId: Id
   name: string
+  /** 重要人物以外でも婚姻/出生/親族を法的に追跡できる。省略は従来互換のKEY。 */
+  interactionRole?: 'KEY' | 'SUPPORTING'
   sex: 'MALE' | 'FEMALE'
   birthYear: Year
   alive: boolean
