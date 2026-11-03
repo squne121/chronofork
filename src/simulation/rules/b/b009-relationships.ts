@@ -3,7 +3,7 @@
 // 初期のPairTrustBaseは1250年などの明示済み基礎関係だけで、毎年の結果はWorldStateに保存する。
 import type { DecisionTraceDraft, PairTrustBase, PersonPairTrustSetCommand, RuleOutcome, WorldState } from '../../contracts/index.ts'
 import { PAIR_TRUST_DEFINITION } from '../../intervention/stat-registry.ts'
-import { pairKey } from '../../intervention/index.ts'
+import { pairKey, roundHalfAwayFromZero } from '../../intervention/index.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
 
@@ -16,9 +16,18 @@ export type B009Calibration=Readonly<{
   annualDelta:number
   /** pair数が超過すると安全停止。黙って先頭だけ更新しない。 */
   maxPairs:number
+  /** 当人たちの出身集団による双方の家門支持差を基礎値に反映する試験係数。既定0。 */
+  houseSupportWeight?:number
+  /** 同家門の人物ペアに対する試験加点。既定0。 */
+  sameHouseBonus?:number
 }>
 export const EXPERIMENTAL_B009_CALIBRATION:B009Calibration=Object.freeze({
   status:'CALIBRATION_ONLY',initialTrust:0,annualDelta:1,maxPairs:500,
+  houseSupportWeight:0,sameHouseBonus:0,
+})
+/** 家門利害による試験用変動を有効化する明示オプトイン。正式ゲーム規則ではない。 */
+export const EXPERIMENTAL_B009_HOUSE_INTEREST:B009Calibration=Object.freeze({
+  ...EXPERIMENTAL_B009_CALIBRATION,houseSupportWeight:2,sameHouseBonus:2,
 })
 export type B009ValidationResult=
   | Readonly<{ok:true;config:B009Calibration}>
@@ -30,6 +39,8 @@ export function validateB009Calibration(c:B009Calibration):B009ValidationResult{
      c.initialTrust>PAIR_TRUST_DEFINITION.max)issues.push('INITIAL_TRUST_OUT_OF_RANGE')
   if(!Number.isSafeInteger(c.annualDelta) || Math.abs(c.annualDelta)>PAIR_TRUST_DEFINITION.max-PAIR_TRUST_DEFINITION.min)issues.push('ANNUAL_DELTA_OUT_OF_RANGE')
   if(!Number.isSafeInteger(c.maxPairs)||c.maxPairs<1||c.maxPairs>10000)issues.push('PAIR_BUDGET_INVALID')
+  if(!Number.isSafeInteger(c.houseSupportWeight??0)||(c.houseSupportWeight??0)<0||(c.houseSupportWeight??0)>10)issues.push('HOUSE_SUPPORT_WEIGHT_INVALID')
+  if(!Number.isSafeInteger(c.sameHouseBonus??0)||Math.abs(c.sameHouseBonus??0)>20)issues.push('SAME_HOUSE_BONUS_INVALID')
   return issues.length===0 ? {ok:true,config:Object.freeze({...c})} : {ok:false,issues}
 }
 const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0
@@ -78,7 +89,20 @@ export function createB009WorldStateEvaluator(
         ])
       }
       const prev=old?.value??initial.get(key)??c.initialTrust
-      const next=Math.min(PAIR_TRUST_DEFINITION.max,Math.max(PAIR_TRUST_DEFINITION.min,prev+c.annualDelta))
+      // 相互の出身集団が、相手のHouseを自家門に比べてどれだけ支持するか。
+      // 集団支持はbpsで、合計を1000で割った試験ポイントを用いる（最大±20）。
+      const groupA=world.groups.find(g=>g.groupId===a.originGroupId)
+      const groupB=world.groups.find(g=>g.groupId===b.originGroupId)
+      if(!groupA||!groupB)throw new EvaluationFailure('家門利害の参照集団が存在しません',[
+        {code:'HOUSE_SUPPORT_GROUP_MISSING',message:key},
+      ])
+      const aToB=(groupA.support.houseBps[b.houseId]??0)-(groupA.support.houseBps[a.houseId]??0)
+      const bToA=(groupB.support.houseBps[a.houseId]??0)-(groupB.support.houseBps[b.houseId]??0)
+      const supportSignal=roundHalfAwayFromZero((aToB+bToA)/1000)
+      const houseSupportDelta=supportSignal*(c.houseSupportWeight??0)||0 // -0を正規化し決定Traceを安定化
+      const houseAffinityDelta=a.houseId===b.houseId?(c.sameHouseBonus??0):0
+      const rawDelta=c.annualDelta+houseSupportDelta+houseAffinityDelta
+      const next=Math.min(PAIR_TRUST_DEFINITION.max,Math.max(PAIR_TRUST_DEFINITION.min,prev+rawDelta))
       const traceIndex=traceDrafts.length
       const candidateId='b009:'+JSON.stringify([ctx.year,ids])
       traceDrafts.push({
@@ -86,12 +110,18 @@ export function createB009WorldStateEvaluator(
         candidates:[{
           candidateId,eligible:true,
           inputs:{personIds:[...ids],previousBaseTrust:prev,updatedBaseTrust:next,
-            annualDelta:c.annualDelta,baseFrom:old?'PRIOR_WORLDSTATE':initial.has(key)?'INITIAL_EVIDENCE':'NEW_PAIR_CALIBRATION',
+            annualDelta:c.annualDelta,rawDelta,houseSupportDelta,houseAffinityDelta,
+            houseSupportWeight:c.houseSupportWeight??0,sameHouseBonus:c.sameHouseBonus??0,
+            houseIds:[a.houseId,b.houseId],originGroupIds:[a.originGroupId,b.originGroupId],
+            reciprocalHouseSupportBps:[aToB,bToA],houseSupportSignal:supportSignal,
+            baseFrom:old?'PRIOR_WORLDSTATE':initial.has(key)?'INITIAL_EVIDENCE':'NEW_PAIR_CALIBRATION',
             previousUpdateYear:old?.lastUpdatedYear??null,provenance:'CALIBRATION_ONLY'},
-          reasonCodes:['CALIBRATION_ONLY',old?'RELATION_CUMULATIVE_UPDATE':'RELATION_CREATED'],
+          reasonCodes:['CALIBRATION_ONLY',old?'RELATION_CUMULATIVE_UPDATE':'RELATION_CREATED',
+            (c.houseSupportWeight??0)!==0?'HOUSE_INTEREST_APPLIED':'HOUSE_INTEREST_DISABLED'],
         }],
         selectedCandidateId:candidateId,status:'ACCEPT',
-        reasonCodes:['CALIBRATION_ONLY','B009_BASE_TRUST_ONLY','NO_MODIFIER_COMMIT'],
+        reasonCodes:['CALIBRATION_ONLY','B009_BASE_TRUST_ONLY','NO_MODIFIER_COMMIT',
+          (c.houseSupportWeight??0)!==0?'HOUSE_INTEREST_APPLIED':'HOUSE_INTEREST_DISABLED'],
         modifierIds:[],ruleVersion:B009_RULE_VERSION,
       })
       commands.push({
