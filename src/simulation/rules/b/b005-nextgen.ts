@@ -43,7 +43,8 @@ export function createB005NextgenEvaluator(
     // 当年の同一人物を複数案に同時成立させない。双方が「唯一の」最優先相手であること。
     const rankings=new Map<Id,Readonly<{score:number;keys:readonly string[]}>>()
     for(const c of matches){
-      if(c.trace.status!=='ACCEPT'||!c.trace.reasonCodes.includes(B004_CALIBRATION_REASON)||c.score===null)continue
+      if(c.trace.status!=='ACCEPT'||!c.trace.reasonCodes.includes(B004_CALIBRATION_REASON)||c.score===null||
+        reviewDomesticMarriageEligibility(world,c.pair).status!=='ELIGIBLE')continue
       for(const id of c.pair){
         const prev=rankings.get(id)
         if(!prev||c.score>prev.score)rankings.set(id,{score:c.score,keys:[pairKey(c.pair)]})
