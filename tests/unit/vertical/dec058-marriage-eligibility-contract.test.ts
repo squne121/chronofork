@@ -26,12 +26,12 @@ describe('DEC-058 / 国内次世代の婚姻適格性・双方向契約選択',(
     expect(reviewDomesticMarriageEligibility(adult,[P2,child.personId])).toMatchObject({status:'ELIGIBLE'})
   })
   it('記録された兄弟・直系・おじ姪・いとこは不可。親子参照不明はPENDING',()=>{
-    const adultWorld:WorldState={...world,year:1260}
+    const adultWorld:WorldState={...world,year:1270}
     expect(reviewDomesticMarriageEligibility(adultWorld,[P2,P3])).toMatchObject({
       status:'REJECT',reasonCode:'COMMON_ANCESTOR_WITHIN_TWO_GENERATIONS',
     })
     const girl=world.persons.find(p=>p.personId===P5)!
-    const niece:Person={...girl,personId:'synthetic-niece',birthYear:1225,
+    const niece:Person={...girl,personId:'synthetic-niece',birthYear:1251,
       fatherId:P4,motherId:P3}
     const w:WorldState={...adultWorld,persons:[...adultWorld.persons,niece]}
     expect(reviewDomesticMarriageEligibility(w,[P2,niece.personId])).toMatchObject({
