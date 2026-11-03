@@ -99,7 +99,7 @@ export function validateSupportingMarriageCohorts(
       if(c.birthYear<START_YEAR)issues.push('C004_COHORT_YEAR_INVALID:'+i)
       const slot=world.demographics.cohortSlots.find(s=>s.groupId===c.groupId&&s.year===c.birthYear)
       const named=world.persons.filter(p=>p.originGroupId===c.groupId&&p.birthYear===c.birthYear).length
-      if(!slot||slot.birthSlots-named<c.memberCount)issues.push('C004_BIRTH_BACKING_INSUFFICIENT:'+i)
+      if(!slot||slot.birthSlots-Math.max(slot.claimedBirths,named)<c.memberCount)issues.push('C004_BIRTH_BACKING_INSUFFICIENT:'+i)
     }
     allocatedByGroup.set(c.groupId,(allocatedByGroup.get(c.groupId)??0)+c.memberCount)
   }
@@ -166,6 +166,7 @@ export function proposeSupportingMarriageCandidates(
     }
   }
   possible.sort((a,b)=>a.rank-b.rank||cmp(a.candidate.candidateId,b.candidate.candidateId))
+  if(possible.length===0)return {status:'DEFER',candidates:[],reasonCodes:['NO_COHORT_CANDIDATE_AVAILABLE']}
   return{status:'PROPOSED',candidates:possible.slice(0,options.maxCandidates).map(x=>x.candidate),
-    reasonCodes:possible.length===0?['NO_COHORT_CANDIDATE_AVAILABLE']:['POPULATION_COHORT_OFFERS_ONLY','LEGAL_KINSHIP_REVIEW_REQUIRED']}
+    reasonCodes:['POPULATION_COHORT_OFFERS_ONLY','LEGAL_KINSHIP_REVIEW_REQUIRED']}
 }
