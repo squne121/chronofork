@@ -1,9 +1,12 @@
 // A0/A1の試験用介入操作。描画用の差分は実WorldState/EventLog/DecisionTraceからのみ取得する。
 // GAME-01〜05と正式勝敗は未成立。CALIBRATION_ONLYの明示法的承認だけを試験で注入する。
 import { useState } from 'react'
-import { compareYear, directlyInvolvesPair, playPersonOptions, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
+import { compareYear, directlyInvolvesPair, playPersonOptions, playModeLabel, PLAY_DEFAULT_MODE, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
+import { observeDynastyContinuity } from './dynasty-continuity.ts'
+import type { ContinuityObservation } from './dynasty-continuity.ts'
+import { NALVEN_DYNASTY_ID } from '../scenario/experimental/index.ts'
 import { childIdsOfPair } from './event-summary.ts'
-import type { BranchChoice, PlayComparison, PlayInput } from './branch-play-source.ts'
+import type { BranchChoice, PlayComparison, PlayInput, PlayMode } from './branch-play-source.ts'
 import type { GoalEvaluation, GoalFailureCode } from '../simulation/goal.ts'
 
 type Props=Readonly<{
@@ -49,6 +52,7 @@ const countMarried=(w:{legal:{marriages:readonly {status:string}[]}})=>w.legal.m
 const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filter(t=>t.holder.status==='HELD').length
 
 export function InterventionComparePanel(p:Props){
+  const [mode,setMode]=useState<PlayMode>(PLAY_DEFAULT_MODE)
   const [yearText,setYearText]=useState(String(PLAY_DEMO_YEAR))
   const [firstId,setFirstId]=useState<string>(PLAY_DEMO_PAIR[0])
   const [secondId,setSecondId]=useState<string>(PLAY_DEMO_PAIR[1])
@@ -64,6 +68,28 @@ export function InterventionComparePanel(p:Props){
   const data=p.comparison?compareYear(p.comparison,p.year):undefined
   const before=data?.a0World,after=data?.a1World
   const input=p.comparison?.input
+  const continuityA0=p.comparison?observeDynastyContinuity(
+    p.comparison.a0.initialWorld,p.comparison.a0.result,NALVEN_DYNASTY_ID):undefined
+  const continuityA1=p.comparison?observeDynastyContinuity(
+    p.comparison.a1.initialWorld,p.comparison.a1.result,NALVEN_DYNASTY_ID):undefined
+  const continuityPanel=(obs:ContinuityObservation|undefined,branch:'A0'|'A1')=><div
+    data-testid={branch==='A0'?'continuity-a0':'continuity-a1'}>
+    <h5>{branch} {branch==='A0'?'介入なし':'介入あり'}</h5>
+    {!obs||obs.status!=='OBSERVED'?<p>歴史の最後まで計算されていません。世代を評価できません。</p>:(
+      <dl className="compare-metrics">
+        <dt>計算中に記録された出生</dt><dd>{obs.birthEvents}件</dd>
+        <dt>1250年の人物から確認できる子孫</dt><dd>{obs.birthsInInitialFamily}人 /
+          {obs.familyDepth>=2?`2世代以上（最深${obs.familyDepth}世代）`:
+            obs.familyDepth===1?'子の世代まで（孫以降は未確認）':'次世代の親子関係未確認'}</dd>
+        <dt>ナルヴェンの初期人物につながる新しい子孫</dt><dd>{obs.birthsInTargetDynastyFamily}人</dd>
+        <dt>うち法的ナルヴェン所属が確定</dt><dd>{obs.legalTargetDescendants}人</dd>
+        <dt>新生児の法的王朝が未確定</dt><dd>{obs.birthsWithUndeterminedDynasty}人</dd>
+        <dt>1350年に存命する合法なナルヴェン</dt><dd>{obs.livingLegalTargetMembers}人</dd>
+        <dt>土地Title移転 / 新しい統治委任</dt><dd>{obs.titleTransferEvents}件 / {obs.controlMandateEvents}件</dd>
+        <dt>1350年に継続中の相続審査</dt><dd>{obs.successionCasesPending}件</dd>
+      </dl>
+    )}
+  </div>
   const pair=input?[input.firstPersonId,input.secondPersonId].sort() as [string,string]:PLAY_DEMO_PAIR
   const b4=(choice:BranchChoice)=>p.comparison?.[choice.toLowerCase() as 'a0'|'a1'].result.decisionTraces.find(t=>
     t.year===p.year&&t.ruleId==='B-004'&&t.actorRef.kind==='PERSON_PAIR'&&
@@ -97,12 +123,32 @@ export function InterventionComparePanel(p:Props){
   </li>
   return <section className="panel intervention-panel" aria-labelledby="branch-heading" data-testid="branch-compare-panel">
     <h2 id="branch-heading">介入して歴史を比べる（試験版）</h2>
-    <p className="note">対象の2人の信頼を一定期間だけ動かし、1250〜1350年を再計算して「介入なし(A0)」と「介入あり(A1)」を同じ年で比べます。婚姻の法的承認は1260年の試験用証拠だけで、正式な勝敗や全自律歴史ではありません。</p>
-    <h3 className="step-title"><span className="step-no">1</span>対象と介入を選ぶ</h3>
+    <p className="note">対象の2人の信頼を一時的に変え、1250〜1350年の実WorldStateを再計算します。法令や出生・死亡の具体値はCALIBRATION_ONLYで、どちらの方式も正式な勝敗・全自律歴史ではありません。</p>
+    <h3 className="step-title"><span className="step-no">1</span>試験方式と介入を選ぶ</h3>
+    <label>法制を試す方式
+      <select data-testid="play-law-mode" value={mode} onChange={e=>{
+        const next=e.target.value as PlayMode
+        setMode(next)
+        // 1250年からの介入が国内法制の差分を観測しやすい初期例。実際のイベント年は固定しない。
+        if(next==='ORDINARY_LAW')setYearText('1250')
+        else setYearText(String(PLAY_DEMO_YEAR))
+      }}>
+        <option value="FIXED_APPROVAL">旧・1260年の明示承認試験</option>
+        <option value="ORDINARY_LAW">通常法制（experimental）</option>
+      </select>
+    </label>
+    <p className="note" data-testid="play-mode-description">
+      {mode==='ORDINARY_LAW'
+        ?'同一国内の背景法令・当事者の試験適格性と、その年のB-005交渉意思から婚姻・相続・新委任を審査します。特定年の婚姻承認は予約しません。'
+        :'従来の1260年限定の明示承認証拠による婚姻試験です。通常法制の自律承認ではありません。'}
+    </p>
+    {p.comparison&&p.comparison.mode!==mode&&<p className="note" role="status">
+      表示中の比較は{playModeLabel(p.comparison.mode)}です。変更した方式を反映するには再計算してください。
+    </p>}
     <form className="compare-form" onSubmit={e=>{
       e.preventDefault()
       if(valid)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
-        signedDelta:delta,durationYears:duration})
+        signedDelta:delta,durationYears:duration,mode})
     }}>
       <div className="form-grid">
         <label>対象の人物1
@@ -146,6 +192,7 @@ export function InterventionComparePanel(p:Props){
       </div>
       <div className="headline" data-testid="trial-goal-summary">
         <h4>1350年のナルヴェン王朝存続条件（試験判定）</h4>
+        <p data-testid="trial-goal-mode">試験方式：{playModeLabel(p.comparison.mode)}</p>
         <p data-testid="trial-goal-a0">A0（介入なし）: {trialGoalStatus(p.comparison.a0.result.technicalGoal)}</p>
         <p data-testid="trial-goal-a1">A1（介入あり）: {trialGoalStatus(p.comparison.a1.result.technicalGoal)}</p>
         <details>
@@ -155,6 +202,17 @@ export function InterventionComparePanel(p:Props){
         </details>
         <p className="note">実計算した1350年のWorldStateを既存の厳格Goalで照合した非権威の検証値です。婚姻・相続・統治の正式な承認権限が未確定なので、正式勝敗を表しません。</p>
       </div>
+      <details className="panel" data-testid="trial-continuity">
+        <summary>1250〜1350年の出生・家系・Title・委任の記録を見る</summary>
+        <p className="note">現実に記録された親子関係のみを追跡します。1250年初期の人物から子が生まれれば1世代、そこから孫が生まれて初めて2世代と数えます。法的王朝所属は推定しません。</p>
+        <div className="comparison-columns">
+          {continuityPanel(continuityA0,'A0')}
+          {continuityPanel(continuityA1,'A1')}
+        </div>
+        {p.comparison.mode==='ORDINARY_LAW'&&<p className="note">
+          国内通常法制の試験セットでは、カルドン家の人物05とヴァルガス家の人物04の婚姻は無条項契約の想定です。子の王朝は明示契約がない限り未確定です。ナルヴェン家の人物02・05には契約候補が複数あり、法制試験では恣意的に選びません。
+        </p>}
+      </details>
       <div className="filters" aria-label="観測する歴史">
         <button type="button" aria-pressed={p.activeBranch==='A0'} onClick={()=>p.onViewBranch('A0')} data-testid="view-a0">A0 原史を観測</button>
         <button type="button" aria-pressed={p.activeBranch==='A1'} onClick={()=>p.onViewBranch('A1')} data-testid="view-a1">A1 改変史を観測</button>
