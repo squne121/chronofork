@@ -111,10 +111,35 @@ function legalMarriageRequestValid(r: CrossDomainRequest, year: number, traceIds
 }
 
 /** A-LEG-01が照会を一件ずつ応答し、ACCEPTのときだけ同一requestIdへの婚姻登録を出すことを検査。 */
-function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[], traceId: (draftIndex: number) => Id): string | null {
+function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[], traceId: (draftIndex: number) => Id,
+  priorTraces: readonly DecisionTrace[]): string | null {
   const responses = o.responses
-  if (!Array.isArray(responses) || responses.length !== queries.length || o.traceDrafts.length !== queries.length) {
+  if (!Array.isArray(responses) || responses.length !== queries.length || o.traceDrafts.length < queries.length) {
     return 'A-LEG-01の照会・応答・判断件数が一致しません'
+  }
+  // B-005からの照会に対応する先頭Traceの後には、当年B-003死亡に裏付けられた
+  // A-LEG-01専用の婚姻終了Traceだけを許す。その他のcommand混入は拒否する。
+  const deathDrafts = o.traceDrafts.slice(queries.length)
+  if (deathDrafts.some(d=>!d.reasonCodes.includes('DEC_058_SPOUSE_DEATH'))) {
+    return '婚姻照会以外の不明なA-LEG-01判断が混在しています'
+  }
+  const dissolveCommands=o.commands.filter(c=>c.type==='MARRIAGE_DISSOLVE')
+  if (dissolveCommands.length!==deathDrafts.filter(d=>d.status==='ACCEPT').length) {
+    return '婚姻終了のACCEPT判断とcommand件数が不一致です'
+  }
+  const deadRequests=new Set<string>()
+  for(const c of dissolveCommands){
+    if(deadRequests.has(c.source.requestId))return '婚姻終了のrequestIdが重複しています'
+    deadRequests.add(c.source.requestId)
+    if(c.source.sourceRuleId!=='A-LEG-01'||c.source.year!==o.traceDrafts[0]?.year&&o.traceDrafts.length>0)
+      return '婚姻終了のSourceが不正です'
+    const idx=deathDrafts.findIndex(d=>d.status==='ACCEPT'&&
+      d.candidates.some(v=>v.inputs.marriageId===c.marriageId&&v.inputs.deceasedPersonId===c.deceasedPersonId))
+    if(idx<0||c.source.sourceTraceId!==traceId(queries.length+idx))return '婚姻終了のTraceが不一致です'
+    const proof=priorTraces.filter(t=>t.ruleId==='B-003'&&t.traceId===c.source.sourceIntentId&&
+      t.status==='ACCEPT'&&t.eventIds.length>0&&
+      t.actorRef.kind==='PERSON'&&t.actorRef.id===c.deceasedPersonId)
+    if(proof.length!==1)return '婚姻終了のB-003死亡根拠が存在しません'
   }
   const seen = new Set<Id>()
   let accepts = 0
@@ -138,7 +163,7 @@ function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[]
       }
     } else if (matching.length !== 0) return '未承認の照会から婚姻登録commandが生成されました'
   }
-  if (o.commands.length !== accepts) return '照会外の婚姻登録commandが含まれます'
+  if (o.commands.length !== accepts+dissolveCommands.length) return '照会外の不明なA-LEG-01 commandが含まれます'
   return null
 }
 
@@ -251,13 +276,13 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
         }
         marriageQueries.push(...outcome.requests as MarriageQuery[])
       }
-      if (ruleId === 'A-LEG-01' && marriageQueries.length > 0) {
-        const bad = marriageResponseError(outcome, marriageQueries, ctx.traceId)
+      if (ruleId === 'A-LEG-01') {
+        const bad = marriageResponseError(outcome, marriageQueries, ctx.traceId, traces)
         if (bad !== null) {
           return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: bad })
         }
-      } else if ((outcome.responses?.length ?? 0) > 0 || (ruleId === 'A-LEG-01' && outcome.commands.length > 0)) {
-        return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: '照会のない法的婚姻登録、または権限のない応答は拒否します' })
+      } else if ((outcome.responses?.length ?? 0) > 0) {
+        return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: 'A-LEG-01以外からの法的婚姻応答は禁止します' })
       }
       const r = applyOutcome(world, outcome, { transaction: tx })
       if (r.status !== 'APPLIED' && r.status !== 'NO_OP' && r.status !== 'DUPLICATE') {
