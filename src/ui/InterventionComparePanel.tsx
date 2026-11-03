@@ -21,8 +21,8 @@ const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filte
 
 export function InterventionComparePanel(p:Props){
   const [yearText,setYearText]=useState(String(PLAY_DEMO_YEAR))
-  const [firstId,setFirstId]=useState(PLAY_DEMO_PAIR[0])
-  const [secondId,setSecondId]=useState(PLAY_DEMO_PAIR[1])
+  const [firstId,setFirstId]=useState<string>(PLAY_DEMO_PAIR[0])
+  const [secondId,setSecondId]=useState<string>(PLAY_DEMO_PAIR[1])
   const [deltaText,setDeltaText]=useState(String(PLAY_DEMO_DELTA))
   const [durationText,setDurationText]=useState(String(PLAY_DEMO_DURATION))
   const seed=Number(p.seedText.trim())
