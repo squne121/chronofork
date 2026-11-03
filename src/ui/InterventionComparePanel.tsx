@@ -173,7 +173,7 @@ export function InterventionComparePanel(p:Props){
       </div>
       <h3 className="step-title"><span className="step-no">2</span>再計算する</h3>
       <button type="submit" disabled={!valid} data-testid="branch-run" className="cta">介入して再計算</button>
-      <span className="note"> 既定値（{personName(PLAY_DEMO_PAIR[0])}と{personName(PLAY_DEMO_PAIR[1])}、1260年、+20、5年）でそのまま試せます。</span>
+      <span className="note"> 例：{personName(PLAY_DEMO_PAIR[0])}と{personName(PLAY_DEMO_PAIR[1])}、{mode==='ORDINARY_LAW'?'1250':'1260'}年、+20、5年。出生・相続・委任は実計算の結果次第です。</span>
     </form>
     {!valid&&<p role="status" className="missing" data-testid="branch-invalid">seed、介入年、相異なる2人、0以外の補正値、1350年を超えない期間を指定してください。</p>}
     {p.error&&<p role="alert" className="halt" data-testid="branch-error">計算不成立（敗北ではありません）: {p.error.code} / {p.error.message}</p>}
@@ -200,7 +200,7 @@ export function InterventionComparePanel(p:Props){
           <p data-testid="trial-goal-reasons-a0">A0: {centralTitleEvidence(p.comparison.a0.result.technicalGoal)}</p>
           <p data-testid="trial-goal-reasons-a1">A1: {centralTitleEvidence(p.comparison.a1.result.technicalGoal)}</p>
         </details>
-        <p className="note">実計算した1350年のWorldStateを既存の厳格Goalで照合した非権威の検証値です。婚姻・相続・統治の正式な承認権限が未確定なので、正式勝敗を表しません。</p>
+        <p className="note">実計算した1350年のWorldStateを既存の厳格Goalで照合した非権威の検証値です。発行者に関する通常法制のDEC-057は採用されていますが、現在の法令・契約・適格性の具体値は試験用で、全37ルールも未完成のため、正式勝敗を表しません。</p>
       </div>
       <details className="panel" data-testid="trial-continuity">
         <summary>1250〜1350年の出生・家系・Title・委任の記録を見る</summary>
