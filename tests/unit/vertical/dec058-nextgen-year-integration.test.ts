@@ -5,7 +5,9 @@ import { createAutonomousCalibrationEvaluators } from '../../../src/simulation/a
 import type { AutonomyCalibration } from '../../../src/simulation/autonomy/index.ts'
 import type { NextgenContractCalibration } from '../../../src/simulation/legal/nextgen-contract.ts'
 import { EXPERIMENTAL_NEXTGEN_CONTRACT } from '../../../src/simulation/legal/nextgen-contract.ts'
-import { runYear } from '../../../src/simulation/engine/index.ts'
+import { runYear,runTimeline } from '../../../src/simulation/engine/index.ts'
+import { evaluateGoal } from '../../../src/simulation/goal.ts'
+import { observeDynastyContinuity } from '../../../src/ui/dynasty-continuity.ts'
 import type { WorldState } from '../../../src/simulation/contracts/index.ts'
 
 const P2='person-exp-02',P4='person-exp-04',P5='person-exp-05'
@@ -38,6 +40,41 @@ const completed=(r:ReturnType<typeof runYear>):WorldState=>{
 }
 const marriageEvents=(r:ReturnType<typeof runYear>)=>
   r.status==='COMPLETED'?r.events.filter(e=>e.eventType==='MARRIAGE_REGISTER'):[]
+
+describe('DEC-058 / 実1250〜1350年の家系・法制経路（CALIBRATION_ONLY）',()=>{
+  it('初期法令から固定年の婚姻・出生表なしで100年を実再計算し、王朝存続の不足を測定',()=>{
+    const initial=createExperimentalWorld()
+    const cfg=createAutonomousCalibrationEvaluators({
+      branchStartWorld:initial,ledger:[],trustBase:[{personIds:[P2,P5],value:40}],
+      nextgenMarriage:{book:trial.book,laws:trial.laws,calibration:CALIBRATION},
+      reviewedLegal:{book:trial.book,ordinaryLaws:trial.laws},
+      autonomy:AUTO,
+    })
+    if(!cfg.ok)throw new Error(cfg.issues.join('; '))
+    const options={seed:20260101,branchId:'A0',evaluators:cfg.evaluators,
+      goal:{dynastyId:NALVEN_DYNASTY_ID},technicalGoalEvaluation:true}
+    const result=runTimeline(initial,options)
+    expect(result.status).toBe('COMPLETED')
+    expect(result.snapshots).toHaveLength(101)
+    expect(result.goal).toBeNull()
+    expect(result.autonomousHistory.status).toBe('NOT_ESTABLISHED')
+    expect(result.coverage.todoRuleIds).toHaveLength(37)
+    expect(result.technicalGoal).toEqual(evaluateGoal(result.snapshots.at(-1)!,{dynastyId:NALVEN_DYNASTY_ID}))
+    const marriages=result.eventLog.filter(e=>e.eventType==='MARRIAGE_REGISTER')
+    const births=result.eventLog.filter(e=>e.eventType==='PERSON_BIRTH')
+    const legalDynasty=result.eventLog.filter(e=>e.eventType==='LEGAL_DYNASTY_SET')
+    expect(marriages.length).toBeGreaterThan(0)
+    expect(births.length).toBeGreaterThan(0)
+    expect(legalDynasty.length).toBeGreaterThan(0)
+    const observations=observeDynastyContinuity(initial,result,NALVEN_DYNASTY_ID)
+    expect(observations.status).toBe('OBSERVED')
+    expect(observations.birthsInTargetDynastyFamily).toBeGreaterThan(0)
+    expect(observations.legalTargetDescendants).toBeGreaterThan(0)
+    // 1350までの世代深度は記録から検証する。孫・勝利の追加や成功固定は行わない。
+    expect(observations.familyDepth).toBeGreaterThanOrEqual(1)
+    expect(runTimeline(initial,options)).toEqual(result)
+  },30000)
+})
 
 describe('DEC-058 次世代の実B-005合意・A登録・出生時の合法王朝',()=>{
   it('相互に唯一の結婚相手を選び、契約合意証拠と国家授権がある場合だけ婚姻登録',()=>{
