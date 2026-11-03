@@ -1,7 +1,7 @@
 // B-009: 年次WorldStateの生存者から全ペアを導き、B領域のpair.trust基礎値を累積する。
 // 新しい人物にもCALIBRATION_ONLYの初期値を与える。StatModifierはここでは加算しない。
 // 初期のPairTrustBaseは1250年などの明示済み基礎関係だけで、毎年の結果はWorldStateに保存する。
-import type { DecisionTraceDraft, Id, PairTrustBase, PersonPairTrustSetCommand, RuleOutcome, WorldState } from '../../contracts/index.ts'
+import type { DecisionTraceDraft, PairTrustBase, PersonPairTrustSetCommand, RuleOutcome, WorldState } from '../../contracts/index.ts'
 import { PAIR_TRUST_DEFINITION } from '../../intervention/stat-registry.ts'
 import { pairKey } from '../../intervention/index.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
@@ -48,7 +48,7 @@ export function createB009WorldStateEvaluator(
       e.value<PAIR_TRUST_DEFINITION.min||e.value>PAIR_TRUST_DEFINITION.max){
       throw new RangeError('B009_INVALID_BASE_PAIR')
     }
-    const key=pairKey(ids)
+    const key=pairKey([ids[0] as string,ids[1] as string])
     if(initial.has(key))throw new RangeError('B009_DUPLICATE_BASE_PAIR')
     initial.set(key,e.value)
   }
