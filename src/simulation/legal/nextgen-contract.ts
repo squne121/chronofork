@@ -49,10 +49,12 @@ function dynastyOf(p:Person,world:WorldState):Id|null{
 }
 function titleStrength(world:WorldState,id:Id):number{
   const people=new Map(world.persons.map(p=>[p.personId,p]))
-  return world.titles.filter(t=>t.valid&&t.hereditary&&t.recognition.status==='ACTIVE'&&
-    t.holder.status==='HELD'&&people.get(t.holder.personId)?.legalDynasty.status==='DETERMINED'&&
-    (people.get(t.holder.personId)?.legalDynasty.status==='DETERMINED'
-      ?people.get(t.holder.personId)?.legalDynasty.dynastyId===id:false)).length
+  return world.titles.filter(t=>{
+    if(!t.valid||!t.hereditary||t.recognition.status!=='ACTIVE'||t.holder.status!=='HELD')
+      return false
+    const holder=people.get(t.holder.personId)
+    return holder!==undefined&&dynastyOf(holder,world)===id
+  }).length
 }
 function houseSupport(world:WorldState,p:Person,id:Id):number{
   const group=world.groups.find(g=>g.groupId===p.originGroupId)
