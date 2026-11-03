@@ -3,9 +3,9 @@
 // 通常の自律評価器を置換するオプトイン評価器で、全37ルールの正式IMPLEMENTED化ではない。
 import type {
   ControllerRef, DecisionTraceDraft, DomainCommand, Id, LegalCaseSetCommand,
-  LegalTitleTransferCommand, ControlMandateSetCommand, RuleOutcome, WorldState, Year,
+  LegalTitleTransferCommand, ControlMandateSetCommand, WorldState, Year,
 } from '../../contracts/index.ts'
-import type { EvaluationContext, EvaluatorMap, RuleEvaluator } from '../../engine/evaluators.ts'
+import type { EvaluatorMap, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
 import { eventIdOf } from '../../engine/ids.ts'
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
