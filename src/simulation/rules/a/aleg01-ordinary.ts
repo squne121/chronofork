@@ -96,7 +96,7 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
       const occupied=world.legal.marriages.some(m=>m.status==='ACTIVE'&&m.personIds.some(id=>pair.includes(id)))||
         pair.some(id=>reserved.has(id))
       let status:'ACCEPT'|'REJECT'|'DEFER'='DEFER'
-      let why='NORMAL_MARRIAGE_REVIEW_MISSING'
+      let why: string
       if(!a||!b||!a.alive||!b.alive)why='PERSON_UNAVAILABLE'
       else if(kinship)why='KNOWN_CLOSE_KINSHIP'
       else if(occupied)why='ACTIVE_MARRIAGE_EXISTS'
