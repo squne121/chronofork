@@ -6,10 +6,11 @@ import { createPairTrustView } from '../intervention/index.ts'
 import type { StatModifierLedger } from '../intervention/index.ts'
 import { createALeg01CalibrationEvaluator, createADyn02EvidenceEvaluator, createASuc04WorldStateEvaluator, createATit07EvidenceEvaluator } from '../rules/a/index.ts'
 import type { MarriageApprovalEvidence } from '../rules/a/index.ts'
-import { createReviewedLegalEvaluators, createALeg01OrdinaryEvaluator } from '../rules/a/index.ts'
+import { createReviewedLegalEvaluators, createALeg01OrdinaryEvaluator, createALeg01NextgenEvaluator } from '../rules/a/index.ts'
+import type { NextgenMarriageInput } from '../rules/a/index.ts'
 import type { OrdinaryMarriageInput } from '../rules/a/index.ts'
 import type { ReviewedLegalInput } from '../rules/a/index.ts'
-import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB009WorldStateEvaluator } from '../rules/b/index.ts'
+import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB005NextgenEvaluator, createB009WorldStateEvaluator } from '../rules/b/index.ts'
 import type { B009Calibration } from '../rules/b/index.ts'
 import type { B004Calibration } from '../rules/b/index.ts'
 import { createCalibrationEvaluators } from '../rules/c/index.ts'
@@ -28,6 +29,8 @@ export type AutonomousEvaluatorInput = Readonly<{
   marriageEvidence?: readonly MarriageApprovalEvidence[]
   /** DEC-057 国内通常婚姻。年指定で法的成功を強制しないオプトイン。 */
   ordinaryMarriage?: OrdinaryMarriageInput
+  /** DEC-058: 実年齢・近親・双方相手選択・双方契約同意の年次法制。explicit opt-in only。 */
+  nextgenMarriage?: NextgenMarriageInput
   /** 明示されたCALIBRATION_ONLY権限に限る後年相続審査・新委任（既定は非適用）。 */
   reviewedLegal?: ReviewedLegalInput
   autonomy?: AutonomyCalibration
@@ -57,8 +60,14 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   const trust=createPairTrustView({base:input.trustBase,ledger:input.ledger,knownPersonIds:known})
   if(!trust.ok)return {ok:false,issues:trust.issues.map(x=>x.code+':'+x.path)}
   if(input.ordinaryMarriage && input.marriageEvidence?.length) return {ok:false,issues:['CANNOT_MIX_SYNTHETIC_MARRIAGE_WITH_ORDINARY']}
-  const marriage=input.ordinaryMarriage
-    ? createALeg01OrdinaryEvaluator(input.ordinaryMarriage)
+  if(input.nextgenMarriage && (input.ordinaryMarriage || input.marriageEvidence?.length))
+    return {ok:false,issues:['CANNOT_MIX_NEXTGEN_WITH_OTHER_MARRIAGE_MODES']}
+  if(input.nextgenMarriage && input.reviewedLegal &&
+    (JSON.stringify(input.nextgenMarriage.book)!==JSON.stringify(input.reviewedLegal.book) ||
+     JSON.stringify(input.nextgenMarriage.laws)!==JSON.stringify(input.reviewedLegal.ordinaryLaws)))
+    return {ok:false,issues:['NEXTGEN_LEGAL_EVIDENCE_MISMATCH']}
+  const marriage=input.nextgenMarriage?createALeg01NextgenEvaluator(input.nextgenMarriage)
+    :input.ordinaryMarriage?createALeg01OrdinaryEvaluator(input.ordinaryMarriage)
     : createALeg01CalibrationEvaluator(input.marriageEvidence??[])
   if(!marriage.ok)return {ok:false,issues:marriage.issues.map(x=>typeof x==='string'?x:x.code+':'+x.path)}
   const reviewed=input.reviewedLegal?createReviewedLegalEvaluators(input.reviewedLegal):undefined
@@ -70,7 +79,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     'B-002':createB002WorldStateEvaluator(autonomy),
     'A-DYN-02':createADyn02EvidenceEvaluator(),
     'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,input.ledger),
-    'B-005':createB005CalibrationEvaluator(),
+    'B-005':input.nextgenMarriage?createB005NextgenEvaluator(input.nextgenMarriage.calibration):createB005CalibrationEvaluator(),
     'A-LEG-01':marriage.evaluator,
     'A-SUC-04':createASuc04WorldStateEvaluator(),
     'A-TIT-07':createATit07EvidenceEvaluator(),
