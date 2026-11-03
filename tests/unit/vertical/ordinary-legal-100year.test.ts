@@ -1,45 +1,18 @@
 // Issue #67: 年指定の法的承認表なしで、初期法令と実年次WorldStateからA0/A1を100年計算。
 // GAME-02/03の具体的な法令ID・人物適格性証拠はCALIBRATION_ONLYの仮値であり正式な勝利ではない。
 import { describe,expect,it } from 'vitest'
-import { createExperimentalWorld,createExperimentalLegalEvidence,NALVEN_DYNASTY_ID } from '../../../src/scenario/experimental/index.ts'
+import { createExperimentalWorld,createExperimentalLegalEvidence,NALVEN_DYNASTY_ID,createExperimentalOrdinaryLegalTrial } from '../../../src/scenario/experimental/index.ts'
 import { createAutonomousCalibrationEvaluators } from '../../../src/simulation/autonomy/index.ts'
 import type { AutonomyCalibration } from '../../../src/simulation/autonomy/index.ts'
 import { createRootBranch,forkHistory } from '../../../src/simulation/branching/index.ts'
 import { runTimeline } from '../../../src/simulation/engine/index.ts'
 import { evaluateGoal } from '../../../src/simulation/goal.ts'
-import type { LegalEvidenceBook } from '../../../src/simulation/legal/evidence.ts'
-import type { OrdinaryLaw } from '../../../src/simulation/legal/ordinary-authority.ts'
-import type { OrdinaryMarriageReview } from '../../../src/simulation/rules/a/index.ts'
 import type { WorldState } from '../../../src/simulation/contracts/index.ts'
 import { TRUST_BOOST,P4,P5,SEED } from './b004-branch-fixture.ts'
 const EARLY_BOOST={...TRUST_BOOST,modifierId:'mod-trial-1250',interventionId:'int-trial-1250',startYear:1250,endExclusiveYear:1255}
 
-const ELDIA={kind:'COUNTRY' as const,id:'country-eldia'}
-const law=(id:string,action:OrdinaryLaw['action']):OrdinaryLaw=>({
-  lawId:id,action,issuerRef:ELDIA,sovereignCountryId:ELDIA.id,
-  effectiveFromYear:1250,endExclusiveYear:1351,
-  origin:'BACKGROUND_PRE_1250',provenance:'CALIBRATION_ONLY',
-})
-const MARRIAGE=law('law:trial-eldia-domestic-marriage','NORMAL_MARRIAGE')
-const SUCCESSION=law('law:trial-eldia-land-succession','NORMAL_LAND_SUCCESSION')
-const CONTROL:OrdinaryLaw={...law('law:trial-eldia-central-delegation','NEW_CONTROL_MANDATE'),
-  titleId:'title-exp-central',regionId:'region-eldia-central',grantBasisId:'exp-basis-central'}
-const LAWS=[MARRIAGE,SUCCESSION,CONTROL] as const
-const BOOK:LegalEvidenceBook=(()=>{
-  const b=createExperimentalLegalEvidence()
-  return {...b,approvalAuthorities:[
-    {authorityBasisId:MARRIAGE.lawId,action:'NORMAL_MARRIAGE' as const,
-      holderRef:ELDIA,sovereignCountryId:ELDIA.id,provenance:'CALIBRATION_ONLY' as const},
-    {authorityBasisId:SUCCESSION.lawId,action:'NORMAL_LAND_SUCCESSION' as const,
-      holderRef:ELDIA,sovereignCountryId:ELDIA.id,provenance:'CALIBRATION_ONLY' as const},
-  ]}
-})()
-const REVIEW:OrdinaryMarriageReview={
-  reviewId:'trial-review-p4p5-eligibility',personIds:[P4,P5],countryId:ELDIA.id,
-  lawId:MARRIAGE.lawId,reviewedBy:ELDIA,availableFromYear:1250,
-  endExclusiveYear:1350,contractCandidateId:null,status:'ELIGIBLE',
-  provenance:'CALIBRATION_ONLY',
-}
+const trial=createExperimentalOrdinaryLegalTrial()
+const LAWS=trial.laws,BOOK=trial.book,REVIEW=trial.marriageReviews[0]!
 const AUTO:AutonomyCalibration={
   status:'CALIBRATION_ONLY',
   birth:{minMotherAge:18,maxMotherAge:32,minFatherAge:18,chancePermille:1000},
