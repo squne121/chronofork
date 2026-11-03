@@ -73,7 +73,8 @@ export function playInitialWorld():WorldState{
   // PR #54で人物05はexperimental初期世界に反映済み。UIだけの二重変更は行わない。
   return createExperimentalWorld()
 }
-export const playPersonOptions=()=>playInitialWorld().persons.map(p=>({
+export const playPersonOptions=()=>playInitialWorld().persons
+  .filter(p=>p.interactionRole!=='SUPPORTING').map(p=>({
   id:p.personId,label:p.name+(p.sex==='MALE'?'（男）':'（女）'),
 }))
 const reject=(code:string,message:string):PlayResult=>({ok:false,code,message})
