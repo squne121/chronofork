@@ -5,6 +5,7 @@ import { runYear } from '../../../src/simulation/engine/index.ts'
 import { createPairTrustView } from '../../../src/simulation/intervention/index.ts'
 import { EXPERIMENTAL_AUTONOMY } from '../../../src/simulation/autonomy/index.ts'
 import { createB004WorldStateEvaluator } from '../../../src/simulation/rules/b/b004-worldstate.ts'
+import type { B009Calibration } from '../../../src/simulation/rules/b/b009-relationships.ts'
 import { createB009WorldStateEvaluator, EXPERIMENTAL_B009_HOUSE_INTEREST, EXPERIMENTAL_B009_CALIBRATION, validateB009Calibration } from '../../../src/simulation/rules/b/b009-relationships.ts'
 import { createSyntheticWorld, P4, P5, SEED } from './b004-branch-fixture.ts'
 
@@ -20,7 +21,7 @@ function withReversedHouseSupport(w: WorldState): WorldState {
     return g
   }) }
 }
-function compute(w: WorldState, cfg = CONFIG) {
+function compute(w: WorldState, cfg: B009Calibration = CONFIG) {
   const view = createPairTrustView({ base: TRUST_BASE, ledger: [], knownPersonIds: new Set(w.persons.map(p=>p.personId)) })
   if (!view.ok) throw new Error('bad pair trust input')
   return runYear(w, { seed: SEED, evaluators: {
