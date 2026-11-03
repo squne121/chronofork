@@ -33,6 +33,10 @@ type CommandBase = Readonly<{
 type CommandOf<T extends string, P> = CommandBase & Readonly<{ type: T }> & Readonly<P>
 
 export type MarriageRegisterCommand = CommandOf<'MARRIAGE_REGISTER', { marriage: Marriage }>
+/** B-003の確定死亡を根拠にA-LEG-01のみが婚姻を解消する。 */
+export type MarriageDissolveCommand = CommandOf<'MARRIAGE_DISSOLVE', {
+  marriageId: Id; deceasedPersonId: Id; dissolvedYear: Year; cause: 'SPOUSE_DEATH'
+}>
 export type LegalDynastySetCommand = CommandOf<
   'LEGAL_DYNASTY_SET',
   { personId: Id; legalDynasty: LegalDynastyState }
@@ -95,6 +99,7 @@ export type TreatyCommitCommand = CommandOf<
 
 export type DomainCommand =
   | MarriageRegisterCommand
+  | MarriageDissolveCommand
   | LegalDynastySetCommand
   | LegalTitleTransferCommand
   | TitleRecognitionSetCommand
@@ -124,6 +129,7 @@ export type WriteOwner =
 /** 契約 §2.1 の唯一の確定者。reducer は owner/発行ドメインが合わない command を拒否する。 */
 export const COMMAND_WRITE_OWNER: Readonly<Record<CommandType, WriteOwner>> = {
   MARRIAGE_REGISTER: 'A_LEGAL',
+  MARRIAGE_DISSOLVE: 'A_LEGAL',
   LEGAL_DYNASTY_SET: 'A_LEGAL',
   LEGAL_TITLE_TRANSFER: 'A_LEGAL',
   TITLE_RECOGNITION_SET: 'A_LEGAL',
