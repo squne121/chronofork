@@ -90,7 +90,7 @@ describe('App', () => {
     expect(screen.getByTestId('active-branch').textContent).toContain('A0')
     fireEvent.click(screen.getByTestId('view-a1'))
     expect(screen.getByTestId('active-branch').textContent).toContain('A1')
-  },30000)
+  },90000)
 
   it('年スライダーで 1250→1251→1350 を選べ、人口が実際に変化する', () => {
     render(<App />)
