@@ -69,6 +69,29 @@ describe('App', () => {
     expect(screen.getByTestId('goal-status').textContent).toContain('未成立')
   },30000)
 
+  it('通常法制モードを選び、A0/A1の100年・家系・1350年の試験判定を閲覧できる',()=>{
+    render(<App />)
+    fireEvent.change(screen.getByTestId('play-law-mode'),{target:{value:'ORDINARY_LAW'}})
+    expect((screen.getByTestId('branch-fork-year') as HTMLInputElement).value).toBe('1250')
+    expect(screen.getByTestId('play-mode-description').textContent).toContain('特定年の婚姻承認は予約しません')
+    fireEvent.click(screen.getByTestId('branch-run'))
+    expect(screen.getByTestId('branch-status').textContent).toContain('A1 COMPLETED')
+    expect(screen.getByTestId('trial-goal-mode').textContent).toContain('通常法制')
+    expect(screen.getByTestId('trial-goal-a0').textContent).toContain('技術検証')
+    expect(screen.getByTestId('trial-goal-a1').textContent).toContain('技術検証')
+    expect(screen.getByTestId('trial-goal-summary').textContent).toContain('正式勝敗を表しません')
+    fireEvent.click(screen.getByTestId('trial-continuity').querySelector('summary')!)
+    expect(screen.getByTestId('continuity-a0').textContent).toContain('1350年に存命する合法なナルヴェン')
+    expect(screen.getByTestId('continuity-a1').textContent).toContain('子の世代まで')
+    expect(screen.getByTestId('continuity-a1').textContent).toContain('孫以降は未確認')
+    expect(screen.getByTestId('continuity-a1').textContent).toContain('法的王朝が未確定')
+    expect(screen.getByTestId('goal-status').textContent).toContain('未成立')
+    fireEvent.click(screen.getByTestId('view-a0'))
+    expect(screen.getByTestId('active-branch').textContent).toContain('A0')
+    fireEvent.click(screen.getByTestId('view-a1'))
+    expect(screen.getByTestId('active-branch').textContent).toContain('A1')
+  },30000)
+
   it('年スライダーで 1250→1251→1350 を選べ、人口が実際に変化する', () => {
     render(<App />)
     const slider = screen.getByRole('slider') as HTMLInputElement
