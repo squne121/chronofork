@@ -84,7 +84,7 @@ export const createASuc04WorldStateEvaluator=():RuleEvaluator=>(world:WorldState
         sourceTraceId:ctx.traceId(adminIndex),sourceIntentId:death.traceId},
       legalCase:{caseId:cid,titleId:title.titleId,kind:'SUCCESSION',status:'PENDING',
         candidatePersonIds:survivors.map(p=>p.personId),
-        reasonCodes:['CALIBRATION_ONLY','GAME_02_UNAPPROVED','SOURCE_B003_EVENT:'+death.eventIds[0]!]},
+        reasonCodes:['CALIBRATION_ONLY','GAME_02_UNAPPROVED','PREDECESSOR_ID:'+predecessor.personId,'SOURCE_B003_EVENT:'+death.eventIds[0]!]},
     })
   }
   return {ruleId:ctx.ruleId,phase:ctx.phase,commands,requests:[],deferred:[],traceDrafts}
