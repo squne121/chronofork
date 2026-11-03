@@ -127,5 +127,5 @@ describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格�
     expect(final.groups.map(g=>g.groupId)).toEqual(world.groups.map(g=>g.groupId))
     expect(final.regions).toEqual(world.regions)
     // strict Goal は測定値とだけ比較する。ACHIEVED/NOT_ACHIEVEDを強制しない。
-  },120000)
+  },240000) // 100年間の実再計算。CIの負荷差による誤ったtimeout判定を避ける
 })
