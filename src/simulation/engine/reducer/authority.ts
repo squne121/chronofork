@@ -36,6 +36,7 @@ function allowances(c: DomainCommand): readonly Allowance[] {
     case 'PERSON_PAIR_TRUST_SET':
       return [{ domain: 'B', phases: [3] }]
     case 'PERSON_BIRTH':
+    case 'PERSON_PROMOTE':
       return [{ domain: 'B', phases: [3] }]
     case 'PERSON_DEATH':
       return c.cause === 'NATURAL'
@@ -91,6 +92,9 @@ export function checkCommandAuthority(
 
   if (!Object.hasOwn(COMMAND_WRITE_OWNER, c.type)) return reject('INVALID_COMMAND', `未知の command 種別: ${String((c as { type: unknown }).type)}`)
   const owner = COMMAND_WRITE_OWNER[c.type]
+  if (c.type === 'PERSON_PROMOTE' && s.sourceRuleId !== 'B-001') {
+    return reject('WRITE_OWNER_VIOLATION', '昇格によるPerson登録はB-001だけが実行できます')
+  }
   if (c.type === 'PERSON_PAIR_TRUST_SET' && s.sourceRuleId !== 'B-009') {
     return reject('WRITE_OWNER_VIOLATION', 'PERSON_PAIR_TRUST_SETはB-009以外では発行できません')
   }
