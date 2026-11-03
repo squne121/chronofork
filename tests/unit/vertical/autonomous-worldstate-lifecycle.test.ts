@@ -212,7 +212,10 @@ describe('WorldStateからの自律生成 — 安全な失敗と境界',()=>{
     if(whole.status!=='COMPLETED')return
     expect(whole.events.filter(e=>e.eventType==='PERSON_BIRTH')).toHaveLength(1)
     expect(whole.events.filter(e=>e.eventType==='LEGAL_DYNASTY_SET')).toHaveLength(1)
-    expect(whole.world.groups).toEqual(onlyB.world.groups) // BのPerson追加は人口を増減しない
+    const cOnly=runYear(initial,{seed:SEED,evaluators:{'RULE-C-004':ev['RULE-C-004']}})
+    expect(cOnly.status).toBe('COMPLETED')
+    if(cOnly.status!=='COMPLETED')return
+    expect(whole.world.groups).toEqual(cOnly.world.groups) // BのPerson追加はC004人口とは独立
   })
 
   it('自然死亡枠がない年はB003は生存者を殺さない',()=>{
