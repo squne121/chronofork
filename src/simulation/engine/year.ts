@@ -276,7 +276,7 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
         }
         marriageQueries.push(...outcome.requests as MarriageQuery[])
       }
-      if (ruleId === 'A-LEG-01') {
+      if (ruleId === 'A-LEG-01' && (marriageQueries.length>0 || outcome.commands.length>0 || (outcome.responses?.length??0)>0)) {
         const bad = marriageResponseError(outcome, marriageQueries, ctx.traceId, traces)
         if (bad !== null) {
           return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: bad })
