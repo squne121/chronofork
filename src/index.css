@@ -310,3 +310,20 @@ button {
     animation: none !important;
   }
 }
+
+/* A0/A1の技術比較。最終的な時代別美術・ウィンドウ配置を確定するものではない。 */
+.compare-form label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
+.compare-form input, .compare-form select { max-width: 12rem; padding: 0.3rem; font: inherit; border: 1px solid var(--line); border-radius: 4px; }
+.compare-form button, .compare-results button { border: 1px solid var(--line); border-radius: 4px; background: white; padding: 0.3rem 0.5rem; }
+.compare-form button { background: #e7f1ff; border-color: var(--accent); font-weight: 650; }
+.compare-form button:disabled { color: var(--muted); background: #eee; border-color: var(--line); }
+.comparison-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0.6rem; }
+.comparison-columns > div { padding: 0.5rem; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; min-width: 0; overflow-wrap: anywhere; }
+.comparison-columns h3 { margin-top: 0; }
+.compare-metrics { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.5rem; margin: 0.4rem 0; font-size: 0.9rem; }
+.compare-metrics dt { color: var(--muted); }
+.compare-metrics dd { margin: 0; text-align: right; }
+.compare-event-list, .compare-trace-list { max-height: 15rem; overflow-y: auto; padding-left: 1.2rem; font-size: 0.83rem; overflow-wrap: anywhere; }
+.compare-event-list button { max-width: 100%; text-align: left; color: var(--accent); }
+.compare-results [aria-pressed='true'] { border: 2px solid var(--accent); background: #ddf0ff; }
+@media (max-width: 600px) { .comparison-columns { grid-template-columns: 1fr; } }
