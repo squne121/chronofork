@@ -6,6 +6,8 @@ import { createPairTrustView } from '../intervention/index.ts'
 import type { StatModifierLedger } from '../intervention/index.ts'
 import { createALeg01CalibrationEvaluator, createADyn02EvidenceEvaluator, createASuc04WorldStateEvaluator, createATit07EvidenceEvaluator } from '../rules/a/index.ts'
 import type { MarriageApprovalEvidence } from '../rules/a/index.ts'
+import { createReviewedLegalEvaluators } from '../rules/a/index.ts'
+import type { ReviewedLegalInput } from '../rules/a/index.ts'
 import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB009WorldStateEvaluator } from '../rules/b/index.ts'
 import type { B009Calibration } from '../rules/b/index.ts'
 import type { B004Calibration } from '../rules/b/index.ts'
@@ -23,6 +25,8 @@ export type AutonomousEvaluatorInput = Readonly<{
   ledger: StatModifierLedger
   trustBase: readonly PairTrustBase[]
   marriageEvidence?: readonly MarriageApprovalEvidence[]
+  /** 明示されたCALIBRATION_ONLY権限に限る後年相続審査・新委任（既定は非適用）。 */
+  reviewedLegal?: ReviewedLegalInput
   autonomy?: AutonomyCalibration
   tuning?: TuningConfig
   b004Calibration?: B004Calibration
@@ -51,6 +55,8 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   if(!trust.ok)return {ok:false,issues:trust.issues.map(x=>x.code+':'+x.path)}
   const marriage=createALeg01CalibrationEvaluator(input.marriageEvidence??[])
   if(!marriage.ok)return {ok:false,issues:marriage.issues.map(x=>x.code+':'+x.path)}
+  const reviewed=input.reviewedLegal?createReviewedLegalEvaluators(input.reviewedLegal):undefined
+  if(reviewed&&!reviewed.ok)return {ok:false,issues:[...reviewed.issues]}
   const evaluators:EvaluatorMap={
     ...createCalibrationEvaluators(input.tuning??EXPERIMENTAL_TUNING),
     'B-003':createB003WorldStateEvaluator(autonomy),
@@ -62,6 +68,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     'A-LEG-01':marriage.evaluator,
     'A-SUC-04':createASuc04WorldStateEvaluator(),
     'A-TIT-07':createATit07EvidenceEvaluator(),
+    ...(reviewed?.ok?reviewed.evaluators:{}),
   }
   return {ok:true,evaluators}
 }
