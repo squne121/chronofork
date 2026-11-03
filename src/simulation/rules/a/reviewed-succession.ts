@@ -97,10 +97,18 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
     if (!title || title.kind !== 'TERRITORIAL' || !title.valid || !title.hereditary ||
         title.recognition.status !== 'ACTIVE') return undefined
     const region = world.regions.find(r => r.regionId === title.regionId)
-    const grant = book.titleGrants.find(x => x.grantBasisId === title.grantBasisId)
-    if (!region || !grant || grant.titleId !== title.titleId ||
-        !grant.hereditary || grant.sovereignCountryId !== region.sovereignCountryId ||
-        title.recognition.sovereignCountryId !== region.sovereignCountryId) return undefined
+    const grants = book.titleGrants.filter(x => x.grantBasisId === title.grantBasisId)
+    const recognitions = book.titleRecognitions.filter(x =>
+      x.decisionId === title.recognition.sourceDecisionId && x.titleId === title.titleId)
+    if (!region || grants.length !== 1 || recognitions.length !== 1 ||
+        !title.recognition.authority || !title.recognition.sourceDecisionId) return undefined
+    const grant = grants[0]!
+    const recognition = recognitions[0]!
+    if (grant.titleId !== title.titleId || !grant.hereditary ||
+        grant.sovereignCountryId !== region.sovereignCountryId ||
+        title.recognition.sovereignCountryId !== region.sovereignCountryId ||
+        recognition.sovereignCountryId !== region.sovereignCountryId ||
+        !sameRef(recognition.authority, title.recognition.authority)) return undefined
     const matches = stableDecisions.filter(d =>
       d.titleId === titleId && d.predecessorPersonId === predecessorId &&
       d.successorPersonId === successorId && d.grantBasisId === grant.grantBasisId &&
@@ -234,7 +242,8 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
         d.availableFromYear <= ctx.year && Number.isSafeInteger(d.endExclusiveYear) &&
         d.endExclusiveYear > ctx.year && present(d.decisionId) && present(d.authorizationId))
       const mandateDecision = approvedMandates.length === 1 ? approvedMandates[0] : undefined
-      const right = mandateDecision ? stableRights.find(r => r.authorizationId === mandateDecision.authorizationId) : undefined
+      const matchingRights = mandateDecision ? stableRights.filter(r => r.authorizationId === mandateDecision.authorizationId) : []
+      const right = matchingRights.length === 1 ? matchingRights[0] : undefined
       const basis = book.titleGrants.find(g => g.grantBasisId === title.grantBasisId)
       const authorized = !!(region && mandateDecision && right && basis &&
         right.titleId === title.titleId && right.regionId === title.regionId &&
@@ -245,7 +254,21 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
         title.recognition.sovereignCountryId === region.sovereignCountryId &&
         !world.legal.controlMandates.some(m => m.regionId === region.regionId &&
           m.effectiveFromYear < mandateDecision.endExclusiveYear && ctx.year < m.endExclusiveYear))
-      if (!authorized || !region || !mandateDecision || !right) continue
+      if (!authorized || !region || !mandateDecision || !right) {
+        const pendingId = 'atit07:mandate-pending:' + JSON.stringify([ctx.year, legalCase.caseId])
+        traceDrafts.push({
+          year: ctx.year, phase: ctx.phase, ruleId: ctx.ruleId,
+          actorRef: { kind: 'REGION', id: title.regionId },
+          candidates: [{ candidateId: pendingId, eligible: false,
+            inputs: { titleId: title.titleId, beneficiaryPersonId: successorId,
+              sourceDecisionId: mandateDecision?.decisionId ?? null,
+              provenance: 'CALIBRATION_ONLY' },
+            reasonCodes: reason('GAME_03_NEW_DELEGATION_EVIDENCE_MISSING') }],
+          status: 'DEFER', reasonCodes: reason('GAME_03_NEW_DELEGATION_EVIDENCE_MISSING'),
+          modifierIds: [], ruleVersion: REVIEWED_LEGAL_VERSION,
+        })
+        continue
+      }
       const mandateTrace = traceDrafts.length
       const mandateId = 'mandate:reviewed:' + JSON.stringify([ctx.year,legalCase.caseId,mandateDecision.decisionId])
       const mandateCandidateId = 'atit07:mandate:' + JSON.stringify([ctx.year,legalCase.caseId])
