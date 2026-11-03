@@ -17,8 +17,10 @@ export const createASuc04WorldStateEvaluator=():RuleEvaluator=>(world:WorldState
     t.ruleId==='B-003'&&t.year===ctx.year&&t.actorRef.kind==='PERSON'&&t.status==='ACCEPT'&&t.eventIds.length===1)
   const deathById=new Map<Id,typeof deaths[number]>(deaths.map(t=>
     [t.actorRef.kind==='PERSON'?t.actorRef.id:'',t]))
-  const titles=world.titles.filter(t=>t.kind==='TERRITORIAL'&&t.holder.status==='HELD'&&
-    deathById.has(t.holder.personId)).sort((a,b)=>cmp(a.titleId,b.titleId))
+  const titles=world.titles.filter(t=>{
+    if(t.kind!=='TERRITORIAL'||t.holder.status!=='HELD')return false
+    return deathById.has(t.holder.personId)
+  }).sort((a,b)=>cmp(a.titleId,b.titleId))
   const traceDrafts:DecisionTraceDraft[]=[]
   const commands:LegalCaseSetCommand[]=[]
   for(const title of titles){
