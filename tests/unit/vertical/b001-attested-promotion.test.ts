@@ -85,6 +85,8 @@ describe('DEC-024/058 B-001 証拠に基づく人口集団からの人物昇格'
       ok:false,issues:expect.arrayContaining(['B001_COHORT_MEMBER_NOT_ATTESTED:0']),
     })
     expect(createB001PromotionEvaluator({cohorts:[COHORT],identities:[INDIVIDUAL,INDIVIDUAL]}).ok).toBe(false)
+    expect(createB001PromotionEvaluator({cohorts:[COHORT,{...COHORT,cohortId:'alias-same-group-year'}],identities:[INDIVIDUAL]}).ok).toBe(false)
+    expect(createB001PromotionEvaluator({cohorts:[COHORT],identities:[null] as unknown as B001PromotionInput['identities']}).ok).toBe(false)
     expect(createB001PromotionEvaluator({
       cohorts:[COHORT],identities:[{...INDIVIDUAL,memberOrdinal:COHORT.memberCount}],
     }).ok).toBe(false)
