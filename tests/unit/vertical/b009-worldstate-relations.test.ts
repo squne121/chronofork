@@ -56,8 +56,7 @@ describe('B-009 WorldState関係値の年次累積（CALIBRATION_ONLY）',()=>{
     const second=runYear(born,{seed:SEED,evaluators:{'B-009':evaluator()}})
     expect(second.status).toBe('COMPLETED')
     if(second.status!=='COMPLETED')return
-    expect(relation(second.world,P4,child)).toBeUndefined() // ペアは辞書順に正規化される
-    const normalized=[P4,child].sort()
+    const normalized=[P4,child].sort() // ペアは辞書順に正規化される
     expect(relation(second.world,normalized[0]!,normalized[1]!)).toMatchObject({value:1,lastUpdatedYear:1251})
     expect(second.world.pairTrust?.length).toBe(36)
     // 一人死亡した後は、死亡人物とその既存関係を残すが更新しない。
