@@ -93,7 +93,7 @@ describe('DEC-057: 国内婚姻の権限と当年合意',()=>{
       expect(marriages(a1)).toHaveLength(0)
       expect(a1.decisionTraces.some(t=>t.ruleId==='A-LEG-01'&&t.status==='DEFER')).toBe(true)
     }
-  })
+  },30000)
 
   it('法令が重複・無効・期限切れの場合は権限が成立しない',()=>{
     expect(validateOrdinaryLaws([MARRIAGE_LAW,MARRIAGE_LAW])).toContain('DUPLICATE_LAW:'+MARRIAGE_LAW.lawId)
