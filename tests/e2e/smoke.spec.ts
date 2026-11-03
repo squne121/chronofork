@@ -294,3 +294,30 @@ for (const width of [1280, 960]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
   })
 }
+
+for (const width of [1280, 960]) {
+  test(`${width}px: 国内通常法制の実再計算と世代・1350年Goalを試せる`,async({page})=>{
+    test.setTimeout(90000)
+    await page.setViewportSize({width,height:900})
+    await page.goto('/')
+    await page.getByTestId('play-law-mode').selectOption('ORDINARY_LAW')
+    await expect(page.getByTestId('play-mode-description')).toContainText('背景法令')
+    await expect(page.getByTestId('branch-fork-year')).toHaveValue('1250')
+    await page.getByTestId('branch-run').click()
+    await expect(page.getByTestId('branch-status')).toContainText('A1 COMPLETED')
+    await expect(page.getByTestId('trial-goal-mode')).toContainText('通常法制')
+    await expect(page.getByTestId('trial-goal-a0')).toContainText('技術検証')
+    await expect(page.getByTestId('trial-goal-a1')).toContainText('技術検証')
+    await expect(page.getByTestId('goal-status')).toContainText('未成立')
+    await page.getByTestId('trial-continuity').locator('summary').click()
+    await expect(page.getByTestId('continuity-a0')).toContainText('新生児の法的王朝が未確定')
+    await expect(page.getByTestId('continuity-a1')).toContainText('孫以降は未確認')
+    await expect(page.getByTestId('continuity-a1')).toContainText('土地Title移転')
+    await page.getByTestId('view-a0').click()
+    await expect(page.getByTestId('active-branch')).toContainText('A0')
+    await page.getByTestId('view-a1').click()
+    await expect(page.getByTestId('active-branch')).toContainText('A1')
+    const over=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)
+    expect(over).toBeLessThanOrEqual(0)
+  })
+}
