@@ -39,11 +39,12 @@ describe('App', () => {
     expect(text).not.toContain('参照不明')
   })
 
-  it('介入・比較ボタンは無く、未実装を明示する', () => {
+  it('介入・比較の実操作を公開し、保存・正式法制は未実装のままと示す', () => {
     render(<App />)
-    const names = screen.getAllByRole('button').map((b) => b.textContent ?? '')
-    expect(names.some((n) => /介入|比較|適用|進める|保存/.test(n))).toBe(false)
-    expect(screen.getByTestId('reserved-areas').textContent).toContain('未接続: 介入機能')
+    expect(screen.getByTestId('branch-run')).toBeTruthy()
+    expect(screen.queryByTestId('branch-results')).toBeNull()
+    expect(screen.getByTestId('reserved-areas').textContent).toContain('試験版で接続済み')
+    expect(screen.getByTestId('reserved-areas').textContent).toContain('未実装')
   })
 
   it('年スライダーで 1250→1251→1350 を選べ、人口が実際に変化する', () => {
