@@ -45,6 +45,8 @@ function refsOfCommand(c: DomainCommand, world: WorldState): TargetRef[] {
       return [{ kind: 'REGION', id: c.mandate.regionId }]
     case 'PERSON_PAIR_TRUST_SET':
       return [{kind:'PERSON_PAIR',ids:c.relation.personIds}]
+    case 'PERSON_PROMOTE':
+      return [{ kind: 'PERSON', id: c.person.personId }, { kind: 'GROUP', id: c.person.originGroupId }]
     case 'PERSON_BIRTH':
       return [
         { kind: 'PERSON', id: c.person.personId },

@@ -1,6 +1,6 @@
 // B の出生（Person 登録）と共通死亡 reducer。人口の増減は C① の枠確定と POPULATION_* のみが行い、
 // ここでは個別 Person の登録・死亡確定と枠の請求済み数の更新だけを行う（人口へ再加算しない: 契約 §4）。
-import type { PersonBirthCommand, PersonDeathCommand, WorldState } from '../../contracts/index.ts'
+import type { PersonBirthCommand, PersonDeathCommand, PersonPromotionCommand, WorldState } from '../../contracts/index.ts'
 import type { Draft, Handler } from './draft.ts'
 import { fail, findPerson } from './draft.ts'
 import type { Rejection } from './types.ts'
@@ -45,6 +45,36 @@ export const personBirth: Handler<PersonBirthCommand> = (d, c) => {
   const slot = claimSlot(d, c.cohortGroupId, 'birth')
   if (slot) return slot
   d.world = { ...d.world, persons: [...d.world.persons, p] }
+  return null
+}
+
+/** B-001: 匿名人口の一人を実際に記録された候補として特定する。人口や既存の出生枠は加減しない。
+ * 個人の出自・生年は評価器が照合済みの別証拠が必要。単なる人口数からは作らない。
+ */
+export const personPromote: Handler<PersonPromotionCommand> = (d, c) => {
+  const w = d.world, p = c.person
+  const validId = (s:unknown):s is string => typeof s==='string'&&s.length>0
+  if(!validId(c.cohortId)||!validId(c.identityEvidenceId))return fail('INVALID_COMMAND','出典と人物の独立した記録IDが必要です')
+  if(!Number.isSafeInteger(c.cohortBirthYear)||p.birthYear!==c.cohortBirthYear||
+      c.cohortBirthYear>w.year-18)return fail('INVALID_COMMAND','生年・18歳以上の出典が一致しません')
+  if(!Number.isSafeInteger(c.cohortSize)||c.cohortSize<1||
+      !Number.isSafeInteger(c.memberOrdinal)||c.memberOrdinal<0||
+      c.memberOrdinal>=c.cohortSize)
+    return fail('INVALID_COMMAND','記録にないコホート構成員の昇格はできません')
+  if(!p.alive||p.deathYear!==undefined||p.legalDynasty.status!=='UNDETERMINED'||
+      p.fatherId!==undefined||p.motherId!==undefined||p.bloodlineDynastyId!==undefined)
+    return fail('INVALID_COMMAND','血統・親子・法的王朝を証拠なしに追加できません')
+  if(findPerson(w,p.personId))return fail('ID_EXISTS','すでに記名Personとして存在します',[p.personId])
+  const g=w.groups.find(g=>g.groupId===p.originGroupId)
+  const h=w.houses.find(h=>h.houseId===p.houseId)
+  const region=g&&w.regions.find(r=>r.regionId===g.regionId)
+  if(!g||!h||!region||!h.countryId||h.countryId!==region.sovereignCountryId||
+      g.support.houseBps[h.houseId]===undefined)
+    return fail('LEGAL_BASIS_MISSING','既存集団と家門/管轄の対応が証明できません')
+  const alive=w.persons.filter(x=>x.alive&&x.originGroupId===g.groupId).length
+  if(c.cohortSize>g.population||alive>=g.population)
+    return fail('COHORT_CAPACITY_CONFLICT','集団の人口には未記名者の空きがありません')
+  d.world={...w,persons:[...w.persons,p]}
   return null
 }
 

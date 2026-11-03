@@ -10,8 +10,8 @@ import { createReviewedLegalEvaluators, createALeg01OrdinaryEvaluator, createALe
 import type { NextgenMarriageInput } from '../rules/a/index.ts'
 import type { OrdinaryMarriageInput } from '../rules/a/index.ts'
 import type { ReviewedLegalInput } from '../rules/a/index.ts'
-import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB005NextgenEvaluator, createB009WorldStateEvaluator } from '../rules/b/index.ts'
-import type { B009Calibration } from '../rules/b/index.ts'
+import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB005NextgenEvaluator, createB009WorldStateEvaluator, createB001PromotionEvaluator } from '../rules/b/index.ts'
+import type { B009Calibration, B001PromotionInput } from '../rules/b/index.ts'
 import type { B004Calibration } from '../rules/b/index.ts'
 import { createCalibrationEvaluators } from '../rules/c/index.ts'
 import { EXPERIMENTAL_TUNING } from '../tuning.ts'
@@ -31,6 +31,8 @@ export type AutonomousEvaluatorInput = Readonly<{
   ordinaryMarriage?: OrdinaryMarriageInput
   /** DEC-058: 実年齢・近親・双方相手選択・双方契約同意の年次法制。explicit opt-in only。 */
   nextgenMarriage?: NextgenMarriageInput
+  /** DEC-024/058: 出典付き人口コホート・身元の二重照合後のみ記名Personへ昇格。 */
+  promotion?: B001PromotionInput
   /** DEC-058: B-003で確定した当年の配偶者死亡を婚姻の法的終了へ接続。既定false。 */
   spouseDeathDissolution?: boolean
   /** 明示されたCALIBRATION_ONLY権限に限る後年相続審査・新委任（既定は非適用）。 */
@@ -73,6 +75,8 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     : createALeg01CalibrationEvaluator(input.marriageEvidence??[])
   if(!marriage.ok)return {ok:false,issues:marriage.issues.map(x=>typeof x==='string'?x:x.code+':'+x.path)}
   const marriageEvaluator=input.spouseDeathDissolution?withSpouseDeathDissolution(marriage.evaluator):marriage.evaluator
+  const promotion=input.promotion?createB001PromotionEvaluator(input.promotion):undefined
+  if(promotion&&!promotion.ok)return {ok:false,issues:[...promotion.issues]}
   const reviewed=input.reviewedLegal?createReviewedLegalEvaluators(input.reviewedLegal):undefined
   if(reviewed&&!reviewed.ok)return {ok:false,issues:[...reviewed.issues]}
   const evaluators:EvaluatorMap={
@@ -81,6 +85,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     'B-009':createB009WorldStateEvaluator(input.trustBase,input.b009Calibration),
     'B-002':createB002WorldStateEvaluator(autonomy),
     'A-DYN-02':createADyn02EvidenceEvaluator(),
+    ...(promotion?.ok?{'B-001':promotion.evaluator}:{}),
     'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,input.ledger),
     'B-005':input.nextgenMarriage?createB005NextgenEvaluator(input.nextgenMarriage.calibration):createB005CalibrationEvaluator(),
     'A-LEG-01':marriageEvaluator,

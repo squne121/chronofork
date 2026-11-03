@@ -18,7 +18,7 @@ import {
   titleRecognitionSet,
 } from './handlers-legal.ts'
 import { resourceTransaction } from './handlers-ledger.ts'
-import { personBirth, personDeath } from './handlers-person.ts'
+import { personBirth, personDeath, personPromote } from './handlers-person.ts'
 import { personPairTrustSet } from './handlers-relationship.ts'
 import { populationCasualty, populationCohort, supportSet } from './handlers-population.ts'
 import { regionControlSet } from './handlers-region.ts'
@@ -46,6 +46,7 @@ const HANDLERS: HandlerMap = {
   CONTROL_MANDATE_SET: controlMandateSet,
   TAX_MANDATE_SET: taxMandateSet,
   PERSON_BIRTH: personBirth,
+  PERSON_PROMOTE: personPromote,
   PERSON_PAIR_TRUST_SET: personPairTrustSet,
   PERSON_DEATH: personDeath,
   POPULATION_COHORT: populationCohort,
