@@ -14,6 +14,7 @@ import type {
   Marriage,
   MarriageContract,
   Person,
+  PersonPairTrust,
   PopulationGroup,
   Region,
   ResourceAccount,
@@ -274,6 +275,16 @@ function person(d: Sink, v: unknown, p: string): Person {
   }
 }
 
+/** Bの年次ペア信頼は古いWorldStateでは省略可能。存在すれば全項目を厳密に検査する。 */
+function personPairTrust(d: Sink, v: unknown, p: string): PersonPairTrust {
+  const o = obj(d, v, p, ['personIds', 'value', 'lastUpdatedYear'])
+  return {
+    personIds: pair(d, o, 'personIds', p),
+    value: num(d, o, 'value', p),
+    lastUpdatedYear: num(d, o, 'lastUpdatedYear', p),
+  }
+}
+
 function holder(d: Sink, v: unknown, p: string): TitleHolder {
   const status = isPlainObject(v) ? v['status'] : undefined
   if (status === 'UNDETERMINED') {
@@ -436,7 +447,7 @@ function deferred(d: Sink, v: unknown, p: string): DeferredEffect {
 export function parseWorldState(input: unknown, d: Sink): WorldState {
   const p = '$'
   const o = obj(d, input, p, [
-    'year', 'countries', 'regions', 'groups', 'houses', 'persons', 'titles', 'legal',
+    'year', 'countries', 'regions', 'groups', 'houses', 'persons', 'pairTrust', 'titles', 'legal',
     'resources', 'demographics', 'deferred',
   ])
   const lo = obj(d, o['legal'], '$.legal', ['dynasties', 'marriages', 'cases', 'controlMandates', 'taxMandates'])
@@ -448,6 +459,7 @@ export function parseWorldState(input: unknown, d: Sink): WorldState {
     groups: arr(d, o, 'groups', p, (v, q) => group(d, v, q)),
     houses: arr(d, o, 'houses', p, (v, q) => house(d, v, q)),
     persons: arr(d, o, 'persons', p, (v, q) => person(d, v, q)),
+    ...(o['pairTrust'] === undefined ? {} : { pairTrust: arr(d, o, 'pairTrust', p, (v, q) => personPairTrust(d, v, q)) }),
     titles: arr(d, o, 'titles', p, (v, q) => title(d, v, q)),
     legal: {
       dynasties: arr(d, lo, 'dynasties', '$.legal', (v, q) => dynasty(d, v, q)),
