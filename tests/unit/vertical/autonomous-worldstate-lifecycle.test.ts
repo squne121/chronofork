@@ -119,6 +119,14 @@ describe('実WorldState起点の自律人物・世代交代（CALIBRATION_ONLY�
       legalDynasty:{status:'DETERMINED',dynastyId:'dynasty-vargas'},
     })
     expect(at(a0,1262).persons.some(x=>x.personId===id)).toBe(false)
+    // 生まれた直後からB009が新人物と既存人物の信頼をWorldStateへ記録する。
+    const newbornRelations=at(a1,1262).pairTrust?.filter(r=>r.personIds.includes(id)) ?? []
+    expect(newbornRelations.length).toBeGreaterThan(0)
+    expect(newbornRelations.every(r=>r.lastUpdatedYear===1261)).toBe(true)
+    // 成人後は従来のNO_BASE_TRUSTではなく、蓄積された関係値でB004が実判断する。
+    const adultCandidates=t(a1,'B-004',1279).filter(r=>r.actorRef.kind==='PERSON_PAIR'&&r.actorRef.ids.includes(id))
+    expect(adultCandidates.length).toBeGreaterThan(0)
+    expect(adultCandidates.some(r=>typeof r.candidates[0]?.inputs.effectiveTrust==='number')).toBe(true)
     expect(status(a1,'B-002',1261)).toContain('ACCEPT')
     const birth=t(a1,'B-002',1261).find(x=>x.actorRef.kind==='PERSON'&&x.actorRef.id===id)!
     expect(birth.random?.stream).toBe('ENDOGENOUS')
