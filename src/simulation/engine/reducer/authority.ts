@@ -33,6 +33,8 @@ function allowances(c: DomainCommand): readonly Allowance[] {
     case 'CONTROL_MANDATE_SET':
     case 'TAX_MANDATE_SET':
       return [{ domain: 'A', phases: LEGAL_PHASES }]
+    case 'PERSON_PAIR_TRUST_SET':
+      return [{ domain: 'B', phases: [3] }]
     case 'PERSON_BIRTH':
       return [{ domain: 'B', phases: [3] }]
     case 'PERSON_DEATH':
@@ -89,6 +91,9 @@ export function checkCommandAuthority(
 
   if (!Object.hasOwn(COMMAND_WRITE_OWNER, c.type)) return reject('INVALID_COMMAND', `未知の command 種別: ${String((c as { type: unknown }).type)}`)
   const owner = COMMAND_WRITE_OWNER[c.type]
+  if (c.type === 'PERSON_PAIR_TRUST_SET' && s.sourceRuleId !== 'B-009') {
+    return reject('WRITE_OWNER_VIOLATION', 'PERSON_PAIR_TRUST_SETはB-009以外では発行できません')
+  }
   const domain = getRule(s.sourceRuleId).domain
   if (!OWNER_ISSUERS[owner].includes(domain)) {
     return reject('WRITE_OWNER_VIOLATION', `${c.type} の確定責務は ${owner} です。領域 ${domain}（${s.sourceRuleId}）は発行できません`)

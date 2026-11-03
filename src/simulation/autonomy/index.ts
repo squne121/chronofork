@@ -6,7 +6,8 @@ import { createPairTrustView } from '../intervention/index.ts'
 import type { StatModifierLedger } from '../intervention/index.ts'
 import { createALeg01CalibrationEvaluator, createADyn02EvidenceEvaluator, createASuc04WorldStateEvaluator, createATit07EvidenceEvaluator } from '../rules/a/index.ts'
 import type { MarriageApprovalEvidence } from '../rules/a/index.ts'
-import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator } from '../rules/b/index.ts'
+import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB009WorldStateEvaluator } from '../rules/b/index.ts'
+import type { B009Calibration } from '../rules/b/index.ts'
 import type { B004Calibration } from '../rules/b/index.ts'
 import { createCalibrationEvaluators } from '../rules/c/index.ts'
 import { EXPERIMENTAL_TUNING } from '../tuning.ts'
@@ -25,6 +26,7 @@ export type AutonomousEvaluatorInput = Readonly<{
   autonomy?: AutonomyCalibration
   tuning?: TuningConfig
   b004Calibration?: B004Calibration
+  b009Calibration?: B009Calibration
 }>
 export type AutonomousEvaluatorResult =
   | Readonly<{ ok: true; evaluators: EvaluatorMap }>
@@ -33,7 +35,7 @@ export type AutonomousEvaluatorResult =
 /**
  * A0からA1へのfork時はbranchStartWorldに必ずfork年初のWorldStateと新ledgerを渡す。
  * ルールの完全性・係数同一性の自動照合はない。呼出側が同じ構成/校正パラメータを固定すること。
- * C004の人口枠、B002出生、B003自然死、B004動的候補、B005法照会、A-LEG01明示審査、
+ * C004の人口枠、B002出生、B003自然死、B009関係値の年次確定、B004動的候補、B005法照会、A-LEG01明示審査、
  * A-DYN02明示条項、A-SUC04相続PENDING、A-TIT07未確定所有者処理を合成する。
  */
 export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorInput):AutonomousEvaluatorResult {
@@ -52,9 +54,10 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   const evaluators:EvaluatorMap={
     ...createCalibrationEvaluators(input.tuning??EXPERIMENTAL_TUNING),
     'B-003':createB003WorldStateEvaluator(autonomy),
+    'B-009':createB009WorldStateEvaluator(input.trustBase,input.b009Calibration),
     'B-002':createB002WorldStateEvaluator(autonomy),
     'A-DYN-02':createADyn02EvidenceEvaluator(),
-    'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration),
+    'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,input.ledger),
     'B-005':createB005CalibrationEvaluator(),
     'A-LEG-01':marriage.evaluator,
     'A-SUC-04':createASuc04WorldStateEvaluator(),

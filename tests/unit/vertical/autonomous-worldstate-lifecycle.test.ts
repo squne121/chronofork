@@ -90,8 +90,14 @@ describe('実WorldState起点の自律人物・世代交代（CALIBRATION_ONLY�
       x.actorRef.ids[0]===P4&&x.actorRef.ids[1]===P5)
     const p0=pair(a0,1260)!,p1=pair(a1,1260)!
     expect([p0.status,p1.status]).toEqual(['REJECT','ACCEPT'])
-    expect([p0.candidates[0]!.score,p1.candidates[0]!.score]).toEqual([10,30])
+    expect([p0.candidates[0]!.score,p1.candidates[0]!.score]).toEqual([21,41])
     expect(p1.modifierIds).toEqual([TRUST_BOOST.modifierId])
+    const rel0=at(a0,1261).pairTrust?.find(r=>r.personIds[0]===P4&&r.personIds[1]===P5)
+    const rel1=at(a1,1261).pairTrust?.find(r=>r.personIds[0]===P4&&r.personIds[1]===P5)
+    expect(rel0).toMatchObject({value:21,lastUpdatedYear:1260})
+    expect(rel1).toEqual(rel0) // 介入modifierはWorldState基礎値を変更しない
+    expect(p1.candidates[0]?.inputs.trustSource).toBe('B009_WORLDSTATE')
+
     expect(events(a0,'MARRIAGE_REGISTER')).toHaveLength(0)
     const marriages=events(a1,'MARRIAGE_REGISTER')
     expect(marriages).toHaveLength(1)
@@ -113,6 +119,14 @@ describe('実WorldState起点の自律人物・世代交代（CALIBRATION_ONLY�
       legalDynasty:{status:'DETERMINED',dynastyId:'dynasty-vargas'},
     })
     expect(at(a0,1262).persons.some(x=>x.personId===id)).toBe(false)
+    // 生まれた直後からB009が新人物と既存人物の信頼をWorldStateへ記録する。
+    const newbornRelations=at(a1,1262).pairTrust?.filter(r=>r.personIds.includes(id)) ?? []
+    expect(newbornRelations.length).toBeGreaterThan(0)
+    expect(newbornRelations.every(r=>r.lastUpdatedYear===1261)).toBe(true)
+    // 成人後は従来のNO_BASE_TRUSTではなく、蓄積された関係値でB004が実判断する。
+    const adultCandidates=t(a1,'B-004',1279).filter(r=>r.actorRef.kind==='PERSON_PAIR'&&r.actorRef.ids.includes(id))
+    expect(adultCandidates.length).toBeGreaterThan(0)
+    expect(adultCandidates.some(r=>typeof r.candidates[0]?.inputs.effectiveTrust==='number')).toBe(true)
     expect(status(a1,'B-002',1261)).toContain('ACCEPT')
     const birth=t(a1,'B-002',1261).find(x=>x.actorRef.kind==='PERSON'&&x.actorRef.id===id)!
     expect(birth.random?.stream).toBe('ENDOGENOUS')
@@ -179,7 +193,7 @@ describe('実WorldState起点の自律人物・世代交代（CALIBRATION_ONLY�
     expect(RULE_REGISTRY.every(r=>r.implementationStatus==='TODO')).toBe(true)
     expect(timeline.autonomousHistory.status).toBe('NOT_ESTABLISHED')
     expect(timeline.coverage.injectedTodoRuleIds).toEqual(expect.arrayContaining([
-      'RULE-C-004','B-002','B-003','B-004','B-005','A-LEG-01','A-DYN-02','A-SUC-04','A-TIT-07',
+      'RULE-C-004','B-002','B-003','B-009','B-004','B-005','A-LEG-01','A-DYN-02','A-SUC-04','A-TIT-07',
     ]))
   })
 
@@ -190,6 +204,8 @@ describe('実WorldState起点の自律人物・世代交代（CALIBRATION_ONLY�
     expect(b.decisionTraces).toEqual(a1.decisionTraces)
     expect(b.ledger).toEqual(a1.ledger)
     expect(a1.evaluatorProfile).toEqual(a0.evaluatorProfile)
+  })
+  it('同一seed・同じ枝IDで再計算するとEvent/Traceを含め完全一致する',()=>{
     expect(fork(a0)).toEqual(a1)
   })
 })
@@ -248,7 +264,7 @@ describe('WorldStateからの自律生成 — 安全な失敗と境界',()=>{
       marriageEvidence:[],autonomy:CONFIG})
     expect(map.ok).toBe(true)
     expect(Object.keys(map.ok?map.evaluators:{}).sort()).toEqual([
-      'A-DYN-02','A-LEG-01','A-SUC-04','A-TIT-07','B-002','B-003','B-004','B-005','RULE-C-004',
+      'A-DYN-02','A-LEG-01','A-SUC-04','A-TIT-07','B-002','B-003','B-004','B-005','B-009','RULE-C-004',
     ].sort())
   })
 })
