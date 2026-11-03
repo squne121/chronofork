@@ -25,7 +25,8 @@ test('experimental・partial・正式な勝敗未成立・37件TODOを明示す�
   const body = page.locator('body')
   await expect(body).not.toContainText(/勝利|敗北|達成/)
   await expect(body).not.toContainText('参照不明')
-  await expect(page.getByRole('button', { name: /介入|比較|適用|保存/ })).toHaveCount(0)
+  await expect(page.getByTestId('branch-run')).toBeVisible()
+  await expect(page.getByTestId('branch-results')).toHaveCount(0)
 })
 
 test('年スライダーで 1250→1251→1350 を選び、実計算の人口が変化する', async ({ page }) => {
