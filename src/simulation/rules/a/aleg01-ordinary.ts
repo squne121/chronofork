@@ -69,8 +69,13 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
     const commands:MarriageRegisterCommand[]=[]
     const responses:CrossDomainResponse[]=[]
     const traceDrafts:DecisionTraceDraft[]=[]
+    const queries=ctx.marriageQueries??[]
+    const simultaneous=new Map<Id,number>()
+    // 同年に複数の交渉意思が同一人物へ集中する場合、ID順で配偶者を決定しない。
+    for(const q of queries)for(const personId of q.payload.personIds)
+      simultaneous.set(personId,(simultaneous.get(personId)??0)+1)
     const reserved=new Set<Id>()
-    for(const q of ctx.marriageQueries??[]){
+    for(const q of queries){
       const pair=q.payload.personIds
       const [a,b]=pair.map(id=>world.persons.find(p=>p.personId===id))
       const hA=a&&world.houses.find(h=>h.houseId===a.houseId)
@@ -98,6 +103,7 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
       let status:'ACCEPT'|'REJECT'|'DEFER'='DEFER'
       let why: string
       if(!a||!b||!a.alive||!b.alive)why='PERSON_UNAVAILABLE'
+      else if(pair.some(id=>(simultaneous.get(id)??0)>1))why='SAME_YEAR_COMPETING_PROPOSALS'
       else if(kinship)why='KNOWN_CLOSE_KINSHIP'
       else if(occupied)why='ACTIVE_MARRIAGE_EXISTS'
       else if(!countryId)why='SAME_COUNTRY_JURISDICTION_UNVERIFIED'
