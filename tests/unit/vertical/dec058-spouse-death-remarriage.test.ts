@@ -73,6 +73,17 @@ describe('DEC-058 配偶者死亡時の婚姻終了と翌年再婚',()=>{
     expect(second.events.filter(e=>e.eventType==='MARRIAGE_DISSOLVE').length).toBe(0)
     expect(runYear(first.world,{seed:1,branchId:'A0',evaluators:config(first.world,true)})).toEqual(second)
   })
+  it('同一年に両配偶者が自然死亡したときも、双方の確定根拠を確認して婚姻を一度だけ終了',()=>{
+    const w=world1280()
+    const bothOld:WorldState={...w,persons:w.persons.map(p=>p.personId===P5?{...p,birthYear:1210}:p)}
+    const r=completed(runYear(bothOld,{seed:1,branchId:'A0',evaluators:config(bothOld,true)}))
+    expect(r.world.persons.find(p=>p.personId===P4)).toMatchObject({alive:false,deathYear:1280})
+    expect(r.world.persons.find(p=>p.personId===P5)).toMatchObject({alive:false,deathYear:1280})
+    expect(r.world.legal.marriages.find(m=>m.marriageId===marriageId)).toMatchObject({
+      status:'DISSOLVED',dissolvedYear:1280,
+    })
+    expect(r.events.filter(e=>e.eventType==='MARRIAGE_DISSOLVE')).toHaveLength(1)
+  })
   it('有効婚姻を登録したまま、死亡Event根拠なしに婚姻を終了させない',()=>{
     const w=world1280()
     const dead:WorldState={...w,persons:w.persons.map(p=>p.personId===P4?
