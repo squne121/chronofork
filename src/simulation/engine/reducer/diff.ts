@@ -11,6 +11,7 @@ const COLLECTIONS: readonly Collection[] = [
   ['groups', (w) => w.groups, (x: { groupId: string }) => x.groupId],
   ['houses', (w) => w.houses, (x: { houseId: string }) => x.houseId],
   ['persons', (w) => w.persons, (x: { personId: string }) => x.personId],
+  ['pairTrust', (w) => w.pairTrust ?? [], (x: { personIds: readonly [string,string] }) => JSON.stringify(x.personIds)],
   ['titles', (w) => w.titles, (x: { titleId: string }) => x.titleId],
   ['legal.dynasties', (w) => w.legal.dynasties, (x: { dynastyId: string }) => x.dynastyId],
   ['legal.marriages', (w) => w.legal.marriages, (x: { marriageId: string }) => x.marriageId],
