@@ -25,7 +25,8 @@ export const createASuc04WorldStateEvaluator=():RuleEvaluator=>(world:WorldState
   const commands:LegalCaseSetCommand[]=[]
   for(const title of titles){
     if(title.holder.status!=='HELD')continue
-    const predecessor=world.persons.find(p=>p.personId===title.holder.personId)
+    const predecessorId=title.holder.personId
+    const predecessor=world.persons.find(p=>p.personId===predecessorId)
     if(!predecessor||predecessor.alive||predecessor.deathYear!==ctx.year){
       throw new EvaluationFailure('死亡済みのTitle保持者とB003の死亡記録が不一致',[{code:'DEATH_TITLE_MISMATCH',message:title.titleId}])
     }
