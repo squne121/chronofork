@@ -51,7 +51,7 @@ function execute(clearances:readonly SupportingKinshipClearance[]){
   return runYear(world,{seed:SEED,branchId:'synthetic-A0',evaluators:{
     'B-001':supplyEvaluator,
     'B-004':createB004WorldStateEvaluator(trustView,EXPERIMENTAL_AUTONOMY),
-    'B-005':createB005NextgenEvaluator(),
+    'B-005':createB005NextgenEvaluator(undefined,clearances),
     'A-LEG-01':legal.evaluator,
   }})
 }

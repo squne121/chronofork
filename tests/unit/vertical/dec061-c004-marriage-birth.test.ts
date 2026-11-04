@@ -2,7 +2,9 @@
 import {describe,expect,it} from 'vitest'
 import {createExperimentalWorld,createExperimentalOrdinaryLegalTrial} from '../../../src/scenario/experimental/index.ts'
 import type {WorldState} from '../../../src/simulation/contracts/index.ts'
-import {runYear} from '../../../src/simulation/engine/index.ts'
+import {NALVEN_DYNASTY_ID} from '../../../src/scenario/experimental/index.ts'
+import {evaluateGoal} from '../../../src/simulation/goal.ts'
+import {runYear,runTimeline} from '../../../src/simulation/engine/index.ts'
 import {createCalibrationEvaluators} from '../../../src/simulation/rules/c/index.ts'
 import {EXPERIMENTAL_TUNING} from '../../../src/simulation/tuning.ts'
 import {createB001SupportingMarriageEvaluator,createB002WorldStateEvaluator,
@@ -60,7 +62,7 @@ function calendar(clearances:readonly SupportingKinshipClearance[]){
   if(!l.ok)throw new Error('LEGAL_CONFIG:'+l.issues.join(','))
   return {...c4,'B-001':supportEvaluator,
     'B-004':createB004WorldStateEvaluator(trust,auto),
-    'B-005':createB005NextgenEvaluator(),
+    'B-005':createB005NextgenEvaluator(undefined,clearances),
     'A-LEG-01':l.evaluator,
     'B-002':createB002WorldStateEvaluator(auto),
     'A-DYN-02':createADyn02EvidenceEvaluator(),
@@ -68,6 +70,27 @@ function calendar(clearances:readonly SupportingKinshipClearance[]){
 }
 
 describe('DEC-061: 過去年C004の匿名出生→非操作配偶者→翌年実出生',()=>{
+  it('禁親証拠なしの高得点補助候補が、別の適格KEY候補を順位上占有しない',()=>{
+    const alternative='person-exp-05'
+    const keyPair=[p2,alternative].sort() as [string,string]
+    const competitor=createPairTrustView({
+      base:[{personIds:pair,value:90},{personIds:keyPair,value:40}],
+      ledger:[],knownPersonIds:new Set([...start.persons.map(p=>p.personId),id]),
+    })
+    if(!competitor.ok)throw new Error('COMPETING_VIEW_INVALID')
+    const r=runYear(toAdult(),{seed,evaluators:{
+      ...calendar([]),'B-004':createB004WorldStateEvaluator(competitor.view,auto),
+    }})
+    expect(r.status).toBe('COMPLETED')
+    if(r.status!=='COMPLETED')return
+    const b5=r.traces.filter(t=>t.ruleId==='B-005'&&t.actorRef.kind==='PERSON_PAIR')
+    const support=b5.find(t=>t.actorRef.kind==='PERSON_PAIR'&&t.actorRef.ids.join('|')===pair.join('|'))
+    const key=b5.find(t=>t.actorRef.kind==='PERSON_PAIR'&&t.actorRef.ids.join('|')===keyPair.join('|'))
+    expect(support?.status).toBe('DEFER')
+    expect(support?.reasonCodes).toContain('SUPPORTING_KINSHIP_CLEARANCE_MISSING')
+    expect(key?.status).toBe('ACCEPT')
+    expect(r.world.legal.marriages.every(m=>!m.personIds.includes(id))).toBe(true)
+  })
   it('別個の禁親証拠がなければ婚姻・出生を登録しない',()=>{
     const r=runYear(toAdult(),{seed,evaluators:calendar([])})
     expect(r.status).toBe('COMPLETED')
