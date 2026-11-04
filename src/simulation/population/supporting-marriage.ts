@@ -166,17 +166,19 @@ export function proposeSupportingMarriageCandidates(
     const age=world.year-pool.birthYear
     if(age<18||age>options.maximumPreviewAge)continue
     // サンプルは候補探査であり、婚姻の判断スコアではない。偏ったID順の最終選択を行わない。
-    const seen=new Set<number>()
-    const tries=Math.min(pool.memberCount,options.perCohortSamples)
-    for(let i=0;i<tries*3&&seen.size<tries;i++){
-      const slot=Math.floor(drawRandom(options.seed,{
-        stream:'ENDOGENOUS',year:world.year,phase:3,ruleId:'B-001',
-        actorId:seekerId,targetId:pool.cohortId,eventKey:'SUPPORTING_CANDIDATE:'+i,
-      })*pool.memberCount)
-      if(seen.has(slot))continue
-      seen.add(slot)
+    // 使用済みのslotを引いたとしても未使用者が残る限り探索を続ける。
+    // シードで開始位置を決め、全slotを最大1回だけ巡回するため空候補の偽判定を防ぐ。
+    const samples=Math.min(pool.memberCount,options.perCohortSamples)
+    const start=Math.floor(drawRandom(options.seed,{
+      stream:'ENDOGENOUS',year:world.year,phase:3,ruleId:'B-001',
+      actorId:seekerId,targetId:pool.cohortId,eventKey:'SUPPORTING_CANDIDATE_START',
+    })*pool.memberCount)
+    let selected=0
+    for(let i=0;i<pool.memberCount&&selected<samples;i++){
+      const slot=(start+i)%pool.memberCount
       const id=supportingCandidateId(pool.cohortId,slot)
       if(options.usedCandidateIds?.has(id)||world.persons.some(p=>p.personId===id))continue
+      selected++
       const candidate:SupportingMarriageCandidate={
         candidateId:id,cohortId:pool.cohortId,ordinal:slot,
         groupId:pool.groupId,affiliationHouseId:pool.affiliationHouseId,

@@ -43,6 +43,24 @@ describe('DEC-061: 大勢の人口集団からの非操作対象の婚姻候補�
     const next=proposeSupportingMarriageCandidates(world,seeker,[cohort],{...options,usedCandidateIds:used})
     expect(next.candidates.every(c=>!used.has(c.candidateId))).toBe(true)
   })
+  it('perCohortSamples=1で使用済み候補を引いても未使用構成員まで探索を続ける',()=>{
+    const one={...options,perCohortSamples:1,maxCandidates:1}
+    const first=proposeSupportingMarriageCandidates(world,seeker,[cohort],one)
+    expect(first.status).toBe('PROPOSED')
+    expect(first.candidates).toHaveLength(1)
+    const consumed=new Set(first.candidates.map(c=>c.candidateId))
+    const second=proposeSupportingMarriageCandidates(world,seeker,[cohort],{
+      ...one,usedCandidateIds:consumed,
+    })
+    expect(second.status).toBe('PROPOSED')
+    expect(second.candidates).toHaveLength(1)
+    expect(second.candidates[0]?.candidateId).not.toBe(first.candidates[0]?.candidateId)
+    const allUsed=new Set(Array.from({length:cohort.memberCount},(_,i)=>
+      supportingCandidateId(cohort.cohortId,i)))
+    expect(proposeSupportingMarriageCandidates(world,seeker,[cohort],{
+      ...one,usedCandidateIds:allUsed,
+    })).toMatchObject({status:'DEFER',candidates:[],reasonCodes:['NO_COHORT_CANDIDATE_AVAILABLE']})
+  })
   it('男女・成年・同一主権管轄が一致しない候補は法的婚姻可能と扱わない',()=>{
     const wrongSex=proposeSupportingMarriageCandidates(world,seeker,[{...cohort,sex:'MALE'}],options)
     expect(wrongSex.candidates).toHaveLength(0)

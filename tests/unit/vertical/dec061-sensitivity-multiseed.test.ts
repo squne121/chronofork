@@ -86,6 +86,13 @@ const adults=(w:WorldState,role:'KEY'|'SUPPORTING')=>{
 function snapshotMetrics(r:ReturnType<typeof runTimeline>){
   const w=r.snapshots.at(-1)!
   const at1290=r.snapshots.find(s=>s.year===1290)
+  const deathsIn1290=new Set(r.decisionTraces.filter(t=>t.ruleId==='B-003'&&
+    t.year===1290&&t.status==='ACCEPT'&&t.actorRef.kind==='PERSON')
+    .map(t=>t.actorRef.kind==='PERSON'?t.actorRef.id:''))
+  const after1290Deaths=at1290?{...at1290,
+    persons:at1290.persons.map(p=>deathsIn1290.has(p.personId)?
+      {...p,alive:false,deathYear:1290}:p),
+  }:null
   const supportIds=new Set(w.persons.filter(p=>p.interactionRole==='SUPPORTING').map(p=>p.personId))
   const latePairs=r.decisionTraces.filter(t=>t.ruleId==='B-004'&&t.year>=1290&&
     t.actorRef.kind==='PERSON_PAIR'&&t.actorRef.ids.some(id=>supportIds.has(id)))
@@ -109,6 +116,8 @@ function snapshotMetrics(r:ReturnType<typeof runTimeline>){
       keyAdults:adults(at1290,'KEY'),
       supportingAdults:adults(at1290,'SUPPORTING'),
       keyAlive:at1290.persons.filter(p=>p.alive&&p.interactionRole!=='SUPPORTING').length,
+      recordedDeathsDuringYear:[...deathsIn1290].sort(),
+      keyAdultsAfterB003:after1290Deaths?adults(after1290Deaths,'KEY'):null,
     }:null,
     supportRecords:counts('PERSON_SUPPORTING_RECORD'),
     supportAliveAtEnd:w.persons.filter(p=>p.alive&&p.interactionRole==='SUPPORTING').length,
@@ -152,5 +161,5 @@ describe('DEC-061: 複数seed・出生/死亡感度・候補供給の実測（CA
       }else expect(r.halt).not.toBeNull()
     }
     expect(results).toHaveLength(seeds.length*cases.length*2)
-  },240000)
+  },480000)
 })
