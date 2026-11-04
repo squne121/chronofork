@@ -23,7 +23,7 @@ const cohort:SupportingMarriageCohort={
 }
 const config={cohorts:[cohort],maxRecordsPerYear:1,maxAliveSupporting:2,perCohortSamples:4,maximumPreviewAge:50}
 const supply=createB001SupportingMarriageEvaluator(config)
-if(!supply.ok)throw new Error('SUPPLY_FACTORY:'+supply.issues.join(','))
+const supplyEvaluator=supply.ok?supply.evaluator:(()=>{throw new Error('SUPPLY_FACTORY:'+supply.issues.join(','))})()
 const predicted=proposeSupportingMarriageCandidates(world,seeker,[cohort],{
   seed:SEED,maxCandidates:1,perCohortSamples:4,maximumPreviewAge:50,
 })
@@ -42,15 +42,15 @@ const trust=createPairTrustView({
   base:[{personIds:pair,value:40}],ledger:[],
   knownPersonIds:new Set([...world.persons.map(p=>p.personId),supportId]),
 })
-if(!trust.ok)throw new Error('TRUST_FACTORY_INVALID')
+const trustView=trust.ok?trust.view:(()=>{throw new Error('TRUST_FACTORY_INVALID')})()
 function execute(clearances:readonly SupportingKinshipClearance[]){
   const legal=createALeg01NextgenEvaluator({
     book:trial.book,laws:trial.laws,supportingKinshipClearances:clearances,
   })
   if(!legal.ok)throw new Error('LEGAL_FACTORY:'+legal.issues.join(','))
   return runYear(world,{seed:SEED,branchId:'synthetic-A0',evaluators:{
-    'B-001':supply.evaluator,
-    'B-004':createB004WorldStateEvaluator(trust.view,EXPERIMENTAL_AUTONOMY),
+    'B-001':supplyEvaluator,
+    'B-004':createB004WorldStateEvaluator(trustView,EXPERIMENTAL_AUTONOMY),
     'B-005':createB005NextgenEvaluator(),
     'A-LEG-01':legal.evaluator,
   }})
