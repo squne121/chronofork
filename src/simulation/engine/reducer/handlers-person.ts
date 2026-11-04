@@ -101,7 +101,7 @@ export const personSupportingRecord: Handler<PersonSupportingRecordCommand> = (d
   }
   // 当年C004で生まれた者を成人の婚姻候補とみなさない。将来コホートの保存/復元は別工程。
   if (c.birthBacking !== 'INITIAL_POPULATION' || p.birthYear >= 1250) {
-    return fail('SUPPORTING_SOURCE_UNVERIFIED', '現時点では1250年以前の試験用初期人口コホートだけを個別記録できます')
+    return fail('LEGAL_BASIS_MISSING', '現時点では1250年以前の試験用初期人口コホートだけを個別記録できます')
   }
   if (findPerson(w, p.personId)) return fail('ID_EXISTS', '補助人物IDを再利用できません', [p.personId])
   const group = w.groups.find(g => g.groupId === p.originGroupId)

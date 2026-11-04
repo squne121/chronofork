@@ -65,9 +65,9 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     return {ok:false,issues:['INVALID_INPUT_WORLD_OR_LEDGER']}
   }
   // 補助人物は法的追跡できても、プレイヤーの直接介入対象にはならない。
-  const supporting=new Set(input.branchStartWorld.persons.filter(p=>p.interactionRole==='SUPPORTING').map(p=>p.personId))
+  const supportingPersonIds=new Set(input.branchStartWorld.persons.filter(p=>p.interactionRole==='SUPPORTING').map(p=>p.personId))
   if(input.ledger.some(m=>m?.targetRef?.kind==='PERSON_PAIR'&&
-    Array.isArray(m.targetRef.ids)&&m.targetRef.ids.some((id:string)=>supporting.has(id))))return {ok:false,issues:['SUPPORTING_PERSON_NOT_DIRECTLY_INTERACTABLE']}
+    Array.isArray(m.targetRef.ids)&&m.targetRef.ids.some((id:string)=>supportingPersonIds.has(id))))return {ok:false,issues:['SUPPORTING_PERSON_NOT_DIRECTLY_INTERACTABLE']}
   const known=new Set(input.branchStartWorld.persons.map(p=>p.personId))
   const trust=createPairTrustView({base:input.trustBase,ledger:input.ledger,knownPersonIds:known})
   if(!trust.ok)return {ok:false,issues:trust.issues.map(x=>x.code+':'+x.path)}
