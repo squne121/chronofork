@@ -59,12 +59,13 @@ describe('DEC-061: 大勢の人口集団からの非操作対象の婚姻候補�
   })
   it('C-004で確定した出生枠を使えるが、実際の枠が足りないなら保留する',()=>{
     const derived:WorldState={...world,year:1270,demographics:{
-      cohortSlots:[{groupId:'group-east-elite',year:1250,birthSlots:25,deathSlots:8,
-        claimedBirths:1,claimedDeaths:0}],
+      cohortSlots:[],
+      anonymousBirthHistory:[{groupId:'group-east-elite',year:1250,anonymousBirths:24}],
     }}
     const birthCohort:SupportingMarriageCohort={
       ...cohort,birthYear:1250,memberCount:4,
       source:'C004_COHORT',sourceEvidenceId:'RULE-C-004:1250:east-elite',
+      survivorAttestationId:'synthetic:current-survivors:1270:east-elite',
     }
     expect(validateSupportingMarriageCohorts(derived,[birthCohort])).toEqual([])
     const r=proposeSupportingMarriageCandidates(derived,seeker,[birthCohort],options)

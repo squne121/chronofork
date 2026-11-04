@@ -99,10 +99,16 @@ export const personSupportingRecord: Handler<PersonSupportingRecordCommand> = (d
       !Number.isSafeInteger(p.birthYear) || w.year - p.birthYear < 18) {
     return fail('INVALID_COMMAND', '補助候補のコホート・構成員番号・成人条件が不正です')
   }
-  // 当年C004で生まれた者を成人の婚姻候補とみなさない。将来コホートの保存/復元は別工程。
-  if (c.birthBacking !== 'INITIAL_POPULATION' || p.birthYear >= 1250) {
-    return fail('LEGAL_BASIS_MISSING', '現時点では1250年以前の試験用初期人口コホートだけを個別記録できます')
-  }
+  // 初期人口と過去年C004匿名出生枠を区別する。出生数のみで成人生存や血縁を推定しない。
+  if(c.birthBacking==='INITIAL_POPULATION'){
+    if(p.birthYear>=1250)
+      return fail('LEGAL_BASIS_MISSING','初期人口コホートの出生年が不正です')
+  }else if(c.birthBacking==='C004_COHORT'){
+    const record=w.demographics.anonymousBirthHistory?.find(
+      s=>s.groupId===p.originGroupId&&s.year===p.birthYear)
+    if(p.birthYear<1250||!record||c.cohortSize>record.anonymousBirths)
+      return fail('LEGAL_BASIS_MISSING','過去C004匿名出生枠の記録がありません')
+  }else return fail('INVALID_COMMAND','人口出生出典の種類が不正です')
   if (findPerson(w, p.personId)) return fail('ID_EXISTS', '補助人物IDを再利用できません', [p.personId])
   const group = w.groups.find(g => g.groupId === p.originGroupId)
   const region = group && w.regions.find(r => r.regionId === group.regionId)
