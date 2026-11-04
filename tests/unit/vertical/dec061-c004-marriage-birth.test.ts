@@ -87,12 +87,10 @@ describe('DEC-061: 過去年C004の匿名出生→非操作配偶者→翌年実
     const marriage=r.world.legal.marriages.find(m=>m.personIds.join('|')===pair.join('|'))
     expect(marriage?.status).toBe('ACTIVE')
     expect(r.events.some(e=>e.eventType==='MARRIAGE_REGISTER')).toBe(true)
-    expect(r.world.groups).toEqual(adult.groups.map(g=>{
-      // 1268年C004の通常人口変化だけが発生し、個別人物の登録で人口は増えない。
-      const c=runYear(adult,{seed,evaluators:c4})
-      if(c.status!=='COMPLETED')throw new Error('C004_COMPARISON')
-      return c.world.groups.find(x=>x.groupId===g.groupId)!
-    }))
+    // 1268年C004の通常人口変化だけが発生し、個別人物の登録で人口は増えない。
+    const populationOnly=runYear(adult,{seed,evaluators:c4})
+    if(populationOnly.status!=='COMPLETED')throw new Error('C004_COMPARISON')
+    expect(r.world.groups).toEqual(populationOnly.world.groups)
     const born=runYear(r.world,{seed,evaluators:calendar([clearance])})
     expect(born.status).toBe('COMPLETED')
     if(born.status!=='COMPLETED')return
