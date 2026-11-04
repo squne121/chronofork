@@ -253,7 +253,7 @@ function legalDynasty(d: Sink, v: unknown, p: string): LegalDynastyState {
 function person(d: Sink, v: unknown, p: string): Person {
   const o = obj(d, v, p, [
     'personId', 'name', 'sex', 'birthYear', 'alive', 'deathYear', 'originGroupId', 'houseId',
-    'fatherId', 'motherId', 'bloodlineDynastyId', 'legalDynasty',
+    'fatherId', 'motherId', 'bloodlineDynastyId', 'legalDynasty', 'interactionRole',
   ])
   const deathYear = optNum(d, o, 'deathYear', p)
   const fatherId = optStr(d, o, 'fatherId', p)
@@ -262,6 +262,7 @@ function person(d: Sink, v: unknown, p: string): Person {
   return {
     personId: str(d, o, 'personId', p),
     name: str(d, o, 'name', p),
+    ...(o['interactionRole']===undefined?{}:{interactionRole:oneOf(d,o,'interactionRole',p,['KEY','SUPPORTING'],'KEY') as 'KEY'|'SUPPORTING'}),
     sex: oneOf(d, o, 'sex', p, ['MALE', 'FEMALE'], 'MALE'),
     birthYear: num(d, o, 'birthYear', p),
     alive: bool(d, o, 'alive', p),

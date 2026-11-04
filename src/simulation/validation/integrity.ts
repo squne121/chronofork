@@ -175,6 +175,8 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
   world.persons.forEach((x, i) => {
     const p = `$.persons[${i}]`
     const o = { kind: 'PERSON', id: x.personId }
+    if(x.interactionRole!==undefined && x.interactionRole!=='KEY' && x.interactionRole!=='SUPPORTING')
+      add('OUT_OF_RANGE',`${p}.interactionRole`,'人物の操作区分はKEY / SUPPORTINGのみ',o)
     ref('GROUP', x.originGroupId, `${p}.originGroupId`, o)
     ref('HOUSE', x.houseId, `${p}.houseId`, o)
     if (x.bloodlineDynastyId !== undefined) ref('DYNASTY', x.bloodlineDynastyId, `${p}.bloodlineDynastyId`, o)
