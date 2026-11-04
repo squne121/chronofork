@@ -134,8 +134,12 @@ function snapshotMetrics(r:ReturnType<typeof runTimeline>){
     goalBlockers:topReasons,
   }
 }
+// 長時間の多seed校正はtests/CLAUDE.mdに従い、必須quick-checkでは既定SKIP。
+// 実行: CHRONOFORK_LONG_SENSITIVITY=1 npm test -- dec061-sensitivity-multiseed
+// 新規CIで実行する場合は明示的に環境変数を設定する。過去の検証証跡はPRのrunへ残す。
+const sensitivityTest=process.env.CHRONOFORK_LONG_SENSITIVITY==='1'?it:it.skip
 describe('DEC-061: 複数seed・出生/死亡感度・候補供給の実測（CALIBRATION_ONLY）',()=>{
-  it('3 seed × 3校正条件 × A0/A1を実計算しHALTEDも証跡に残す',()=>{
+  sensitivityTest('3 seed × 3校正条件 × A0/A1を実計算しHALTEDも証跡に残す',()=>{
     const results:unknown[]=[]
     for(const scenario of cases)for(const seed of seeds)for(const branch of ['A0','A1'] as const){
       const ledger=branch==='A1'?[intervention]:[]
