@@ -1,6 +1,6 @@
 // DEC-058: B-005双方合意の当年Traceを再検証し、DEC-057の法制権限を通してのみ婚姻を登録。
 // 出生児の王朝所属はここで指定しない（A-DYN-02が唯一の明示契約条項から後年確定する）。
-import type { WorldState } from '../../contracts/index.ts'
+import type { Id, WorldState, Year } from '../../contracts/index.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
@@ -14,10 +14,22 @@ import { pairKey } from '../../intervention/index.ts'
 import { createALeg01OrdinaryEvaluator } from './aleg01-ordinary.ts'
 import type { OrdinaryMarriageReview } from './aleg01-ordinary.ts'
 
+/** 集団ラベルとは独立した、当事者ごとの試験用禁親確認証拠。人数やcohort IDだけでは生成しない。 */
+export type SupportingKinshipClearance=Readonly<{
+  clearanceId:Id
+  personIds:readonly [Id,Id]
+  countryId:Id
+  checkedYear:Year
+  validUntilYear:Year
+  sourceEvidenceId:Id
+  provenance:'CALIBRATION_ONLY'
+}>
 export type NextgenMarriageInput=Readonly<{
   book:LegalEvidenceBook
   laws:readonly OrdinaryLaw[]
   calibration?:NextgenContractCalibration
+  /** SUPPORTINGと婚姻する場合だけ別個に必要な血縁照合証拠。省略は保留。 */
+  supportingKinshipClearances?:readonly SupportingKinshipClearance[]
 }>
 export type NextgenMarriageFactory=
   | Readonly<{ok:true;evaluator:RuleEvaluator}>
@@ -28,7 +40,24 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
   const issues=[...validateNextgenContractCalibration(cal)]
   const base=createALeg01OrdinaryEvaluator({book:input.book,laws:input.laws,reviews:[]})
   if(!base.ok)issues.push(...base.issues)
+  const clearances=input.supportingKinshipClearances??[]
+  if(!Array.isArray(clearances))issues.push('SUPPORTING_CLEARANCE_LIST_INVALID')
+  else {
+    const ids=new Set<Id>()
+    for(const [i,c] of clearances.entries()){
+      if(!c||!c.clearanceId||!c.sourceEvidenceId||
+        !Array.isArray(c.personIds)||c.personIds.length!==2||
+        !c.personIds[0]||!c.personIds[1]||c.personIds[0]>=c.personIds[1]||
+        !c.countryId||!Number.isSafeInteger(c.checkedYear)||
+        !Number.isSafeInteger(c.validUntilYear)||c.validUntilYear<=c.checkedYear||
+        c.provenance!=='CALIBRATION_ONLY'||ids.has(c.clearanceId)){
+        issues.push('SUPPORTING_CLEARANCE_INVALID:'+i)
+      }
+      if(c?.clearanceId)ids.add(c.clearanceId)
+    }
+  }
   if(issues.length>0)return {ok:false,issues}
+  const stableClearances=structuredClone(clearances) as SupportingKinshipClearance[]
   const book=structuredClone(input.book) as LegalEvidenceBook
   const laws=structuredClone(input.laws) as OrdinaryLaw[]
   const evaluator:RuleEvaluator=(world:WorldState,ctx:EvaluationContext)=>{
@@ -42,6 +71,14 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
       const key=pairKey(pair)
       const eligibility=reviewDomesticMarriageEligibility(world,pair)
       if(eligibility.status!=='ELIGIBLE')continue
+      // 登録済み血縁の禁忌に加え、補助人物には人口/家門ラベルとは独立した禁親確認記録が必要。
+      if(pair.some(id=>world.persons.find(p=>p.personId===id)?.interactionRole==='SUPPORTING')){
+        const matching=stableClearances.filter(c=>
+          c.personIds[0]===pair[0]&&c.personIds[1]===pair[1]&&
+          c.countryId===eligibility.countryId&&
+          c.checkedYear<=ctx.year&&ctx.year<c.validUntilYear)
+        if(matching.length!==1)continue
+      }
       const b5=(ctx.priorTraces??[]).filter(t=>t.traceId===query.source.sourceTraceId&&
         t.ruleId==='B-005'&&t.year===ctx.year&&t.status==='ACCEPT'&&
         t.reasonCodes.includes('DEC_058_CONTRACT_NEGOTIATION')&&
