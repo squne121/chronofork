@@ -368,7 +368,7 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
       add('COHORT_SLOT_EXCEEDED', p, '請求済みの出生/死亡数が枠を超えています', o)
     }
   })
-  (world.demographics.anonymousBirthHistory ?? []).forEach((s,i) => {
+  ;(world.demographics.anonymousBirthHistory ?? []).forEach((s,i) => {
     const p = `$.demographics.anonymousBirthHistory[${i}]`
     const o = { kind: 'GROUP', id: s.groupId }
     ref('GROUP', s.groupId, p+'.groupId', o)
