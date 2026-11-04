@@ -1,6 +1,6 @@
 // B の出生（Person 登録）と共通死亡 reducer。人口の増減は C① の枠確定と POPULATION_* のみが行い、
 // ここでは個別 Person の登録・死亡確定と枠の請求済み数の更新だけを行う（人口へ再加算しない: 契約 §4）。
-import type { PersonBirthCommand, PersonDeathCommand, PersonPromotionCommand, WorldState } from '../../contracts/index.ts'
+import type { PersonBirthCommand, PersonDeathCommand, PersonPromotionCommand, PersonSupportingRecordCommand, WorldState } from '../../contracts/index.ts'
 import type { Draft, Handler } from './draft.ts'
 import { fail, findPerson } from './draft.ts'
 import type { Rejection } from './types.ts'
@@ -75,6 +75,48 @@ export const personPromote: Handler<PersonPromotionCommand> = (d, c) => {
   if(c.cohortSize>g.population||alive>=g.population)
     return fail('COHORT_CAPACITY_CONFLICT','集団の人口には未記名者の空きがありません')
   d.world={...w,persons:[...w.persons,p]}
+  return null
+}
+
+
+/**
+ * DEC-061: B-001専用の非操作補助人物記録。既存の重要人物昇格とは異なるSourceとCommandを使う。
+ * 候補が法的婚姻可能であるとの証明ではなく、人口集団に含まれる匿名者を少数だけ追跡可能にする。
+ */
+export const personSupportingRecord: Handler<PersonSupportingRecordCommand> = (d, c) => {
+  const w = d.world
+  const p = c.person
+  if (p.interactionRole !== 'SUPPORTING' || !p.alive || p.deathYear !== undefined ||
+      p.fatherId !== undefined || p.motherId !== undefined ||
+      p.bloodlineDynastyId !== undefined || p.legalDynasty.status !== 'UNDETERMINED') {
+    return fail('INVALID_COMMAND', '補助人物は非操作・生存・血縁/王朝未確定のまま記録してください')
+  }
+  if (!c.sourceEvidenceId || !c.cohortId || !c.familyPoolId ||
+      !Number.isSafeInteger(c.cohortSize) || c.cohortSize < 1 ||
+      !Number.isSafeInteger(c.memberOrdinal) || c.memberOrdinal < 0 ||
+      c.memberOrdinal >= c.cohortSize ||
+      p.personId !== 'support:population:' + JSON.stringify([c.cohortId, c.memberOrdinal]) ||
+      !Number.isSafeInteger(p.birthYear) || w.year - p.birthYear < 18) {
+    return fail('INVALID_COMMAND', '補助候補のコホート・構成員番号・成人条件が不正です')
+  }
+  // 当年C004で生まれた者を成人の婚姻候補とみなさない。将来コホートの保存/復元は別工程。
+  if (c.birthBacking !== 'INITIAL_POPULATION' || p.birthYear >= 1250) {
+    return fail('SUPPORTING_SOURCE_UNVERIFIED', '現時点では1250年以前の試験用初期人口コホートだけを個別記録できます')
+  }
+  if (findPerson(w, p.personId)) return fail('ID_EXISTS', '補助人物IDを再利用できません', [p.personId])
+  const group = w.groups.find(g => g.groupId === p.originGroupId)
+  const region = group && w.regions.find(r => r.regionId === group.regionId)
+  const house = w.houses.find(h => h.houseId === p.houseId)
+  if (!group || !region || !house?.countryId ||
+      region.sovereignCountryId !== house.countryId ||
+      group.support.houseBps[house.houseId] === undefined) {
+    return fail('LEGAL_BASIS_MISSING', '補助人物の人口集団・家門・管轄が確認できません')
+  }
+  const living = w.persons.filter(x => x.alive && x.originGroupId === group.groupId).length
+  if (c.cohortSize > group.population || living >= group.population) {
+    return fail('COHORT_CAPACITY_CONFLICT', '人口集団の未記名者の空きがありません')
+  }
+  d.world = { ...w, persons: [...w.persons, p] } // 人口の一次値は変更しない
   return null
 }
 
