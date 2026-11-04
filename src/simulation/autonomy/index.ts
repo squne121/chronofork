@@ -109,7 +109,10 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     'A-DYN-02':createADyn02EvidenceEvaluator(),
     ...(b001?{'B-001':b001}:{}),
     'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,input.ledger),
-    'B-005':input.nextgenMarriage?createB005NextgenEvaluator(input.nextgenMarriage.calibration):createB005CalibrationEvaluator(),
+    'B-005':input.nextgenMarriage
+      ?createB005NextgenEvaluator(input.nextgenMarriage.calibration,
+        input.nextgenMarriage.supportingKinshipClearances)
+      :createB005CalibrationEvaluator(),
     'A-LEG-01':marriageEvaluator,
     'A-SUC-04':createASuc04WorldStateEvaluator(),
     'A-TIT-07':createATit07EvidenceEvaluator(),
