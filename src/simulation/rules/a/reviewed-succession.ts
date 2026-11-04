@@ -162,11 +162,28 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
     const pending = world.legal.cases
       .filter(c => c.kind === 'SUCCESSION' && c.status === 'PENDING')
       .sort((a,b) => compare(a.caseId,b.caseId))
+    const pendingCountByTitle = new Map<Id, number>()
+    for (const legalCase of pending) {
+      pendingCountByTitle.set(legalCase.titleId, (pendingCountByTitle.get(legalCase.titleId) ?? 0) + 1)
+    }
     for (const legalCase of pending) {
       const title = world.titles.find(t => t.titleId === legalCase.titleId)
       if (!title || title.kind !== 'TERRITORIAL' || !title.valid || !title.hereditary ||
-          title.holder.status !== 'UNDETERMINED' ||
-          world.legal.cases.filter(c => c.titleId === title.titleId && c.kind === 'SUCCESSION').length !== 1) continue
+          title.holder.status !== 'UNDETERMINED') continue
+      // 過去のAPPROVED/REJECTEDは履歴。現在のPENDINGが同じTitleに複数あれば競合として保留。
+      if (pendingCountByTitle.get(title.titleId) !== 1) {
+        const candidateId = 'asuc04:concurrent:' + JSON.stringify([ctx.year, legalCase.caseId])
+        traceDrafts.push({
+          year: ctx.year, phase: ctx.phase, ruleId: ctx.ruleId,
+          actorRef: { kind: 'REGION', id: title.regionId },
+          candidates: [{ candidateId, eligible: false,
+            inputs: { titleId: title.titleId, legalCaseId: legalCase.caseId, provenance: 'CALIBRATION_ONLY' },
+            reasonCodes: reason('CONCURRENT_PENDING_SUCCESSION_CASES') }],
+          status: 'DEFER', reasonCodes: reason('CONCURRENT_PENDING_SUCCESSION_CASES'),
+          modifierIds: [], ruleVersion: REVIEWED_LEGAL_VERSION,
+        })
+        continue
+      }
       const predecessorId = predecessorOf(legalCase.reasonCodes)
       const heir = predecessorId ? reviewLandHeir(world, predecessorId) : null
       const proof = predecessorId && heir?.status === 'READY'
@@ -227,6 +244,17 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
       const title = world.titles.find(t => t.titleId === legalCase.titleId)
       if (!title || title.kind !== 'TERRITORIAL' || !title.valid || !title.hereditary ||
           title.holder.status !== 'UNDETERMINED' || legalCase.candidatePersonIds.length !== 1) continue
+      const history = world.legal.cases.filter(c => c.titleId === title.titleId && c.kind === 'SUCCESSION')
+      // 最新の相続事件だけが現保持者を決められる。旧APPROVEDの再利用や現PENDINGの追越しは禁止。
+      if (history.some(c => c.status === 'PENDING')) continue
+      const deathYearOf = (c: { reasonCodes: readonly string[] }): number => {
+        const predecessorId = predecessorOf(c.reasonCodes)
+        return world.persons.find(p => p.personId === predecessorId)?.deathYear ?? -Infinity
+      }
+      const latestDeathYear = Math.max(...history.map(deathYearOf))
+      if (!Number.isSafeInteger(latestDeathYear) ||
+          history.filter(c => deathYearOf(c) === latestDeathYear).length !== 1 ||
+          deathYearOf(legalCase) !== latestDeathYear) continue
       const successorId = legalCase.candidatePersonIds[0]!
       const predecessorId = predecessorOf(legalCase.reasonCodes)
       if (!predecessorId) continue
