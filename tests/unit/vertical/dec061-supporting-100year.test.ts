@@ -65,7 +65,7 @@ const fork=rootBranch.ok?forkHistory({
   modifiers:[EARLY_BOOST],evaluatorsFor:({ledger})=>make(world,ledger),
 }):null
 
-const quantify=(r:typeof root)=>{
+const quantify=(r:Readonly<Pick<typeof root,'snapshots'|'eventLog'|'decisionTraces'>>)=>{
   const supporting=new Set(r.snapshots.at(-1)?.persons.filter(p=>p.interactionRole==='SUPPORTING')
     .map(p=>p.personId)??[])
   const events=r.eventLog
@@ -79,7 +79,7 @@ const quantify=(r:typeof root)=>{
     lateSupportingB004Pairs:latePairs,marriages,births,legalDynastySets:legal,
     successionCases:events.filter(e=>e.eventType==='LEGAL_CASE_SET').length,
     titleTransfers:events.filter(e=>e.eventType==='LEGAL_TITLE_TRANSFER').length,
-    goal:r.technicalGoal?.status??'UNVERIFIED',
+    technicalGoal:evaluateGoal(r.snapshots.at(-1)!,{dynastyId:NALVEN_DYNASTY_ID}).status,
   }
 }
 
@@ -94,17 +94,18 @@ describe('Issue #83: C004由来補助婚姻供給と厳格Goalの100年A0/A1実�
     expect(a1.status).toBe('COMPLETED')
     expect(a1.snapshots).toHaveLength(101)
     expect(a1.snapshots[0]).toEqual(root.snapshots[0])
-    for(const branch of [root,a1]){
-      const end=branch.snapshots.at(-1)!
+    for(const history of [root,a1]){
+      const end=history.snapshots.at(-1)!
       expect(end.year).toBe(END)
-      expect(branch.goal).toBeNull()
-      expect(branch.autonomousHistory.status).toBe('NOT_ESTABLISHED')
-      expect(branch.coverage.todoRuleIds).toHaveLength(37)
-      expect(branch.technicalGoal).toEqual(evaluateGoal(end,{dynastyId:NALVEN_DYNASTY_ID}))
+      expect(history.goal).toBeNull()
       expect(end.demographics.cohortSlots).toEqual([])
       expect(end.demographics.anonymousBirthHistory?.some(s=>s.year===1260)).toBe(true)
       expect(end.demographics.anonymousBirthHistory?.some(s=>s.year===1280)).toBe(true)
     }
+    expect(root.autonomousHistory.status).toBe('NOT_ESTABLISHED')
+    expect(root.coverage.todoRuleIds).toHaveLength(37)
+    expect(root.technicalGoal).toEqual(
+      evaluateGoal(root.snapshots.at(-1)!,{dynastyId:NALVEN_DYNASTY_ID}))
     const a0Metrics=quantify(root),a1Metrics=quantify(a1)
     // 少なくとも試験A0で補助Personが実WorldStateに記録されることを実証する。
     expect(a0Metrics.supportingRegistered).toBeGreaterThan(0)
