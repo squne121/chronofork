@@ -146,4 +146,4 @@ describe('R01: 同じ1250〜1350年の実年次計算で補助婚姻と子の記
     expect(withoutProof.snapshots.at(-1)!.persons.some(p=>p.motherId===supportingId)).toBe(false)
     expect(withoutProof.goal).toBeNull()
   })
-},120000)
+})
