@@ -207,8 +207,25 @@ function closeYear(world: WorldState): { world: WorldState } | { code: HaltCode;
   if (world.demographics.cohortSlots.some((s) => s.year !== t)) {
     return { code: 'BOUNDARY_INCOMPLETE', message: `${t} 年以外の CohortSlot が残っています` }
   }
-  // t 年の出生・自然死枠は t 年内で消費済み。翌年の枠は翌年 C① が確定する。
-  const next = { ...world, year: t + 1, demographics: { cohortSlots: [] } }
+  // C004の当年出生枠からB002の実出生請求を引いた匿名出生数のみ年次履歴へ。
+  // 匿名出生の成人生存・血縁・婚姻適格性はこの値だけから推定しない。
+  const prior=world.demographics.anonymousBirthHistory??[]
+  const keys=new Set(prior.map(s=>JSON.stringify([s.groupId,s.year])))
+  for(const slot of world.demographics.cohortSlots){
+    const key=JSON.stringify([slot.groupId,slot.year])
+    if(keys.has(key))return {code:'BOUNDARY_INCOMPLETE',message:'匿名出生履歴の同年二重計上: '+key}
+    keys.add(key)
+  }
+  const history=[
+    ...prior,
+    ...world.demographics.cohortSlots.map(s=>({
+      groupId:s.groupId,year:s.year,anonymousBirths:s.birthSlots-s.claimedBirths,
+    })),
+  ].sort((a,b)=>a.year-b.year||(a.groupId<b.groupId?-1:a.groupId>b.groupId?1:0))
+  const next:WorldState={
+    ...world,year:t+1,
+    demographics:{cohortSlots:[],...(history.length?{anonymousBirthHistory:history}:{})},
+  }
   const nv = validateWorldState(next)
   if (!nv.ok) {
     return { code: 'YEAR_VALIDATION_ERROR', message: `${t + 1} 年初の WorldState 検証に ERROR があります`, diagnostics: nv.diagnostics.filter((d) => d.severity === 'ERROR') }

@@ -42,7 +42,10 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
       throw new EvaluationFailure('B-001補助人物記録は当年フェーズ3に限ります',[
         {code:'RULE_MISMATCH',message:String(ctx.ruleId)}])
     }
-    const checked = validateSupportingMarriageCohorts(world, cohorts)
+    // まだ18歳に達していないC004コホートは、現在の年に出生/成人したことにしない。
+    const eligibleCohorts=cohorts.filter(c=>ctx.year-c.birthYear>=18&&
+      ctx.year-c.birthYear<=settings.maximumPreviewAge)
+    const checked = validateSupportingMarriageCohorts(world, eligibleCohorts)
     if (checked.length > 0) throw new EvaluationFailure('人口集団の補助人物出典が不整合',
       checked.map(code => ({code,message:code})))
     const active = world.persons.filter(p => p.alive && p.interactionRole === 'SUPPORTING').length
@@ -57,7 +60,7 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
     for (const seeker of seekers) {
       if (commands.length >= settings.maxRecordsPerYear ||
           active + commands.length >= settings.maxAliveSupporting) break
-      const supplied = proposeSupportingMarriageCandidates(world, seeker.personId, cohorts, {
+      const supplied = proposeSupportingMarriageCandidates(world, seeker.personId, eligibleCohorts, {
         seed: ctx.seed,
         maxCandidates: 1,
         perCohortSamples: settings.perCohortSamples,
@@ -67,8 +70,7 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
       if (supplied.status !== 'PROPOSED') continue
       const candidate = supplied.candidates[0]!
       const cohort = cohorts.find(c => c.cohortId === candidate.cohortId)!
-      // Phase Aの抽象候補と異なり、成人SUPPORTINGの記録は初期人口出典だけを対象とする。
-      if (cohort.source !== 'INITIAL_POPULATION') continue
+      // 候補IDは年・枝に依存しない。重複した個別化はWorldStateと使用済みIDで拒否する。
       used.add(candidate.candidateId)
       const person: Person = {
         personId: candidate.candidateId,
@@ -89,6 +91,7 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
             seekerPersonId: seeker.personId, supportingPersonId: person.personId,
             cohortId: cohort.cohortId, familyPoolId: candidate.familyPoolId,
             memberOrdinal: candidate.ordinal, sourceEvidenceId: cohort.sourceEvidenceId,
+            survivorAttestationId: cohort.survivorAttestationId??null,
             kinshipStatus: 'UNVERIFIED', provenance: 'CALIBRATION_ONLY',
           },
           reasonCodes: ['CALIBRATION_ONLY','SUPPORTING_RECORD_ONLY','NOT_MARRIAGE_APPROVAL'],

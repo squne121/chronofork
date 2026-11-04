@@ -22,6 +22,8 @@ export type SupportingMarriageCohort=Readonly<{
   source:'INITIAL_POPULATION'|'C004_COHORT'
   /** 初期集団の年齢構成を想定する試験台帳の識別子。C004の場合は出生枠の参照ラベル。 */
   sourceEvidenceId:Id
+  /** C004出生枠とは独立した、成人までの存命者の試験用確認出典。 */
+  survivorAttestationId?:Id
   provenance:'CALIBRATION_ONLY'
 }>
 export type SupportingMarriageCandidate=Readonly<{
@@ -68,6 +70,14 @@ export function validateSupportingMarriageCohorts(
   const issues:string[]=[]
   const ids=new Set<Id>(),familySlots=new Set<string>()
   const allocatedByGroup=new Map<Id,number>()
+  const allocatedBirths=new Map<string,number>()
+  const realizedByCohort=(cohortId:Id)=>world.persons.filter(p=>{
+    if(!p.personId.startsWith('support:population:'))return false
+    try{
+      const v:unknown=JSON.parse(p.personId.slice('support:population:'.length))
+      return Array.isArray(v)&&v[0]===cohortId&&Number.isSafeInteger(v[1])
+    }catch{return false}
+  })
   for(const [i,c] of cohorts.entries()){
     if(!c||!present(c.cohortId)||!present(c.groupId)||!present(c.affiliationHouseId)||
       !present(c.familyPoolId)||!present(c.sourceEvidenceId)||
@@ -96,12 +106,29 @@ export function validateSupportingMarriageCohorts(
     if(c.source==='INITIAL_POPULATION'){
       if(c.birthYear>=START_YEAR)issues.push('INITIAL_COHORT_NOT_PRE_START:'+i)
     }else{
-      if(c.birthYear<START_YEAR)issues.push('C004_COHORT_YEAR_INVALID:'+i)
-      const slot=world.demographics.cohortSlots.find(s=>s.groupId===c.groupId&&s.year===c.birthYear)
-      const named=world.persons.filter(p=>p.originGroupId===c.groupId&&p.birthYear===c.birthYear).length
-      if(!slot||slot.birthSlots-Math.max(slot.claimedBirths,named)<c.memberCount)issues.push('C004_BIRTH_BACKING_INSUFFICIENT:'+i)
+      if(c.birthYear<START_YEAR||c.birthYear>=world.year)
+        issues.push('C004_COHORT_YEAR_INVALID:'+i)
+      if(!present(c.survivorAttestationId)||c.survivorAttestationId===c.sourceEvidenceId)
+        issues.push('C004_SURVIVOR_ATTESTATION_MISSING:'+i)
+      const record=world.demographics.anonymousBirthHistory?.find(
+        s=>s.groupId===c.groupId&&s.year===c.birthYear)
+      if(!record||record.anonymousBirths<c.memberCount)
+        issues.push('C004_BIRTH_BACKING_INSUFFICIENT:'+i)
+      const key=JSON.stringify([c.groupId,c.birthYear])
+      allocatedBirths.set(key,(allocatedBirths.get(key)??0)+c.memberCount)
     }
-    allocatedByGroup.set(c.groupId,(allocatedByGroup.get(c.groupId)??0)+c.memberCount)
+    const represented=realizedByCohort(c.cohortId)
+    if(represented.some(p=>p.originGroupId!==c.groupId||p.birthYear!==c.birthYear)||
+      represented.length>c.memberCount)issues.push('COHORT_MEMBER_RECORD_CONFLICT:'+i)
+    const aliveRealized=represented.filter(p=>p.alive).length
+    allocatedByGroup.set(c.groupId,(allocatedByGroup.get(c.groupId)??0)+c.memberCount-aliveRealized)
+  }
+  for(const [key,count] of allocatedBirths){
+    const [groupId,year]=JSON.parse(key) as [Id,number]
+    const backed=world.demographics.anonymousBirthHistory?.find(
+      s=>s.groupId===groupId&&s.year===year)
+    if(!backed||count>backed.anonymousBirths)
+      issues.push('C004_SHARED_BIRTH_CAPACITY_EXCEEDED:'+key)
   }
   for(const [groupId,count] of allocatedByGroup){
     const group=world.groups.find(g=>g.groupId===groupId)
