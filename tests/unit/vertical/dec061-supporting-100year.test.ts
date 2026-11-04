@@ -12,7 +12,10 @@ import type { SupportingMarriageCohort } from '../../../src/simulation/populatio
 import { TRUST_BOOST,P4,P5 } from './b004-branch-fixture.ts'
 
 const trial=createExperimentalOrdinaryLegalTrial()
-const world=createExperimentalWorld()
+const initial=createExperimentalWorld()
+const world:WorldState={...initial,demographics:{
+  ...initial.demographics,anonymousBirthHistory:[],
+}}
 const cohorts:SupportingMarriageCohort[]=[
   {
     cohortId:'synthetic:C004:1260:east:female',groupId:'group-east-elite',

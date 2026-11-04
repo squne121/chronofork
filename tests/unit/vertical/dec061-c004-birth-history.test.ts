@@ -12,7 +12,10 @@ import { validateWorldState } from '../../../src/simulation/validation/index.ts'
 const seed=27001
 const c4=createCalibrationEvaluators(EXPERIMENTAL_TUNING)
 function yearsTo(endYear:number):WorldState{
-  let w:WorldState=createExperimentalWorld()
+  const initial=createExperimentalWorld()
+  let w:WorldState={...initial,demographics:{
+    ...initial.demographics,anonymousBirthHistory:[],
+  }}
   for(let year=1250;year<endYear;year++){
     const r=runYear(w,{seed,evaluators:c4,branchId:'evidence-A0'})
     if(r.status!=='COMPLETED')throw new Error('C004 '+year+' '+JSON.stringify(r.halt))
