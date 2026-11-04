@@ -40,7 +40,7 @@ const AUTO:AutonomyCalibration={
   death:{minAge:60,riskStartAge:59,basePermille:0,increasePerYearPermille:1000,maxPermille:1000},
   marriage:{minAdultAge:18,maxCandidatePairs:500},
 }
-const START=1250, END=1350, SEED=20260101
+const END=1350, SEED=20260101
 const EARLY_BOOST:StatModifier={
   ...TRUST_BOOST,modifierId:'trial:dec061:trust-1250',interventionId:'trial:dec061:int-1250',
   startYear:1250,endExclusiveYear:1255,
