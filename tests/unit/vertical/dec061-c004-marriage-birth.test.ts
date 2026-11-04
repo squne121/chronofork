@@ -2,9 +2,7 @@
 import {describe,expect,it} from 'vitest'
 import {createExperimentalWorld,createExperimentalOrdinaryLegalTrial} from '../../../src/scenario/experimental/index.ts'
 import type {WorldState} from '../../../src/simulation/contracts/index.ts'
-import {NALVEN_DYNASTY_ID} from '../../../src/scenario/experimental/index.ts'
-import {evaluateGoal} from '../../../src/simulation/goal.ts'
-import {runYear,runTimeline} from '../../../src/simulation/engine/index.ts'
+import {runYear} from '../../../src/simulation/engine/index.ts'
 import {createCalibrationEvaluators} from '../../../src/simulation/rules/c/index.ts'
 import {EXPERIMENTAL_TUNING} from '../../../src/simulation/tuning.ts'
 import {createB001SupportingMarriageEvaluator,createB002WorldStateEvaluator,
