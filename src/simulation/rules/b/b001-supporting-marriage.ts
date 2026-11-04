@@ -57,9 +57,24 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
       .sort((a,b) => cmp(a.personId,b.personId))
     const traceDrafts: DecisionTraceDraft[] = []
     const commands: PersonSupportingRecordCommand[] = []
+    const defer=(seekerId:Id, reasonCode:string)=>{
+      const key=JSON.stringify([ctx.year,seekerId,reasonCode])
+      traceDrafts.push({
+        year:ctx.year,phase:ctx.phase,ruleId:ctx.ruleId,
+        actorRef:{kind:'PERSON',id:seekerId},
+        candidates:[{candidateId:'b001:supporting:defer:'+key,eligible:false,
+          inputs:{seekerPersonId:seekerId,provenance:'CALIBRATION_ONLY'},
+          reasonCodes:['CALIBRATION_ONLY',reasonCode]}],
+        status:'DEFER',reasonCodes:['CALIBRATION_ONLY','SUPPORTING_SUPPLY_DEFERRED',reasonCode],
+        modifierIds:[],ruleVersion:B001_SUPPORTING_VERSION,
+      })
+    }
     for (const seeker of seekers) {
       if (commands.length >= settings.maxRecordsPerYear ||
-          active + commands.length >= settings.maxAliveSupporting) break
+          active + commands.length >= settings.maxAliveSupporting){
+        defer(seeker.personId,'SUPPORTING_RECORD_BUDGET_EXCEEDED')
+        break
+      }
       const supplied = proposeSupportingMarriageCandidates(world, seeker.personId, eligibleCohorts, {
         seed: ctx.seed,
         maxCandidates: 1,
@@ -67,7 +82,10 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
         maximumPreviewAge: settings.maximumPreviewAge,
         usedCandidateIds: used,
       })
-      if (supplied.status !== 'PROPOSED') continue
+      if (supplied.status !== 'PROPOSED') {
+        defer(seeker.personId,supplied.reasonCodes[0]??'NO_COHORT_CANDIDATE_AVAILABLE')
+        continue
+      }
       const candidate = supplied.candidates[0]!
       const cohort = cohorts.find(c => c.cohortId === candidate.cohortId)!
       // 候補IDは年・枝に依存しない。重複した個別化はWorldStateと使用済みIDで拒否する。
@@ -113,6 +131,7 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
         memberOrdinal: candidate.ordinal,
         familyPoolId: cohort.familyPoolId,
         sourceEvidenceId: cohort.sourceEvidenceId, birthBacking: cohort.source,
+        ...(cohort.survivorAttestationId?{survivorAttestationId:cohort.survivorAttestationId}:{}),
       })
     }
     return {ruleId: ctx.ruleId, phase: ctx.phase, commands,requests:[],deferred:[],traceDrafts}

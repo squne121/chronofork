@@ -69,6 +69,7 @@ export type PersonPromotionCommand = CommandOf<'PERSON_PROMOTE', {
 export type PersonSupportingRecordCommand = CommandOf<'PERSON_SUPPORTING_RECORD', {
   person: Person; cohortId: Id; cohortSize: number; memberOrdinal: number
   sourceEvidenceId: Id; familyPoolId: Id; birthBacking: 'INITIAL_POPULATION' | 'C004_COHORT'
+  survivorAttestationId?: Id
 }>
 export type PersonPairTrustSetCommand = CommandOf<'PERSON_PAIR_TRUST_SET', { relation: PersonPairTrust }>
 export type PersonDeathCommand = CommandOf<

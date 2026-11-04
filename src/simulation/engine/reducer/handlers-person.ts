@@ -104,6 +104,8 @@ export const personSupportingRecord: Handler<PersonSupportingRecordCommand> = (d
     if(p.birthYear>=1250)
       return fail('LEGAL_BASIS_MISSING','初期人口コホートの出生年が不正です')
   }else if(c.birthBacking==='C004_COHORT'){
+    if(!c.survivorAttestationId||c.survivorAttestationId===c.sourceEvidenceId)
+      return fail('LEGAL_BASIS_MISSING','過去年出生集団の成人生存に独立した試験用出典がありません')
     const record=w.demographics.anonymousBirthHistory?.find(
       s=>s.groupId===p.originGroupId&&s.year===p.birthYear)
     if(p.birthYear<1250||!record||c.cohortSize>record.anonymousBirths)
