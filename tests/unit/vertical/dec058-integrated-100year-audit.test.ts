@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import { createExperimentalWorld, createExperimentalOrdinaryLegalTrial, NALVEN_DYNASTY_ID } from '../../../src/scenario/experimental/index.ts'
 import { createAutonomousCalibrationEvaluators } from '../../../src/simulation/autonomy/index.ts'
 import type { AutonomyCalibration } from '../../../src/simulation/autonomy/index.ts'
-import {childIdForMarriageYear} from '../../../src/simulation/rules/b/b002-worldstate.ts'
 import {attested,supportingCohorts,supportingClearances,supportingPersonId,
   witnessedSonId,withC004BirthHistory} from './issue71-supporting-fixture.ts'
 import { runTimeline } from '../../../src/simulation/engine/index.ts'
