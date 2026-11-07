@@ -34,8 +34,8 @@ Playwright CLIによるAIのGUI試遊、正式Goal公開、正式シナリオデ
 ## 検証・段階導入
 
 1. **短い回帰テスト（必須CI）**: PLAYERとDEBUGの分離、同一WorldStateからの投影、未計算年の拒否、介入前のA1拒否。既存Vitest/Playwright Testは維持。
-2. **fast-check**（採用、実装環境に追加してから）: 合法な操作列と不正入力を生成し、不変条件・決定的再実行・失敗の縮小と再生を検査。テストの合否基準をAIが変更しない。
-3. **Playwright CLI**（採用、実行環境ごとに可用性確認）: AIがGUIを探索し、発見した不具合を固定Playwright Testに移す。AIのGUI試遊の正式評価方法は保留。
+2. **fast-check**（devDependency追加済み）: 初回は101年初の実snapshotに対してPLAYER/DEBUG分離とEvent参照のプロパティテストを実装。後続では合法な操作列と不正入力を生成し、不変条件・決定的再実行・失敗の縮小と再生を検査。テストの合否基準をAIが変更しない。
+3. **Playwright CLI**（採用、\`npm run play:ui -- --help\`の入口を追加）: 既存Playwrightへ委譲し、AIがGUIを探索して発見した不具合は固定Playwright Testに移す。実ブラウザでの試遊は未検証。AIのGUI試遊の正式評価方法は保留。
 4. **長時間ローカル試験**: 100年統合・多seed・AIによる探索は必須quick-checkから分離し、コミットと条件に紐付く証跡を残す。人間が面白さを最終評価する（DEC-018）。
 
 正式Goal、未承認GAME-01〜05、試験用法令・係数の正式昇格、MVPの勝利・介入・年次処理は一切変更しない。
