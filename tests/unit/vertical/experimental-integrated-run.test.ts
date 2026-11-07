@@ -8,7 +8,8 @@ import {createExperimentalWorld,createExperimentalOrdinaryLegalTrial,
   createExperimentalIntegratedTimelineOptions,
   INTEGRATED_SEED,INTEGRATED_TRUST_REDUCTION,INTEGRATED_SUPPORTING_CLEARANCES,
   INTEGRATED_SUPPORTING_COHORTS,INTEGRATED_SUPPORTING_PERSON_ID,INTEGRATED_WITNESSED_SON_ID,
-  INTEGRATED_PROMOTION,INTEGRATED_AUTONOMY} from '../../../src/scenario/experimental/index.ts'
+  INTEGRATED_PROMOTION,INTEGRATED_AUTONOMY,INTEGRATED_TRUST_BASE,
+  INTEGRATED_NEXTGEN_CONTRACT,INTEGRATED_B009_CALIBRATION} from '../../../src/scenario/experimental/index.ts'
 import {createAutonomousCalibrationEvaluators} from '../../../src/simulation/autonomy/index.ts'
 import {runYear} from '../../../src/simulation/engine/index.ts'
 import type {WorldState,StatModifier} from '../../../src/simulation/contracts/index.ts'
@@ -16,6 +17,23 @@ import {EXPERIMENTAL_NEXTGEN_CONTRACT} from '../../../src/simulation/legal/nextg
 import {EXPERIMENTAL_B009_CALIBRATION} from '../../../src/simulation/rules/b/index.ts'
 
 const P2='person-exp-02',P5='person-exp-05'
+// PR #78 直書きの控え(src/の定数を再利用しない独立値)。
+const REF_SUPPORTING_ID='support:population:["trial:issue71:C004:1260:east-female",0]'
+const REF_SON_ID='person:b002:auto:[1252,"marriage:normal:[1250,\\"[\\\\\\"person-exp-02\\\\\\",\\\\\\"person-exp-05\\\\\\"]\\"]","person-exp-02","person-exp-05"]'
+const REF_COHORT={cohortId:'trial:issue71:C004:1260:east-female',groupId:'group-east-elite',
+  affiliationHouseId:'house-cardon',familyPoolId:'trial:issue71:independently-attested-cardon-unrelated-family',
+  tier:'REGIONAL_LOWER_NOBILITY',sex:'FEMALE',birthYear:1260,memberCount:1,source:'C004_COHORT',
+  sourceEvidenceId:'trial:issue71:C004:1260:east',
+  survivorAttestationId:'trial:issue71:separate-survivor-census:1278:east',provenance:'CALIBRATION_ONLY'}
+const REF_PROMOTION={
+  cohorts:[{cohortId:'experimental-census:birth-1249-east-commons',groupId:'group-east-commons',
+    birthYear:1249,memberCount:3,recordedYear:1249,
+    censusEvidenceId:'experimental-census:pre1250-age-group-evidence',provenance:'CALIBRATION_ONLY'}],
+  identities:[{identityEvidenceId:'experimental-identity:cardon-person-1249',
+    cohortId:'experimental-census:birth-1249-east-commons',memberOrdinal:0,
+    personId:'person:experimental-census:east-cardon-1249',
+    personName:'実験用の記名候補（史実・正式設定ではない）',sex:'FEMALE',houseId:'house-cardon',
+    recordedYear:1249,provenance:'CALIBRATION_ONLY'}]}
 /** PR #78 の dec058-integrated-100year-audit.test.ts 直書き構成の控え(独立検算用)。 */
 function referenceEvaluators(startWorld:WorldState,ledger:readonly StatModifier[]){
   const trial=createExperimentalOrdinaryLegalTrial()
@@ -26,13 +44,13 @@ function referenceEvaluators(startWorld:WorldState,ledger:readonly StatModifier[
         titleWeight:4,noClauseCost:5,supportWeight:0},
       supportingKinshipClearances:[{
         clearanceId:'trial:issue71:independent-kinship-check:1278',
-        personIds:[INTEGRATED_WITNESSED_SON_ID,INTEGRATED_SUPPORTING_PERSON_ID],
+        personIds:[REF_SON_ID,REF_SUPPORTING_ID],
         countryId:'country-eldia',checkedYear:1278,validUntilYear:1320,
         sourceEvidenceId:'trial:issue71:person-level-lineage-record-distinct-from-C004-and-survivor',
         provenance:'CALIBRATION_ONLY'}]},
     reviewedLegal:{book:trial.book,ordinaryLaws:trial.laws},
-    spouseDeathDissolution:true,promotion:INTEGRATED_PROMOTION,
-    supportingMarriage:{cohorts:INTEGRATED_SUPPORTING_COHORTS,maxRecordsPerYear:1,
+    spouseDeathDissolution:true,promotion:REF_PROMOTION as never,
+    supportingMarriage:{cohorts:[REF_COHORT as never],maxRecordsPerYear:1,
       maxAliveSupporting:1,perCohortSamples:1,maximumPreviewAge:65},
     autonomy:{status:'CALIBRATION_ONLY',
       birth:{minMotherAge:18,maxMotherAge:32,minFatherAge:18,chancePermille:1000},
@@ -75,6 +93,20 @@ describe('experimental integrated run: 共通実行構成',()=>{
       statKey:'pair.trust',targetRef:{kind:'PERSON_PAIR',ids:[P2,P5]}})
     const {options}=createExperimentalIntegratedTimelineOptions('x')
     expect(options).toMatchObject({seed:20260101,technicalGoalEvaluation:true,goal:{dynastyId:'dynasty-nalven'}})
+  })
+  it('SUPPORTING・昇格・ID・係数の実値がPR #78と一致する(1278年経路の固定照合)',()=>{
+    expect(INTEGRATED_SUPPORTING_PERSON_ID).toBe(REF_SUPPORTING_ID)
+    expect(INTEGRATED_WITNESSED_SON_ID).toBe(REF_SON_ID)
+    expect(INTEGRATED_SUPPORTING_COHORTS).toEqual([REF_COHORT])
+    expect(INTEGRATED_PROMOTION).toEqual(REF_PROMOTION)
+    expect(INTEGRATED_AUTONOMY.marriage.maxCandidatePairs).toBe(1600)
+    expect(INTEGRATED_TRUST_BASE).toEqual([{personIds:[P2,P5],value:80}])
+    expect(INTEGRATED_NEXTGEN_CONTRACT).toMatchObject({ownDynastyBonus:2,otherDynastyCost:0,
+      titleWeight:4,noClauseCost:5,supportWeight:0})
+    expect(INTEGRATED_B009_CALIBRATION).toMatchObject({initialTrust:25,annualDelta:1,
+      houseSupportWeight:2,sameHouseBonus:10,maxPairs:1600})
+    expect(INTEGRATED_SUPPORTING_CLEARANCES[0]).toMatchObject({
+      clearanceId:'trial:issue71:independent-kinship-check:1278',checkedYear:1278,validUntilYear:1320})
   })
   it('A0: 共通入口の評価器はPR #78直書き構成と同じ年次結果(世界・Event・Trace)を出す',()=>{
     const world=createExperimentalIntegratedWorld()
