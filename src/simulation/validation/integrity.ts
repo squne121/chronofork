@@ -1,6 +1,6 @@
 // 型付き WorldState の整合性検証。入力を変更せず、診断だけを返す。
 // 検証中に相続・承認・税権移管・人口補正を自動実行しない（PENDING/UNDETERMINED は正当な状態として許容する）。
-import type { Id, WorldState } from '../contracts/index.ts'
+import type { Id, PersonPairTrust, WorldState } from '../contracts/index.ts'
 import { GOAL_YEAR, START_YEAR } from '../contracts/index.ts'
 import { PAIR_TRUST_DEFINITION } from '../intervention/stat-registry.ts'
 import type { Diagnostic, DiagnosticCode, DiagnosticSeverity } from './diagnostics.ts'
@@ -13,6 +13,34 @@ type RefKind =
 const ENTITY_KINDS: readonly RefKind[] = ['COUNTRY', 'REGION', 'GROUP', 'HOUSE', 'PERSON', 'TITLE']
 
 const isCount = (v: number) => Number.isSafeInteger(v) && v >= 0
+
+/** B-009 人物ペア関係の整合検査。全体検証と reducer の差分検証（pairTrust のみ変更時）で同一コードを使う。 */
+export function checkPairTrustRecords(
+  pairTrust: readonly PersonPairTrust[],
+  worldYear: number,
+  ref: (kind: 'PERSON', id: Id, path: string, owner: { kind: string; id: Id }) => boolean,
+  add: (code: DiagnosticCode, path: string, message: string, target?: { kind: string; id: Id } | null) => void,
+): void {
+  const relationKeys = new Set<string>()
+  pairTrust.forEach((r, i) => {
+    const path = `$.pairTrust[${i}]`
+    const owner = { kind: 'PERSON_PAIR', id: JSON.stringify(r.personIds) }
+    const [a, b] = r.personIds
+    if (a === b) add('SELF_REFERENCE', path, '信頼関係の人物IDが同一です', owner)
+    else if (a > b) add('PERSON_PAIR_NOT_NORMALIZED', path, '人物IDは昇順に正規化します', owner)
+    ref('PERSON', a, path+'.personIds[0]', owner)
+    ref('PERSON', b, path+'.personIds[1]', owner)
+    const key = JSON.stringify(r.personIds)
+    if (relationKeys.has(key)) add('DUPLICATE_ID', path, '人物ペアの信頼記録が重複しています', owner)
+    relationKeys.add(key)
+    if (!Number.isSafeInteger(r.value) || r.value < PAIR_TRUST_DEFINITION.min || r.value > PAIR_TRUST_DEFINITION.max) {
+      add('OUT_OF_RANGE', path+'.value', 'pair.trust基礎値が校正値域外です', owner)
+    }
+    if (!Number.isSafeInteger(r.lastUpdatedYear) || r.lastUpdatedYear < START_YEAR || r.lastUpdatedYear > worldYear) {
+      add('OUT_OF_RANGE', path+'.lastUpdatedYear', '信頼関係の更新年が世界の年次と整合しません', owner)
+    }
+  })
+}
 
 export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
   const out: Diagnostic[] = []
@@ -153,25 +181,7 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
   })
 
   // --- B-009 人物ペア関係（WorldStateの年次基礎値。modifierは介入台帳のまま）---
-  const relationKeys = new Set<string>()
-  ;(world.pairTrust ?? []).forEach((r, i) => {
-    const path = `$.pairTrust[${i}]`
-    const owner = { kind: 'PERSON_PAIR', id: JSON.stringify(r.personIds) }
-    const [a, b] = r.personIds
-    if (a === b) add('SELF_REFERENCE', path, '信頼関係の人物IDが同一です', owner)
-    else if (a > b) add('PERSON_PAIR_NOT_NORMALIZED', path, '人物IDは昇順に正規化します', owner)
-    ref('PERSON', a, path+'.personIds[0]', owner)
-    ref('PERSON', b, path+'.personIds[1]', owner)
-    const key = JSON.stringify(r.personIds)
-    if (relationKeys.has(key)) add('DUPLICATE_ID', path, '人物ペアの信頼記録が重複しています', owner)
-    relationKeys.add(key)
-    if (!Number.isSafeInteger(r.value) || r.value < PAIR_TRUST_DEFINITION.min || r.value > PAIR_TRUST_DEFINITION.max) {
-      add('OUT_OF_RANGE', path+'.value', 'pair.trust基礎値が校正値域外です', owner)
-    }
-    if (!Number.isSafeInteger(r.lastUpdatedYear) || r.lastUpdatedYear < START_YEAR || r.lastUpdatedYear > world.year) {
-      add('OUT_OF_RANGE', path+'.lastUpdatedYear', '信頼関係の更新年が世界の年次と整合しません', owner)
-    }
-  })
+  checkPairTrustRecords(world.pairTrust ?? [], world.year, ref, add)
 
   // --- 人物 ---
   const personById = new Map(world.persons.map((x) => [x.personId, x]))
