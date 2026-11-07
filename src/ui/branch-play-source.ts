@@ -10,7 +10,7 @@ import { createAutonomousCalibrationEvaluators } from '../simulation/autonomy/in
 import type { AutonomyCalibration } from '../simulation/autonomy/index.ts'
 import { createRootBranch, forkHistory } from '../simulation/branching/index.ts'
 import type { Branch } from '../simulation/branching/index.ts'
-import type { DecisionTrace, EventLogEntry, Id, StatModifier, WorldState } from '../simulation/contracts/index.ts'
+import type { EventLogEntry, Id, StatModifier, WorldState } from '../simulation/contracts/index.ts'
 import { GOAL_YEAR, PAIR_TRUST_STAT_KEY, START_YEAR, STAT_MODIFIER_RULE_VERSION } from '../simulation/contracts/index.ts'
 import { runTimeline } from '../simulation/engine/index.ts'
 import type { EvaluatorMap, TimelineResult } from '../simulation/engine/index.ts'
@@ -18,6 +18,9 @@ import { normalizePersonPair } from '../simulation/intervention/index.ts'
 import type { MarriageApprovalEvidence } from '../simulation/rules/a/index.ts'
 import { EXPERIMENTAL_TUNING } from '../simulation/tuning.ts'
 import type { TimelineRun } from './timeline-source.ts'
+import { compareTraces } from './trace-correspondence.ts'
+import type { TraceDelta, TraceSummary } from './trace-correspondence.ts'
+export type { TraceDelta, TraceSummary } from './trace-correspondence.ts'
 
 /** 原史の正式な人物設定ではなく、既存の縦断テストと同じ婚姻試験用人物ペア。 */
 const P4='person-exp-04',P5='person-exp-05'
@@ -183,11 +186,10 @@ export function runPlayComparison(input:PlayInput):PlayResult{
   }
 }
 export type EventDelta=Readonly<{kind:'A1_ONLY'|'A0_ONLY'|'CHANGED';event:EventLogEntry;counterpart?:EventLogEntry}>
-export type TraceDelta=Readonly<{traceId:Id;ruleId:string;before?:DecisionTrace;after?:DecisionTrace}>
 /** 年をまたいだ比較にしない。IDの一致だけでなく内容差分も判定する。 */
 export function compareYear(c:PlayComparison,year:number):Readonly<{
   a0World:WorldState|undefined;a1World:WorldState|undefined;
-  events:readonly EventDelta[];traces:readonly TraceDelta[]
+  events:readonly EventDelta[];traces:readonly TraceDelta[];traceSummary:TraceSummary
 }>{
   const a0World=c.a0.result.snapshots.find(w=>w.year===year)
   const a1World=c.a1.result.snapshots.find(w=>w.year===year)
@@ -200,14 +202,11 @@ export function compareYear(c:PlayComparison,year:number):Readonly<{
     else if(JSON.stringify(before)!==JSON.stringify(e))events.push({kind:'CHANGED',event:e,counterpart:before})
   }
   for(const [key,e] of a0Events)if(!a1Events.has(key))events.push({kind:'A0_ONLY',event:e})
-  const t0=new Map(c.a0.result.decisionTraces.filter(t=>t.year===year).map(t=>[t.traceId,t]))
-  const t1=new Map(c.a1.result.decisionTraces.filter(t=>t.year===year).map(t=>[t.traceId,t]))
-  const traces:TraceDelta[]=[]
-  for(const id of new Set([...t0.keys(),...t1.keys()])){
-    const before=t0.get(id),after=t1.get(id)
-    if(JSON.stringify(before)!==JSON.stringify(after))traces.push({traceId:id,ruleId:(after??before)!.ruleId,before,after})
-  }
-  return {a0World,a1World,events,traces}
+  // traceIdは枝間の同一性に使わない。意味（年・phase・RuleID・actor）で一意に対応付けた場合だけ比較する。
+  const cmp=compareTraces(
+    c.a0.result.decisionTraces.filter(t=>t.year===year),c.a1.result.decisionTraces.filter(t=>t.year===year),
+    c.a0.result.eventLog,c.a1.result.eventLog)
+  return {a0World,a1World,events,traces:cmp.deltas,traceSummary:cmp.summary}
 }
 /** 相手の家門や子孫等、指定ペアから離れた波及を分離するための「直接関与」のみの判定。 */
 export function directlyInvolvesPair(e:EventLogEntry,pair:readonly [Id,Id]):boolean{

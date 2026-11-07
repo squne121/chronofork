@@ -286,10 +286,19 @@ export function InterventionComparePanel(p:Props){
         </p>
         <p className="note" data-testid="branch-trace-ids">対象のTrace: A0 {traceA0?.traceId??'—'} / A1 {traceA1?.traceId??'—'}</p>
         <h5>DecisionTraceの差分（{data?.traces.length??0}件）</h5>
+        {data&&<p className="note" data-testid="branch-trace-summary">
+          判断の意味（年・段階・規則・対象者）で一対一に対応: {data.traceSummary.matched}件
+          （同一 {data.traceSummary.unchanged} / 変化 {data.traceSummary.changed}）/
+          A1で新規 {data.traceSummary.a1Only}件 / A1で消滅 {data.traceSummary.a0Only}件 /
+          対応不明 {data.traceSummary.ambiguousTraces}件（比較しません）
+        </p>}
         {data?.traces.length===0?<p>この年の判断Traceに差分はありません。</p>:
           <ul data-testid="branch-trace-diffs" className="compare-trace-list">
-            {data?.traces.map(tr=><li key={tr.traceId}>{tr.ruleId} / {tr.traceId} /
-              A0 {tr.before?.status??'なし'} → A1 {tr.after?.status??'なし'}
+            {data?.traces.map(tr=><li key={tr.kind+tr.traceId+(tr.before?.traceId??'')}>{tr.ruleId} / {
+              tr.kind==='AMBIGUOUS'?`対応不明（A0 ${tr.ambiguousBefore?.length}件 / A1 ${tr.ambiguousAfter?.length}件。同じ判断か決められないため比較しません）`
+              :tr.kind==='A1_ONLY'?`A1で新規 ${tr.after?.traceId}`
+              :tr.kind==='A0_ONLY'?`A1で消滅 ${tr.before?.traceId}`
+              :`A0 ${tr.before?.traceId} → A1 ${tr.after?.traceId}（A0 ${tr.before?.status} → A1 ${tr.after?.status}）`}
             </li>)}
           </ul>}
         <p className="note">未承認の法制判断はDEFER/PENDINGを維持します。</p>
