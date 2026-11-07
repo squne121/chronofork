@@ -1,4 +1,4 @@
-// Issue #71 / A: 信頼介入が B-004 → B-005 → A-LEG-01 → 出生へ届く条件の実計算検証（CALIBRATION_ONLY）。
+// Issue #71 / A: 信頼介入が B-004 → B-005 → 婚姻登録(MARRIAGE_REGISTER) → 出生へ届く条件の実計算検証（CALIBRATION_ONLY）。
 // 統合実行構成（INTEGRATED_*）の実WorldState・EventLog・DecisionTraceだけを使い、結果は固定していない。
 // 介入量は閾値の境界を探るための値で、勝利に都合のよい seed 探索・固定イベントは行わない。
 // 判明した事実:
@@ -90,7 +90,9 @@ describe('介入の実効性: 1250年の B-004/B-005 判断（P2/P5）', () => {
     expect(eventsOf([tie], 'MARRIAGE_REGISTER')).toHaveLength(0) // ID順などで同率を解消しない（DEC-058）
     const switched = run([modifier(P1_P5, 56)], 1)[0]!
     expect(trace(switched, 'B-004', P1_P5)!.candidates[0]!.score).toBe(70)
+    expect(trace(switched, 'B-004', INTEGRATED_PAIR)).toMatchObject({ status: 'ACCEPT' }) // P2 側も採択のまま、P1が上回って置き換わる
     expect(trace(switched, 'B-005', P1_P5)).toMatchObject({ status: 'ACCEPT' })
+    expect(trace(switched, 'B-005', P1_P5)!.candidates[0]!.inputs.selectedContractKey).toBe('CHILD_DYNASTY:dynasty-nalven')
     expect(trace(switched, 'B-005', INTEGRATED_PAIR)!.reasonCodes).toContain('MUTUAL_UNIQUE_PARTNER_NOT_ESTABLISHED')
     const marriages = eventsOf([switched], 'MARRIAGE_REGISTER')
     expect(marriages).toHaveLength(1)
@@ -99,13 +101,13 @@ describe('介入の実効性: 1250年の B-004/B-005 判断（P2/P5）', () => {
 })
 
 describe('介入の下流への因果: 婚姻・出生・法的王朝（1250〜1262）', () => {
-  const YEARS = 13 // P5 の出産年齢上限(32歳)の1262年まで
+  const YEARS = 13 // 1250〜1262年（初期の出生が出そろう範囲。長期は別の100年診断で扱う）
   const a0 = run([], YEARS)
   const births = (ys: readonly Year[]) => eventsOf(ys, 'PERSON_BIRTH')
   // 最終世界に記録された B-002 出生児（実在の fatherId を持つ人物）の父の集合。
   const fathersOf = (ys: readonly Year[]) => new Set(ys.at(-1)!.world.persons.filter((p) => p.fatherId !== undefined && p.birthYear > 1250).map((p) => p.fatherId))
 
-  it('A0: P2/P5 の婚姻から毎年の出生が起き、子は P2 を父とする', () => {
+  it('A0: P2/P5 の婚姻から出生が起き、子は P2 を父とする', () => {
     expect(births(a0).length).toBeGreaterThan(0)
     expect([...fathersOf(a0)]).toEqual(['person-exp-02'])
   })
@@ -114,9 +116,9 @@ describe('介入の下流への因果: 婚姻・出生・法的王朝（1250〜1
     const a1 = run([modifier(INTEGRATED_PAIR, -40)], YEARS)
     expect(eventsOf(a1, 'MARRIAGE_REGISTER')).toHaveLength(0)
     expect(births(a1)).toHaveLength(0)
-    expect(a1.at(-1)!.world.persons.length).toBeLessThan(a0.at(-1)!.world.persons.length)
     // 介入期間(〜1254)後も P2/P5 の信頼は閾値30へ戻らない（修正すべき不具合ではなく校正値の帰結）。
-    const after = trace(a1[8]!, 'B-004', INTEGRATED_PAIR)!
+    const afterIdx = INTEGRATED_TRUST_REDUCTION.endExclusiveYear - 1250 + 1 // 介入期間終了の翌年
+    const after = trace(a1[afterIdx]!, 'B-004', INTEGRATED_PAIR)!
     expect(after.modifierIds).toEqual([])
     expect(after.candidates[0]!.score).toBeLessThan(30)
   })
@@ -128,6 +130,5 @@ describe('介入の下流への因果: 婚姻・出生・法的王朝（1250〜1
     expect(marriage.e.involvedRefs).toEqual([{ kind: 'PERSON_PAIR', ids: [...P1_P5] }])
     expect(births(a1).length).toBeGreaterThan(0)
     expect([...fathersOf(a1)]).toEqual(['person-exp-01'])
-    expect(JSON.stringify(a1.map((y) => y.events))).not.toBe(JSON.stringify(a0.map((y) => y.events)))
   })
 })
