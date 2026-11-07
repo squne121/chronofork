@@ -2,6 +2,7 @@
 // 数値の値域・参照の整合は integrity.ts で検証する（ここでは有限な number であることまで）。
 import type {
   CohortSlot,
+  AnonymousBirthRecord,
   ControlMandate,
   ControllerRef,
   Country,
@@ -426,6 +427,15 @@ function cohortSlot(d: Sink, v: unknown, p: string): CohortSlot {
   }
 }
 
+function anonymousBirthRecord(d: Sink, v: unknown, p: string): AnonymousBirthRecord {
+  const o = obj(d, v, p, ['groupId','year','anonymousBirths'])
+  return {
+    groupId: str(d,o,'groupId',p),
+    year: num(d,o,'year',p),
+    anonymousBirths: num(d,o,'anonymousBirths',p),
+  }
+}
+
 function deferred(d: Sink, v: unknown, p: string): DeferredEffect {
   const o = obj(d, v, p, ['deferredId', 'source', 'effectiveFromYear', 'payload'])
   const pp = `${p}.payload`
@@ -453,7 +463,7 @@ export function parseWorldState(input: unknown, d: Sink): WorldState {
     'resources', 'demographics', 'deferred',
   ])
   const lo = obj(d, o['legal'], '$.legal', ['dynasties', 'marriages', 'cases', 'controlMandates', 'taxMandates'])
-  const dem = obj(d, o['demographics'], '$.demographics', ['cohortSlots'])
+  const dem = obj(d, o['demographics'], '$.demographics', ['cohortSlots','anonymousBirthHistory'])
   return {
     year: num(d, o, 'year', p),
     countries: arr(d, o, 'countries', p, (v, q) => country(d, v, q)),
@@ -471,7 +481,13 @@ export function parseWorldState(input: unknown, d: Sink): WorldState {
       taxMandates: arr(d, lo, 'taxMandates', '$.legal', (v, q) => taxMandate(d, v, q)),
     },
     resources: arr(d, o, 'resources', p, (v, q) => account(d, v, q)),
-    demographics: { cohortSlots: arr(d, dem, 'cohortSlots', '$.demographics', (v, q) => cohortSlot(d, v, q)) },
+    demographics: {
+      cohortSlots: arr(d, dem, 'cohortSlots', '$.demographics', (v, q) => cohortSlot(d, v, q)),
+      ...(dem['anonymousBirthHistory'] === undefined ? {} : {
+        anonymousBirthHistory: arr(d, dem, 'anonymousBirthHistory', '$.demographics',
+          (v, q) => anonymousBirthRecord(d, v, q)),
+      }),
+    },
     deferred: arr(d, o, 'deferred', p, (v, q) => deferred(d, v, q)),
   }
 }

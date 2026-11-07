@@ -43,6 +43,24 @@ describe('DEC-061: 大勢の人口集団からの非操作対象の婚姻候補�
     const next=proposeSupportingMarriageCandidates(world,seeker,[cohort],{...options,usedCandidateIds:used})
     expect(next.candidates.every(c=>!used.has(c.candidateId))).toBe(true)
   })
+  it('perCohortSamples=1で使用済み候補を引いても未使用構成員まで探索を続ける',()=>{
+    const one={...options,perCohortSamples:1,maxCandidates:1}
+    const first=proposeSupportingMarriageCandidates(world,seeker,[cohort],one)
+    expect(first.status).toBe('PROPOSED')
+    expect(first.candidates).toHaveLength(1)
+    const consumed=new Set(first.candidates.map(c=>c.candidateId))
+    const second=proposeSupportingMarriageCandidates(world,seeker,[cohort],{
+      ...one,usedCandidateIds:consumed,
+    })
+    expect(second.status).toBe('PROPOSED')
+    expect(second.candidates).toHaveLength(1)
+    expect(second.candidates[0]?.candidateId).not.toBe(first.candidates[0]?.candidateId)
+    const allUsed=new Set(Array.from({length:cohort.memberCount},(_,i)=>
+      supportingCandidateId(cohort.cohortId,i)))
+    expect(proposeSupportingMarriageCandidates(world,seeker,[cohort],{
+      ...one,usedCandidateIds:allUsed,
+    })).toMatchObject({status:'DEFER',candidates:[],reasonCodes:['NO_COHORT_CANDIDATE_AVAILABLE']})
+  })
   it('男女・成年・同一主権管轄が一致しない候補は法的婚姻可能と扱わない',()=>{
     const wrongSex=proposeSupportingMarriageCandidates(world,seeker,[{...cohort,sex:'MALE'}],options)
     expect(wrongSex.candidates).toHaveLength(0)
@@ -59,12 +77,13 @@ describe('DEC-061: 大勢の人口集団からの非操作対象の婚姻候補�
   })
   it('C-004で確定した出生枠を使えるが、実際の枠が足りないなら保留する',()=>{
     const derived:WorldState={...world,year:1270,demographics:{
-      cohortSlots:[{groupId:'group-east-elite',year:1250,birthSlots:25,deathSlots:8,
-        claimedBirths:1,claimedDeaths:0}],
+      cohortSlots:[],
+      anonymousBirthHistory:[{groupId:'group-east-elite',year:1250,anonymousBirths:24}],
     }}
     const birthCohort:SupportingMarriageCohort={
       ...cohort,birthYear:1250,memberCount:4,
       source:'C004_COHORT',sourceEvidenceId:'RULE-C-004:1250:east-elite',
+      survivorAttestationId:'synthetic:current-survivors:1270:east-elite',
     }
     expect(validateSupportingMarriageCohorts(derived,[birthCohort])).toEqual([])
     const r=proposeSupportingMarriageCandidates(derived,seeker,[birthCohort],options)

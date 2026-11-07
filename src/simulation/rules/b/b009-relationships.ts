@@ -69,7 +69,9 @@ export function createB009WorldStateEvaluator(
       throw new EvaluationFailure('B009の年・フェーズ・RuleID不一致',[{code:'RULE_MISMATCH',message:String(ctx.ruleId)}])
     }
     const persons=world.persons.filter(p=>p.alive).sort((a,b)=>cmp(a.personId,b.personId))
-    const n=persons.length*(persons.length-1)/2
+    // DEC-061: SUPPORTING同士の全人口ペア計算は作らない（既存KEYペアは維持）。
+    const supportingCount=persons.filter(p=>p.interactionRole==='SUPPORTING').length
+    const n=persons.length*(persons.length-1)/2-supportingCount*(supportingCount-1)/2
     if(!Number.isSafeInteger(n)||n>c.maxPairs){
       throw new EvaluationFailure('B009の更新対象ペアが予算を超過',[
         {code:'PAIR_BUDGET_EXCEEDED',message:n+' > '+c.maxPairs},
@@ -80,6 +82,7 @@ export function createB009WorldStateEvaluator(
     const traceDrafts:DecisionTraceDraft[]=[]
     for(let i=0;i<persons.length;i++)for(let j=i+1;j<persons.length;j++){
       const a=persons[i]!,b=persons[j]!
+      if(a.interactionRole==='SUPPORTING'&&b.interactionRole==='SUPPORTING')continue
       const ids=[a.personId,b.personId] as const // personsはID昇順
       const key=pairKey(ids)
       const old=existing.get(key)

@@ -10,6 +10,10 @@ import { chooseNextgenContract, negotiatedMarriageContract,
   EXPERIMENTAL_NEXTGEN_CONTRACT, validateNextgenContractCalibration } from '../../legal/nextgen-contract.ts'
 import type { NextgenContractCalibration } from '../../legal/nextgen-contract.ts'
 import { reviewDomesticMarriageEligibility } from '../../legal/nextgen-marriage.ts'
+import { reviewSupportingKinshipClearance,validateSupportingKinshipClearances }
+  from '../../legal/supporting-kinship-clearance.ts'
+import type { SupportingKinshipClearance } from '../../legal/supporting-kinship-clearance.ts'
+export type { SupportingKinshipClearance } from '../../legal/supporting-kinship-clearance.ts'
 import { pairKey } from '../../intervention/index.ts'
 import { createALeg01OrdinaryEvaluator } from './aleg01-ordinary.ts'
 import type { OrdinaryMarriageReview } from './aleg01-ordinary.ts'
@@ -18,6 +22,8 @@ export type NextgenMarriageInput=Readonly<{
   book:LegalEvidenceBook
   laws:readonly OrdinaryLaw[]
   calibration?:NextgenContractCalibration
+  /** SUPPORTINGと婚姻する場合だけ別個に必要な血縁照合証拠。省略は保留。 */
+  supportingKinshipClearances?:readonly SupportingKinshipClearance[]
 }>
 export type NextgenMarriageFactory=
   | Readonly<{ok:true;evaluator:RuleEvaluator}>
@@ -28,7 +34,10 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
   const issues=[...validateNextgenContractCalibration(cal)]
   const base=createALeg01OrdinaryEvaluator({book:input.book,laws:input.laws,reviews:[]})
   if(!base.ok)issues.push(...base.issues)
+  const clearances=input.supportingKinshipClearances??[]
+  issues.push(...validateSupportingKinshipClearances(clearances))
   if(issues.length>0)return {ok:false,issues}
+  const stableClearances=structuredClone(clearances) as SupportingKinshipClearance[]
   const book=structuredClone(input.book) as LegalEvidenceBook
   const laws=structuredClone(input.laws) as OrdinaryLaw[]
   const evaluator:RuleEvaluator=(world:WorldState,ctx:EvaluationContext)=>{
@@ -42,12 +51,18 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
       const key=pairKey(pair)
       const eligibility=reviewDomesticMarriageEligibility(world,pair)
       if(eligibility.status!=='ELIGIBLE')continue
+      // B-005とA-LEG-01は同じ当事者別証拠を再審査。違う証拠IDでのすり替えは認めない。
+      const clearance=reviewSupportingKinshipClearance(
+        world,pair,eligibility.countryId,ctx.year,stableClearances)
+      if(clearance.status!=='CLEARED')continue
       const b5=(ctx.priorTraces??[]).filter(t=>t.traceId===query.source.sourceTraceId&&
         t.ruleId==='B-005'&&t.year===ctx.year&&t.status==='ACCEPT'&&
         t.reasonCodes.includes('DEC_058_CONTRACT_NEGOTIATION')&&
         t.actorRef.kind==='PERSON_PAIR'&&pairKey(t.actorRef.ids)===key)
       if(b5.length!==1)continue
       const verified=b5[0]!
+      if(pair.some(id=>world.persons.find(p=>p.personId===id)?.interactionRole==='SUPPORTING')&&
+        verified.candidates[0]?.inputs.supportingKinshipClearanceId!==clearance.clearanceId)continue
       const priorId=verified.candidates[0]?.inputs.sourceB004TraceId
       const b4=(ctx.priorTraces??[]).filter(t=>t.traceId===priorId&&t.ruleId==='B-004'&&
         t.status==='ACCEPT'&&t.year===ctx.year&&t.actorRef.kind==='PERSON_PAIR'&&

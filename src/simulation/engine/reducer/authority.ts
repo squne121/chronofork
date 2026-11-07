@@ -38,6 +38,7 @@ function allowances(c: DomainCommand): readonly Allowance[] {
       return [{ domain: 'B', phases: [3] }]
     case 'PERSON_BIRTH':
     case 'PERSON_PROMOTE':
+    case 'PERSON_SUPPORTING_RECORD':
       return [{ domain: 'B', phases: [3] }]
     case 'PERSON_DEATH':
       return c.cause === 'NATURAL'
@@ -95,6 +96,9 @@ export function checkCommandAuthority(
   const owner = COMMAND_WRITE_OWNER[c.type]
   if (c.type === 'MARRIAGE_DISSOLVE' && s.sourceRuleId !== 'A-LEG-01') {
     return reject('WRITE_OWNER_VIOLATION', '婚姻終了はA-LEG-01のみが確定します')
+  }
+  if (c.type === 'PERSON_SUPPORTING_RECORD' && s.sourceRuleId !== 'B-001') {
+    return reject('WRITE_OWNER_VIOLATION', 'SUPPORTING人物記録はB-001だけが実行できます')
   }
   if (c.type === 'PERSON_PROMOTE' && s.sourceRuleId !== 'B-001') {
     return reject('WRITE_OWNER_VIOLATION', '昇格によるPerson登録はB-001だけが実行できます')
