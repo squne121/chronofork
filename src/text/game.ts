@@ -128,7 +128,37 @@ export class TextGameSession {
         actorRef:t.actorRef,status:t.status,reasonCodes:t.reasonCodes,
         selectedCandidateId:t.selectedCandidateId??null,eventIds:t.eventIds})
     }
-    return success('PLAYER','inspect',{branch,year,kind,id,entity:item})
+    // GUI上の閲覧項目だけを明示投影。WorldStateの生オブジェクトはPLAYERへ返さない。
+    if(kind==='person'){
+      const p=item as WorldState['persons'][number]
+      return success('PLAYER','inspect',{branch,year,kind,id,entity:{
+        name:p.name,sex:p.sex,birthYear:p.birthYear,alive:p.alive,
+        deathYear:p.deathYear??null,houseId:p.houseId,
+        legalDynasty:p.legalDynasty,bloodlineDynastyId:p.bloodlineDynastyId??null,
+        fatherId:p.fatherId??null,motherId:p.motherId??null,originGroupId:p.originGroupId,
+      }})
+    }
+    if(kind==='region'){
+      const r=item as WorldState['regions'][number]
+      return success('PLAYER','inspect',{branch,year,kind,id,entity:{
+        name:r.name,sovereignCountryId:r.sovereignCountryId,
+        deFactoController:r.deFactoControllerRef,adjacentRegionIds:r.adjacentRegionIds,
+        groupIds:w.groups.filter(g=>g.regionId===id).map(g=>g.groupId),
+        titleIds:w.titles.filter(t=>t.regionId===id).map(t=>t.titleId),
+      }})
+    }
+    if(kind==='group'){
+      const g=item as WorldState['groups'][number]
+      return success('PLAYER','inspect',{branch,year,kind,id,entity:{
+        name:g.name,regionId:g.regionId,population:g.population,
+        prosperity:g.prosperity,unrest:g.unrest,support:g.support,
+      }})
+    }
+    const t=item as WorldState['titles'][number]
+    return success('PLAYER','inspect',{branch,year,kind,id,entity:{
+      kind:t.kind,regionId:t.regionId,holder:t.holder,
+      hereditary:t.hereditary,valid:t.valid,recognition:t.recognition.status,
+    }})
   }
 
   intervene(input:Omit<PlayInput,'mode'|'seed'>):TextResult{
