@@ -26,7 +26,9 @@ export function createB004WorldStateEvaluator(
     const adults=world.persons.filter(p=>p.alive&&!married.has(p.personId)&&ctx.year-p.birthYear>=match.minAdultAge)
       .sort((a,b)=>cmp(a.personId,b.personId))
     const men=adults.filter(p=>p.sex==='MALE'),women=adults.filter(p=>p.sex==='FEMALE')
-    const n=men.length*women.length
+    const n=men.length*women.length-
+      men.filter(p=>p.interactionRole==='SUPPORTING').length*
+      women.filter(p=>p.interactionRole==='SUPPORTING').length
     if(!Number.isSafeInteger(n)||n>match.maxCandidatePairs){
       throw new EvaluationFailure('WorldState由来の縁談候補が校正予算を超過しました',[
         {code:'PAIR_BUDGET_EXCEEDED',message:n+' > '+match.maxCandidatePairs},
@@ -34,6 +36,7 @@ export function createB004WorldStateEvaluator(
     }
     const pairs: [Id,Id][]=[]
     for(const a of men)for(const b of women){
+      if(a.interactionRole==='SUPPORTING'&&b.interactionRole==='SUPPORTING')continue
       pairs.push(cmp(a.personId,b.personId)<0?[a.personId,b.personId]:[b.personId,a.personId])
     }
     // B-009実行後の年次WorldStateに信頼が存在すれば、動的基礎値＋当年介入を一度だけ解決する。

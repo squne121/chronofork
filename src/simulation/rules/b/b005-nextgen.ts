@@ -9,6 +9,9 @@ import {
 } from '../../legal/nextgen-contract.ts'
 import type { NextgenContractCalibration } from '../../legal/nextgen-contract.ts'
 import { reviewDomesticMarriageEligibility } from '../../legal/nextgen-marriage.ts'
+import { reviewSupportingKinshipClearance,validateSupportingKinshipClearances }
+  from '../../legal/supporting-kinship-clearance.ts'
+import type { SupportingKinshipClearance } from '../../legal/supporting-kinship-clearance.ts'
 import { B004_CALIBRATION_REASON } from './b004-candidate.ts'
 
 export const B005_NEXTGEN_VERSION='b005-bilateral-family-contract-1:CALIBRATION_ONLY'
@@ -17,9 +20,20 @@ type Candidate=Readonly<{trace:DecisionTrace;pair:readonly [Id,Id];score:number|
 const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0
 export function createB005NextgenEvaluator(
   calibration:NextgenContractCalibration=EXPERIMENTAL_NEXTGEN_CONTRACT,
+  supportingKinshipClearances:readonly SupportingKinshipClearance[]=[],
 ):RuleEvaluator{
-  const issues=validateNextgenContractCalibration(calibration)
+  const issues=[
+    ...validateNextgenContractCalibration(calibration),
+    ...validateSupportingKinshipClearances(supportingKinshipClearances),
+  ]
   if(issues.length>0)throw new RangeError('B005_NEXTGEN_INVALID_CALIBRATION:'+issues.join(','))
+  const stableClearances=structuredClone(supportingKinshipClearances) as SupportingKinshipClearance[]
+  const evidence=(world:WorldState,pair:readonly [Id,Id])=>{
+    const eligibility=reviewDomesticMarriageEligibility(world,pair)
+    return eligibility.status==='ELIGIBLE'
+      ?reviewSupportingKinshipClearance(world,pair,eligibility.countryId,world.year,stableClearances)
+      :null
+  }
   return (world:WorldState,ctx:EvaluationContext):RuleOutcome=>{
     if(ctx.ruleId!=='B-005'||ctx.phase!==3||ctx.year!==world.year)
       throw new EvaluationFailure('B-005次世代交渉の年/RuleID/Phase不一致',[
@@ -44,7 +58,8 @@ export function createB005NextgenEvaluator(
     const rankings=new Map<Id,Readonly<{score:number;keys:readonly string[]}>>()
     for(const c of matches){
       if(c.trace.status!=='ACCEPT'||!c.trace.reasonCodes.includes(B004_CALIBRATION_REASON)||c.score===null||
-        reviewDomesticMarriageEligibility(world,c.pair).status!=='ELIGIBLE')continue
+        reviewDomesticMarriageEligibility(world,c.pair).status!=='ELIGIBLE'||
+        evidence(world,c.pair)?.status!=='CLEARED')continue
       for(const id of c.pair){
         const prev=rankings.get(id)
         if(!prev||c.score>prev.score)rankings.set(id,{score:c.score,keys:[pairKey(c.pair)]})
@@ -56,17 +71,19 @@ export function createB005NextgenEvaluator(
     for(const {trace,pair,score} of matches){
       const key=pairKey(pair)
       const eligibility=reviewDomesticMarriageEligibility(world,pair)
+      const clearance=evidence(world,pair)
       const unique=score!==null&&pair.every(id=>{
         const r=rankings.get(id)
         return r!==undefined&&r.score===score&&r.keys.length===1&&r.keys[0]===key
       })
-      const agreement=eligibility.status==='ELIGIBLE'&&unique&&score!==null
+      const agreement=eligibility.status==='ELIGIBLE'&&clearance?.status==='CLEARED'&&unique&&score!==null
         ?chooseNextgenContract(world,pair,score,calibration):null
       const accepted=agreement?.status==='ACCEPT'
       let why:string
       if(trace.status!=='ACCEPT')why='B004_NOT_ACCEPTED'
       else if(score===null)why='B004_SCORE_MISSING'
       else if(eligibility.status!=='ELIGIBLE')why=eligibility.reasonCode
+      else if(clearance?.status!=='CLEARED')why=clearance?.reasonCode??'SUPPORTING_KINSHIP_CLEARANCE_MISSING'
       else if(!unique)why='MUTUAL_UNIQUE_PARTNER_NOT_ESTABLISHED'
       else why=agreement?.reasonCode??'CONTRACT_AGREEMENT_UNVERIFIED'
       const index=traceDrafts.length
@@ -83,6 +100,7 @@ export function createB005NextgenEvaluator(
             sourceRequestId:accepted?queryId:null,
             selectionEvidence:'RECORDED_B004_MUTUAL_UNIQUE_TOP',
             selectedContractKey:agreement?.status==='ACCEPT'?agreement.choice.key:null,
+            supportingKinshipClearanceId:clearance?.status==='CLEARED'?clearance.clearanceId:null,
             ...(agreement?{contractOptions:agreement.choices.map(c=>({
               key:c.key,dynastyId:c.dynastyId,
               firstConsentScore:c.firstConsentScore,secondConsentScore:c.secondConsentScore,
