@@ -2,11 +2,12 @@
 // ゲーム規則や勝敗を再実装せず、GUIと同じ試験A0/A1実行入口を呼ぶ。
 import { createInterface } from 'node:readline'
 import { TextGameSession, textReport } from '../src/text/game.ts'
-import type { InspectKind, TextResult } from '../src/text/game.ts'
-import type { BranchChoice, PlayMode } from '../src/ui/branch-play-source.ts'
+import { executeTextCommand, parseInteger } from '../src/text/command.ts'
+import type { TextResult } from '../src/text/game.ts'
+import type { PlayMode } from '../src/ui/branch-play-source.ts'
 
 const HELP=`Project Chronofork — テキスト操作 (EXPERIMENTAL / CALIBRATION_ONLY)
-起動: npm run play:text -- [--seed=1] [--mode=FIXED_APPROVAL|ORDINARY_LAW] [--json]
+起動: npm run play:text -- [--seed=0以上の整数] [--mode=FIXED_APPROVAL|ORDINARY_LAW] [--json]
 入力コマンド（1行ずつ）:
   observe [year=1250] [A0|A1]         指定年の世界とEventを観測
   inspect <person|region|group|title|event|trace> <id> [year=1250] [A0|A1]
@@ -17,42 +18,32 @@ const HELP=`Project Chronofork — テキスト操作 (EXPERIMENTAL / CALIBRATIO
 注: 現段階はGUIと同じ試験用の人物ペア信頼1操作→A1比較に限定。
     結果イベント・正式Goalを直接操作できません。`
 
-const flags=process.argv.slice(2)
-const seedFlag=flags.find(x=>x.startsWith('--seed='))?.slice('--seed='.length)
-const modeFlag=flags.find(x=>x.startsWith('--mode='))?.slice('--mode='.length)
-const seed=seedFlag===undefined?1:Number(seedFlag)
-const mode=(modeFlag??'FIXED_APPROVAL') as PlayMode
-const json=flags.includes('--json')
-const session=new TextGameSession(seed,mode)
-const err=(code:string,message:string):TextResult=>({ok:false,code,message})
-const branch=(s?:string):BranchChoice=>s==='A1'?'A1':'A0'
-const year=(s:string|undefined,fallback:number)=>s===undefined?fallback:Number(s)
-
-function invoke(parts:string[]):TextResult{
-  const [verb,...args]=parts
-  if(verb==='observe'){
-    return session.observe(year(args[0],1250),branch(args[1]))
+const MODES=['FIXED_APPROVAL','ORDINARY_LAW'] as const
+function parseStartup(flags:readonly string[]):{seed:number;mode:PlayMode;json:boolean}|string{
+  let seed=1,mode:PlayMode='FIXED_APPROVAL',json=false
+  for(const f of flags){
+    if(f==='--json'){json=true;continue}
+    if(f.startsWith('--seed=')){
+      const n=parseInteger(f.slice(7))
+      if(n===null)return `--seedは0以上の10進整数で指定してください: ${f}`
+      seed=n;continue
+    }
+    if(f.startsWith('--mode=')){
+      const m=f.slice(7)
+      if(!(MODES as readonly string[]).includes(m))return `--modeは${MODES.join('|')}のいずれかです: ${f}`
+      mode=m as PlayMode;continue
+    }
+    return `不明な起動引数です: ${f}`
   }
-  if(verb==='inspect'){
-    const [kind,id,at,which]=args
-    if(!kind||!id||!['person','region','group','title','event','trace'].includes(kind))
-      return err('INVALID_COMMAND','inspectに対象種別とIDを指定してください')
-    return session.inspect(kind as InspectKind,id,year(at,1250),branch(which))
-  }
-  if(verb==='intervene'){
-    if(args.length!==5)return err('INVALID_COMMAND','interveneには年・人物ID×2・補正値・年数が必要です')
-    return session.intervene({
-      year:Number(args[0]),firstPersonId:args[1],secondPersonId:args[2],
-      signedDelta:Number(args[3]),durationYears:Number(args[4]),
-    })
-  }
-  if(verb==='compare')return session.compare(year(args[0],1350))
-  if(verb==='debug'){
-    if(args[0]===undefined)return err('INVALID_COMMAND','debugには年を指定してください')
-    return session.debug(Number(args[0]),branch(args[1]),args[2])
-  }
-  return err('UNKNOWN_COMMAND','helpで利用可能な操作を確認してください')
+  return {seed,mode,json}
 }
+const startup=parseStartup(process.argv.slice(2))
+if(typeof startup==='string'){
+  process.stderr.write(`ERROR INVALID_ARGUMENT: ${startup}\n`)
+  process.exit(2)
+}
+const {seed,mode,json}=startup
+const session=new TextGameSession(seed,mode)
 
 const rl=createInterface({input:process.stdin,crlfDelay:Infinity,terminal:!!process.stdin.isTTY})
 if(!json)process.stdout.write(HELP+'\n')
@@ -65,7 +56,7 @@ for await(const line of rl){
     continue
   }
   let output:TextResult
-  try{output=invoke(input.split(/\s+/))}
-  catch(e){output=err('UNEXPECTED_ERROR',e instanceof Error?e.message:String(e))}
+  try{output=executeTextCommand(session,input.split(/\s+/))}
+  catch(e){output={ok:false,code:'UNEXPECTED_ERROR',message:e instanceof Error?e.message:String(e)}}
   process.stdout.write(json?JSON.stringify(output)+'\n':textReport(output)+'\n')
 }

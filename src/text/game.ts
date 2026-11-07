@@ -87,6 +87,8 @@ export class TextGameSession {
   }
 
   private select(branch:BranchChoice):{ok:true;run:TimelineRun}|{ok:false;code:string;message:string}{
+    // 型を迂回した呼び出しでもA0へ黙って落とさない。
+    if(branch!=='A0'&&branch!=='A1')return {ok:false,code:'INVALID_BRANCH',message:'branchはA0またはA1のみです'}
     if(branch==='A1'){
       return this.comparison?{ok:true,run:this.comparison.a1}:
         {ok:false,code:'NO_BRANCH',message:'先にinterveneでA1を作成してください'}
