@@ -132,4 +132,4 @@ describe('Issue #71: C004集団からの非操作配偶者供給（CALIBRATION_O
       provenance:'CALIBRATION_ONLY',
     }))
   },90000)
-)
+})
