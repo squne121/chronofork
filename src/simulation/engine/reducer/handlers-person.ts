@@ -110,6 +110,11 @@ export const personSupportingRecord: Handler<PersonSupportingRecordCommand> = (d
       s=>s.groupId===p.originGroupId&&s.year===p.birthYear)
     if(p.birthYear<1250||!record||c.cohortSize>record.anonymousBirths)
       return fail('LEGAL_BASIS_MISSING','過去C004匿名出生枠の記録がありません')
+    // 別コホートが同じ集団・出生年の匿名出生枠を共有するため、記録済みの補助人物数も数える。
+    const recorded=w.persons.filter(x=>x.originGroupId===p.originGroupId&&
+      x.birthYear===p.birthYear&&x.personId.startsWith('support:population:')).length
+    if(recorded>=record.anonymousBirths)
+      return fail('COHORT_CAPACITY_CONFLICT','同じ集団・出生年の匿名出生枠を使い切っています')
   }else return fail('INVALID_COMMAND','人口出生出典の種類が不正です')
   if (findPerson(w, p.personId)) return fail('ID_EXISTS', '補助人物IDを再利用できません', [p.personId])
   const group = w.groups.find(g => g.groupId === p.originGroupId)
