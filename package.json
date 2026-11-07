@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "play:text": "node --experimental-strip-types src/cli/text-game.ts"
   },
   "dependencies": {
     "react": "^19.3.1",
