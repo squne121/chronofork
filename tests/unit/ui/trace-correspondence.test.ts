@@ -60,8 +60,8 @@ describe('correspondTraces: 判断の意味での対応付け',()=>{
   })
   it('判断の新規/消滅を区別する',()=>{
     const r=correspondTraces([tr('t0',P('gone'),['c'])],[tr('t0',P('new'),['c'])])
-    expect(r.a0Only.map(t=>actorKey(t.actorRef))).toEqual(['PERSON:gone'])
-    expect(r.a1Only.map(t=>actorKey(t.actorRef))).toEqual(['PERSON:new'])
+    expect(r.a0Only.map(t=>actorKey(t.actorRef))).toEqual([JSON.stringify(['PERSON','gone'])])
+    expect(r.a1Only.map(t=>actorKey(t.actorRef))).toEqual([JSON.stringify(['PERSON','new'])])
   })
   it('同actor・同ruleで複数あり、候補ID集合が一意なら順序が違っても対応する（順序変更）',()=>{
     const a0=[tr('t0',P('p'),['x']),tr('t1',P('p'),['y'])]
