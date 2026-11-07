@@ -2,7 +2,7 @@
 // ゲーム規則や勝敗を再実装せず、GUIと同じ試験A0/A1実行入口を呼ぶ。
 import { createInterface } from 'node:readline'
 import { TextGameSession, textReport } from '../src/text/game.ts'
-import type { InspectKind, TextResult } from '../text/game.ts'
+import type { InspectKind, TextResult } from '../src/text/game.ts'
 import type { BranchChoice, PlayMode } from '../src/ui/branch-play-source.ts'
 
 const HELP=`Project Chronofork — テキスト操作 (EXPERIMENTAL / CALIBRATION_ONLY)
