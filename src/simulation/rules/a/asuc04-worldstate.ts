@@ -33,11 +33,18 @@ export const createASuc04WorldStateEvaluator=():RuleEvaluator=>(world:WorldState
     const death=deathById.get(predecessor.personId)!
     const survivors=world.persons.filter(p=>p.alive&&(p.fatherId===predecessor.personId||p.motherId===predecessor.personId))
       .sort((a,b)=>cmp(a.personId,b.personId))
-    const previous=world.legal.cases.find(c=>c.titleId===title.titleId&&c.kind==='SUCCESSION')
-    const canRecord=previous===undefined&&title.valid&&title.hereditary&&title.recognition.status==='ACTIVE'
+    // 相続はTitle単位の一度きりの状態ではなく、各保持者の死亡という独立事件。
+    // 過去の承認・却下履歴は保持しつつ、現在のPENDING案件が競合する場合だけ新規登録を止める。
+    const history=world.legal.cases.filter(c=>c.titleId===title.titleId&&c.kind==='SUCCESSION')
+    const currentId=caseId(ctx.year,title.titleId)
+    const sameIncident=history.find(c=>c.caseId===currentId)
+    const pending=history.filter(c=>c.status==='PENDING')
+    const canRecord=!sameIncident&&pending.length===0&&title.valid&&title.hereditary&&title.recognition.status==='ACTIVE'
     const reason=!title.valid||!title.hereditary||title.recognition.status!=='ACTIVE'
-      ?'TITLE_NOT_ACTIVE_HEREDITARY':previous?'EXISTING_CASE_REQUIRES_REVIEW':'GAME_02_SUCCESSION_AUTHORITY_UNDETERMINED'
-    const cid=previous?.caseId??caseId(ctx.year,title.titleId)
+      ?'TITLE_NOT_ACTIVE_HEREDITARY':pending.length>1?'CONCURRENT_PENDING_SUCCESSION_CASES'
+        :pending.length===1?'PENDING_CASE_REQUIRES_REVIEW'
+          :sameIncident?'EXISTING_INCIDENT_CASE':'GAME_02_SUCCESSION_AUTHORITY_UNDETERMINED'
+    const cid=sameIncident?.caseId??currentId
     const candidateId='asuc04:auto:'+JSON.stringify([ctx.year,title.titleId])
     traceDrafts.push({
       year:ctx.year,phase:ctx.phase,ruleId:ctx.ruleId,
@@ -46,12 +53,12 @@ export const createASuc04WorldStateEvaluator=():RuleEvaluator=>(world:WorldState
         candidateId,eligible:false,
         inputs:{titleId:title.titleId,predecessorPersonId:predecessor.personId,
           sourceB003TraceId:death.traceId,sourceB003EventIds:[...death.eventIds],
-          caseId:canRecord?cid:previous?.caseId??null,
+          caseId:canRecord?cid:sameIncident?.caseId??null,
           decisionId:null,candidatePersonId:null,
           proposedHeirPersonIds:survivors.map(p=>p.personId),
           proposedHeirLegalDynasties:survivors.map(p=>p.legalDynasty.status==='DETERMINED'
             ?p.legalDynasty.dynastyId:'UNDETERMINED'),
-          existingLegalCaseStatus:previous?.status??null,grantBasisId:title.grantBasisId,
+          existingLegalCaseStatus:sameIncident?.status??(pending.length===1?pending[0]!.status:null),grantBasisId:title.grantBasisId,
           provenance:'CALIBRATION_ONLY'},
         reasonCodes:['CALIBRATION_ONLY',reason],
       }],

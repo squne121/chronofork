@@ -80,6 +80,13 @@ describe('App', () => {
     expect(screen.getByTestId('trial-goal-a0').textContent).toContain('技術検証')
     expect(screen.getByTestId('trial-goal-a1').textContent).toContain('技術検証')
     expect(screen.getByTestId('trial-goal-summary').textContent).toContain('正式勝敗を表しません')
+    const titleReasons=screen.getByTestId('trial-goal-all-titles')
+    fireEvent.click(within(titleReasons).getByText(/すべての土地Titleの条件不足/))
+    const territorialCount=createExperimentalScenario().world.titles.filter(t=>t.kind==='TERRITORIAL').length
+    expect(within(titleReasons).getAllByRole('row')).toHaveLength(territorialCount+1)
+    expect(titleReasons.textContent).toContain('エルディア中央')
+    expect(titleReasons.textContent).toContain('正式勝敗ではありません')
+    expect(titleReasons.textContent).toMatch(/保持者が|有効な実効統治|承認根拠|王朝所属/)
     fireEvent.click(screen.getByTestId('trial-continuity').querySelector('summary')!)
     expect(screen.getByTestId('continuity-a0').textContent).toContain('1350年に存命する合法なナルヴェン')
     expect(screen.getByTestId('continuity-a1').textContent).toContain('子の世代まで')

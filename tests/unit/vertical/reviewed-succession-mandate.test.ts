@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { createExperimentalWorld, createExperimentalLegalEvidence, NALVEN_DYNASTY_ID } from '../../../src/scenario/experimental/index.ts'
 import type { LegalEvidenceBook } from '../../../src/simulation/legal/evidence.ts'
 import type { OrdinaryLaw } from '../../../src/simulation/legal/ordinary-authority.ts'
-import type { WorldState } from '../../../src/simulation/contracts/index.ts'
+import type { DecisionTrace, WorldState } from '../../../src/simulation/contracts/index.ts'
 import { runYear } from '../../../src/simulation/engine/index.ts'
 import { evaluateGoal } from '../../../src/simulation/goal.ts'
-import { createReviewedLegalEvaluators, reviewLandHeir } from '../../../src/simulation/rules/a/index.ts'
+import { createASuc04WorldStateEvaluator, createReviewedLegalEvaluators, reviewLandHeir } from '../../../src/simulation/rules/a/index.ts'
 import type { ReviewedLegalInput, SuccessionReviewEvidence, DelegationAuthorityEvidence, DelegationDecisionEvidence } from '../../../src/simulation/rules/a/index.ts'
 
 const TITLE_ID = 'title-exp-central'
@@ -309,5 +309,120 @@ describe('DEC-057: 背景法令による通常相続と新規委任の自律年�
     const r=runYear(w,{seed:1,evaluators:legal.evaluators})
     const after=nextWorld(r)
     expect(after.legal.cases[0]?.status).toBe('PENDING')
+  })
+})
+
+
+// Issue #80: 相続履歴は事件単位に蓄積し、同一Titleの過去の承認を新たな死亡の承認と混同しない。
+// 人物・承認・死亡日は試験用fixture。正式な婚姻法/相続権限/Goalを新設しない。
+describe('Issue #80: 同一Titleの2代目・3代目相続と競合保留（CALIBRATION_ONLY）', () => {
+  const successionLawOnly = [ORDINARY_SUCCESSION_LAW]
+
+  function laterDeath(previous: WorldState, predecessorId: string, childId: string, deathYear: number): WorldState {
+    const predecessor = previous.persons.find(p => p.personId === predecessorId)!
+    const template = previous.persons.find(p => p.personId === P3)!
+    const child = {
+      ...template, personId: childId, name: 'synthetic non-interactive heir ' + childId,
+      sex: 'MALE' as const, birthYear: deathYear - 30,
+      fatherId: predecessorId, motherId: undefined,
+      originGroupId: predecessor.originGroupId, houseId: predecessor.houseId,
+      bloodlineDynastyId: predecessor.bloodlineDynastyId,
+      legalDynasty: predecessor.legalDynasty, alive: true, deathYear: undefined,
+    }
+    const currentCaseId = 'case:asuc04:auto:' + JSON.stringify([deathYear, TITLE_ID])
+    return {
+      ...previous, year: deathYear + 1,
+      persons: [...previous.persons.map(p => p.personId === predecessorId
+        ? { ...p, alive: false, deathYear } : p), child],
+      titles: previous.titles.map(t => t.titleId === TITLE_ID
+        ? { ...t, holder: { status: 'UNDETERMINED' as const } } : t),
+      legal: {
+        ...previous.legal, cases: [...previous.legal.cases, {
+          caseId: currentCaseId, kind: 'SUCCESSION' as const, titleId: TITLE_ID,
+          status: 'PENDING' as const, candidatePersonIds: [childId],
+          reasonCodes: ['CALIBRATION_ONLY', 'PREDECESSOR_ID:' + predecessorId,
+            'SOURCE_B003_EVENT:synthetic-death-' + deathYear],
+        }],
+      },
+    }
+  }
+
+  it('旧APPROVEDが存在しても新たな死亡から別caseIdのPENDING記録を生成する', () => {
+    const first = nextWorld(ordinaryYear(pendingWorld(), successionLawOnly))
+    const secondDeath: WorldState = {
+      ...first, year: 1290,
+      persons: first.persons.map(p => p.personId === P2 ? { ...p, alive: false, deathYear: 1290 } : p),
+    }
+    const deathTrace = {
+      ruleId: 'B-003', year: 1290, actorRef: { kind: 'PERSON', id: P2 },
+      status: 'ACCEPT', traceId: 'trace:synthetic:second-death',
+      eventIds: ['event:synthetic:second-death'],
+    } as unknown as DecisionTrace
+    const result = createASuc04WorldStateEvaluator()(secondDeath, {
+      year: 1290, phase: 4, ruleId: 'A-SUC-04', seed: 1, branchId: 'A0',
+      priorTraces: [deathTrace], traceId: i => 'trace:synthetic:succession:' + i,
+      random: () => 0.25,
+    })
+    expect(result.commands).toHaveLength(1)
+    expect(result.commands[0]).toMatchObject({
+      type: 'LEGAL_CASE_SET',
+      legalCase: {
+        caseId: 'case:asuc04:auto:' + JSON.stringify([1290, TITLE_ID]),
+        status: 'PENDING', reasonCodes: expect.arrayContaining(['PREDECESSOR_ID:' + P2]),
+      },
+    })
+    expect(secondDeath.legal.cases).toHaveLength(1)
+    expect(secondDeath.legal.cases[0]?.status).toBe('APPROVED')
+  })
+
+  it('過去の承認記録を残し、2代目と3代目をそれぞれ独立審査してTitleを移転する', () => {
+    const first = nextWorld(ordinaryYear(pendingWorld(), successionLawOnly))
+    expect(first.titles.find(t => t.titleId === TITLE_ID)?.holder).toEqual({ status: 'HELD', personId: P2 })
+
+    const secondDeath = laterDeath(first, P2, 'synthetic-heir-generation-2', 1290)
+    const secondResult = ordinaryYear(secondDeath, successionLawOnly)
+    const second = nextWorld(secondResult)
+    expect(second.legal.cases).toHaveLength(2)
+    expect(second.legal.cases.map(c => c.status)).toEqual(['APPROVED', 'APPROVED'])
+    expect(second.legal.cases[0]).toEqual(first.legal.cases[0])
+    expect(second.titles.find(t => t.titleId === TITLE_ID)?.holder)
+      .toEqual({ status: 'HELD', personId: 'synthetic-heir-generation-2' })
+    expect(second.legal.controlMandates).toEqual(first.legal.controlMandates)
+    expect(second.legal.taxMandates).toEqual(first.legal.taxMandates)
+    expect(secondResult.status).toBe('COMPLETED')
+    if (secondResult.status === 'COMPLETED') {
+      expect(secondResult.events.filter(e => e.eventType === 'LEGAL_TITLE_TRANSFER')).toHaveLength(1)
+      expect(secondResult.events.filter(e => e.eventType === 'LEGAL_CASE_SET')).toHaveLength(1)
+    }
+
+    const thirdDeath = laterDeath(second, 'synthetic-heir-generation-2', 'synthetic-heir-generation-3', 1320)
+    const thirdResult = ordinaryYear(thirdDeath, successionLawOnly)
+    const third = nextWorld(thirdResult)
+    expect(third.legal.cases).toHaveLength(3)
+    expect(third.legal.cases.map(c => c.status)).toEqual(['APPROVED', 'APPROVED', 'APPROVED'])
+    expect(third.titles.find(t => t.titleId === TITLE_ID)?.holder)
+      .toEqual({ status: 'HELD', personId: 'synthetic-heir-generation-3' })
+    expect(third.regions).toEqual(first.regions)
+    expect(third.legal.controlMandates).toEqual(first.legal.controlMandates)
+    expect(ordinaryYear(thirdDeath, successionLawOnly)).toEqual(thirdResult)
+  })
+
+  it('同一Titleに同時PENDINGが2件なら旧APPROVEDから復旧させずDEFERする', () => {
+    const first = nextWorld(ordinaryYear(pendingWorld(), successionLawOnly))
+    const secondDeath = laterDeath(first, P2, 'synthetic-heir-conflict', 1290)
+    const duplicate = { ...secondDeath.legal.cases[1]!, caseId: 'synthetic-conflicting-second-case' }
+    const contested: WorldState = {
+      ...secondDeath,
+      legal: { ...secondDeath.legal, cases: [...secondDeath.legal.cases, duplicate] },
+    }
+    const result = ordinaryYear(contested, successionLawOnly)
+    const after = nextWorld(result)
+    expect(after.legal.cases.filter(c => c.status === 'PENDING')).toHaveLength(2)
+    expect(after.titles.find(t => t.titleId === TITLE_ID)?.holder).toEqual({ status: 'UNDETERMINED' })
+    if (result.status === 'COMPLETED') {
+      expect(result.events.filter(e => e.eventType === 'LEGAL_TITLE_TRANSFER')).toHaveLength(0)
+      expect(result.traces.some(t => t.ruleId === 'A-SUC-04' &&
+        t.reasonCodes.includes('CONCURRENT_PENDING_SUCCESSION_CASES') && t.status === 'DEFER')).toBe(true)
+    }
   })
 })

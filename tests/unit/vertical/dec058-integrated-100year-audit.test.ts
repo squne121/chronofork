@@ -6,6 +6,10 @@ import { createAutonomousCalibrationEvaluators } from '../../../src/simulation/a
 import type { AutonomyCalibration } from '../../../src/simulation/autonomy/index.ts'
 import type { B001PromotionInput } from '../../../src/simulation/rules/b/index.ts'
 import { runTimeline } from '../../../src/simulation/engine/index.ts'
+import { createRootBranch, forkHistory } from '../../../src/simulation/branching/index.ts'
+import type { StatModifier, WorldState } from '../../../src/simulation/contracts/index.ts'
+import { PAIR_TRUST_STAT_KEY, STAT_MODIFIER_RULE_VERSION } from '../../../src/simulation/contracts/index.ts'
+import { auditYearlyHistory } from './issue71-yearly-diagnostics.ts'
 import { evaluateGoal } from '../../../src/simulation/goal.ts'
 import { observeDynastyContinuity } from '../../../src/ui/dynasty-continuity.ts'
 import type { NextgenContractCalibration } from '../../../src/simulation/legal/nextgen-contract.ts'
@@ -43,23 +47,36 @@ const contract:NextgenContractCalibration={
   ownDynastyBonus:2,otherDynastyCost:0,titleWeight:4,
   noClauseCost:5,supportWeight:0,
 }
+/** 同一seed、同一校正のままP2/P5の信頼のみ負の介入を行う。出生・婚姻・相続成功を固定しない。 */
+const trialModifier:StatModifier={
+  modifierId:'trial:issue71:pair-trust-minus-20',
+  interventionId:'trial:issue71:intervene-1250',
+  targetRef:{kind:'PERSON_PAIR',ids:[P2,P5]},
+  statKey:PAIR_TRUST_STAT_KEY,signedDelta:-20,
+  startYear:1250,endExclusiveYear:1255,
+  decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
+}
 describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格・厳格Goal',()=>{
   it('実Stateから昇格→成人婚姻→孫世代へ進み、1350年の成功/失敗を正確に診断',()=>{
     const world=createExperimentalWorld()
     expect(world.year).toBe(START)
     const trial=createExperimentalOrdinaryLegalTrial()
-    const cfg=createAutonomousCalibrationEvaluators({
-      branchStartWorld:world,ledger:[],trustBase:[{personIds:[P2,P5],value:80}],
-      nextgenMarriage:{book:trial.book,laws:trial.laws,calibration:contract},
-      reviewedLegal:{book:trial.book,ordinaryLaws:trial.laws},
-      spouseDeathDissolution:true,promotion:attested,
-      autonomy:auto,
-      b009Calibration:{...EXPERIMENTAL_B009_CALIBRATION,
-        initialTrust:25,annualDelta:1,houseSupportWeight:2,sameHouseBonus:10,maxPairs:500},
-    })
-    if(!cfg.ok)throw new Error('INVALID_INTEGRATED_EVALUATORS:'+cfg.issues.join('; '))
+    const createEvaluators=(startWorld:WorldState,ledger:readonly StatModifier[])=>{
+      const cfg=createAutonomousCalibrationEvaluators({
+        branchStartWorld:startWorld,ledger,trustBase:[{personIds:[P2,P5],value:80}],
+        nextgenMarriage:{book:trial.book,laws:trial.laws,calibration:contract},
+        reviewedLegal:{book:trial.book,ordinaryLaws:trial.laws},
+        spouseDeathDissolution:true,promotion:attested,
+        autonomy:auto,
+        b009Calibration:{...EXPERIMENTAL_B009_CALIBRATION,
+          initialTrust:25,annualDelta:1,houseSupportWeight:2,sameHouseBonus:10,maxPairs:500},
+      })
+      if(!cfg.ok)throw new Error('INVALID_INTEGRATED_EVALUATORS:'+cfg.issues.join('; '))
+      return cfg.evaluators
+    }
+    const evaluators=createEvaluators(world,[])
     const result=runTimeline(world,{
-      seed:20260101,branchId:'A0-integrated-evidence',evaluators:cfg.evaluators,
+      seed:20260101,branchId:'A0-integrated-evidence',evaluators,
       goal:{dynastyId:NALVEN_DYNASTY_ID},technicalGoalEvaluation:true,
     })
     expect(result.status,result.status==='HALTED'?JSON.stringify(result.halt):'').toBe('COMPLETED')
@@ -126,6 +143,55 @@ describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格�
       t.traceId===id&&t.eventIds.includes(dissolutionEvents[0]!.eventId)))).toBe(true)
     expect(final.groups.map(g=>g.groupId)).toEqual(world.groups.map(g=>g.groupId))
     expect(final.regions).toEqual(world.regions)
+
+    // Issue #71: 生存者・候補・相続審査・Title・委任を101個の年初snapshotから読み取る。
+    // B-005/A-SUC-04等の理由は本当に発生したDecisionTraceからのみ取得する。
+    const a0=auditYearlyHistory(result,NALVEN_DYNASTY_ID)
+    const parent=createRootBranch(result,[],evaluators)
+    expect(parent.ok).toBe(true)
+    if(!parent.ok)return
+    const fork=forkHistory({
+      parent:parent.branch,branchId:'A1-issue71-trust-reduced',forkYear:1250,
+      modifiers:[trialModifier],
+      evaluatorsFor:({ledger})=>createEvaluators(world,ledger),
+    })
+    expect(fork.ok).toBe(true)
+    if(!fork.ok)return
+    const a1Result=fork.branch
+    expect(a1Result.status,a1Result.halt?.message??'').toBe('COMPLETED')
+    expect(a1Result.seed).toBe(result.seed)
+    expect(a1Result.snapshots).toHaveLength(101)
+    expect(a1Result.snapshots[0]).toEqual(result.snapshots[0])
+    const a1=auditYearlyHistory(a1Result,NALVEN_DYNASTY_ID)
+    expect(a0.rows).toHaveLength(101)
+    expect(a1.rows).toHaveLength(101)
+    expect(a0.rows[0]?.year).toBe(1250)
+    expect(a0.rows.at(-1)?.year).toBe(1350)
+    expect(a0.rows.at(-1)?.legalNalvenAlive).toBe(
+      final.persons.filter(p=>p.alive&&p.legalDynasty.status==='DETERMINED'&&
+        p.legalDynasty.dynastyId===NALVEN_DYNASTY_ID).length)
+    expect(a0.rows.at(-1)?.titleUndetermined).toBe(
+      final.titles.filter(t=>t.kind==='TERRITORIAL'&&t.holder.status==='UNDETERMINED').length)
+    expect(a0.goal).toEqual(result.technicalGoal)
+    expect(a1.goal).toEqual(evaluateGoal(a1Result.snapshots.at(-1)!,{dynastyId:NALVEN_DYNASTY_ID}))
+    expect(a1Result.goal).toBeNull()
+    // 現在・未来のイベントを推測しない。各行のEvent/Traceは当年実ログの数に一致。
+    for(const [history,report] of [[result,a0],[a1Result,a1]] as const){
+      for(const row of report.rows){
+        expect(row.eventCount).toBe(history.eventLog.filter(e=>e.year===row.year).length)
+        expect(row.traceCount).toBe(history.decisionTraces.filter(t=>t.year===row.year).length)
+      }
+    }
+    console.info('CHRONOFORK_ISSUE71_A0_ANNUAL='+JSON.stringify(a0))
+    console.info('CHRONOFORK_ISSUE71_A1_ANNUAL='+JSON.stringify(a1))
+    console.info('CHRONOFORK_ISSUE71_A0_A1_SUMMARY='+JSON.stringify({
+      provenance:'CALIBRATION_ONLY',seed:result.seed,
+      intervention:trialModifier,
+      a0:a0.summary,a1:a1.summary,
+      exactTechnicalGoalA0:a0.goal,
+      exactTechnicalGoalA1:a1.goal,
+      autonomousHistory:'NOT_ESTABLISHED',
+    }))
     // strict Goal は測定値とだけ比較する。ACHIEVED/NOT_ACHIEVEDを強制しない。
-  },240000) // 100年間の実再計算。CIの負荷差による誤ったtimeout判定を避ける
+  },600000) // A0/A1の100年間を実再計算する長時間校正。CIで実測後、通常必須から分離する。
 })

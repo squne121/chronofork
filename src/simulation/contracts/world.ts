@@ -56,6 +56,8 @@ export type PersonPairTrust = Readonly<{
 export type Person = Readonly<{
   personId: Id
   name: string
+  /** 重要人物以外でも婚姻/出生/親族を法的に追跡できる。省略は従来互換のKEY。 */
+  interactionRole?: 'KEY' | 'SUPPORTING'
   sex: 'MALE' | 'FEMALE'
   birthYear: Year
   alive: boolean
@@ -187,7 +189,17 @@ export type CohortSlot = Readonly<{
   claimedDeaths: number
 }>
 
-export type Demographics = Readonly<{ cohortSlots: readonly CohortSlot[] }>
+/** C004確定後に個別出生B002へ割り当てなかった出生数の年次履歴。生存証明ではない。 */
+export type AnonymousBirthRecord = Readonly<{
+  groupId: Id
+  year: Year
+  anonymousBirths: number
+}>
+export type Demographics = Readonly<{
+  cohortSlots: readonly CohortSlot[]
+  /** 古いWorldStateでは省略可能。個人や成人生存を推定する根拠にしてはならない。 */
+  anonymousBirthHistory?: readonly AnonymousBirthRecord[]
+}>
 
 /** 翌年施行（effectiveFromYear = source.year + 1 のみ）の効果。型付き union のみ。汎用更新は持たない。 */
 export type DeferredPayload = Readonly<{

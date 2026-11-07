@@ -71,6 +71,9 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
   dupScoped('TaxCollectionMandate', world.legal.taxMandates.map((m, i) => ({ key: m.mandateId, path: `$.legal.taxMandates[${i}]` })))
   dupScoped('DeferredEffect', world.deferred.map((m, i) => ({ key: m.deferredId, path: `$.deferred[${i}]` })))
   dupScoped('CohortSlot', world.demographics.cohortSlots.map((m, i) => ({ key: `${m.groupId}@${m.year}`, path: `$.demographics.cohortSlots[${i}]` })))
+  dupScoped('AnonymousBirthRecord', (world.demographics.anonymousBirthHistory ?? []).map((m,i) => ({
+    key: `${m.groupId}@${m.year}`, path: `$.demographics.anonymousBirthHistory[${i}]`,
+  })))
 
   /** 存在しない → DANGLING_REF、別種別として存在 → WRONG_REF_KIND。 */
   const ref = (kind: RefKind, id: Id, path: string, owner: { kind: string; id: Id }) => {
@@ -175,6 +178,8 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
   world.persons.forEach((x, i) => {
     const p = `$.persons[${i}]`
     const o = { kind: 'PERSON', id: x.personId }
+    if(x.interactionRole!==undefined && x.interactionRole!=='KEY' && x.interactionRole!=='SUPPORTING')
+      add('OUT_OF_RANGE',`${p}.interactionRole`,'人物の操作区分はKEY / SUPPORTINGのみ',o)
     ref('GROUP', x.originGroupId, `${p}.originGroupId`, o)
     ref('HOUSE', x.houseId, `${p}.houseId`, o)
     if (x.bloodlineDynastyId !== undefined) ref('DYNASTY', x.bloodlineDynastyId, `${p}.bloodlineDynastyId`, o)
@@ -362,6 +367,15 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
     if (s.claimedBirths > s.birthSlots || s.claimedDeaths > s.deathSlots) {
       add('COHORT_SLOT_EXCEEDED', p, '請求済みの出生/死亡数が枠を超えています', o)
     }
+  })
+  ;(world.demographics.anonymousBirthHistory ?? []).forEach((s,i) => {
+    const p = `$.demographics.anonymousBirthHistory[${i}]`
+    const o = { kind: 'GROUP', id: s.groupId }
+    ref('GROUP', s.groupId, p+'.groupId', o)
+    if (!Number.isSafeInteger(s.year) || s.year < START_YEAR || s.year >= world.year || s.year >= GOAL_YEAR)
+      add('INVALID_PERIOD', p+'.year', '匿名出生履歴は1250年から現在より前の年に限ります', o)
+    if (!isCount(s.anonymousBirths))
+      add('NOT_NON_NEGATIVE_INTEGER',p+'.anonymousBirths','匿名出生数は非負整数です',o)
   })
   world.deferred.forEach((e, i) => {
     const p = `$.deferred[${i}]`
