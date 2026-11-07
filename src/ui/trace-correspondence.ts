@@ -65,7 +65,12 @@ export function correspondTraces(a0:readonly DecisionTrace[],a1:readonly Decisio
 function semanticView(t:DecisionTrace,events:ReadonlyMap<Id,EventLogEntry>){
   const {traceId:_t,eventIds,...rest}=t
   void _t
-  return JSON.stringify({...rest,events:eventIds.map(id=>events.get(id)?.semanticEventKey??'?'+id).sort()})
+  // Eventは意味キーに加え、種別・関与対象・状態差分も比較する（sourceTraceIdsは採番差なので除外）。
+  const ev=eventIds.map(id=>{
+    const e=events.get(id)
+    return e?JSON.stringify([e.semanticEventKey,e.eventType,e.involvedRefs,e.stateChanges]):'?'+id
+  }).sort()
+  return JSON.stringify({...rest,events:ev})
 }
 
 export function compareTraces(

@@ -81,6 +81,17 @@ describe('correspondTraces: 判断の意味での対応付け',()=>{
     const diff=compareTraces([tr('a',P('p'),['c'],{eventIds:['e0']})],[tr('b',P('p'),['c'],{eventIds:['e9']})],
       [ev('e0','K')],[ev('e9','OTHER')])
     expect(diff.deltas).toHaveLength(1)
+    // 同じ意味キーでもstateChangesが違えば変更として残す。
+    const sc=(v:number):EventLogEntry=>({...ev('e','K'),stateChanges:[{path:'x',before:0,after:v}]})
+    const sd=compareTraces([tr('a',P('p'),['c'],{eventIds:['e']})],[tr('b',P('p'),['c'],{eventIds:['e']})],[sc(1)],[sc(2)])
+    expect(sd.deltas).toHaveLength(1)
+  })
+  it.each([
+    ['modifierIds',{modifierIds:['m']}],['random',{random:{stream:'ENDOGENOUS' as const,key:'k',value:1}}],
+    ['reasonCodes',{reasonCodes:['R']}],['selectedCandidateId',{selectedCandidateId:'c'}],
+  ])('%sの差は同一扱いにしない',(_n,o)=>{
+    const r=compareTraces([tr('a',P('p'),['c'])],[tr('b',P('p'),['c'],o)],[],[])
+    expect(r.deltas).toHaveLength(1)
   })
 })
 
