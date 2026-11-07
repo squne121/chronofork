@@ -63,9 +63,10 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent}:Props)
         初期入力例（seed {INTEGRATED_PLAY_DEFAULTS.seed}・{INTEGRATED_PLAY_DEFAULTS.year}年・{INTEGRATED_PLAY_DEFAULTS.signedDelta}・{INTEGRATED_PLAY_DEFAULTS.durationYears}年間）はPR #78で実測した CALIBRATION_ONLY の条件です。入力欄を変えた場合は、その値で再計算しています。史実・強制イベントではありません。
       </p>
       {om&&<p className="note" data-testid="integrated-omission">
-        表示用の縮約: Event A0 {om.fullEventCount.a0}件 / A1 {om.fullEventCount.a1}件、Trace A0 {om.fullTraceCount.a0}件 / A1 {om.fullTraceCount.a1}件を計算しました。
-        メモリ保護のため、A0/A1で完全に同一の信頼更新（{Object.entries(om.omittedEventsByType).map(([k,n])=>`${k} ${n}件`).join('、')||'なし'}、
-        {Object.entries(om.omittedTracesByRule).map(([k,n])=>`${k}のTrace ${n}件`).join('、')||'なし'}）だけを一覧から省略しています。差分のあるものは全て残しています。
+        表示の省略（experimental試遊限定の技術的処置）: 計算した全件数は Event A0 {om.fullEventCount.a0}件 / A1 {om.fullEventCount.a1}件、Trace A0 {om.fullTraceCount.a0}件 / A1 {om.fullTraceCount.a1}件です。
+        メモリ保護のため、A0/A1で内容が完全に同一の高頻度記録（{Object.entries(om.omittedEventsByType).map(([k,n])=>`${k} ${n}件`).join('、')||'なし'}、
+        {Object.entries(om.omittedTracesByRule).map(([k,n])=>`${k}のTrace ${n}件`).join('、')||'なし'}）だけを、画面への転送と一覧表示から省略しています（省略件数は両枝共通の件数）。
+        両枝で差のある記録は全て残しています。省略した個別の詳細は、現在のUIでは後から閲覧できません。
       </p>}
     </details>
 
@@ -78,7 +79,7 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent}:Props)
           {overview.finalWorldIdentical===false?' / 1350年のWorldStateも異なります':overview.finalWorldIdentical===true?' / 1350年のWorldStateは同一です':''}。</p>}
       <p data-testid="integrated-trace-use">介入が判断Traceに記録された件数: A0 {overview.interventionTraces.a0}件 / A1 {overview.interventionTraces.a1}件
         （A1側の判断の理由には介入が残ります。結果の差とは別です）。</p>
-      {om&&<p className="note" data-testid="integrated-count-note">この画面のEvent/Trace件数は縮約後の表示分です。計算した全件数は上の「入力条件と計算結果の出典」を参照してください。</p>}
+      {om&&<p className="note" data-testid="integrated-count-note">この画面のEvent/Trace件数は、同一記録を省略した後の表示分です（省略した個別詳細は閲覧できません）。全件数と省略件数は上の「入力条件と計算結果の出典」を参照してください。</p>}
       <p className="note">単独原因の断定ではなく、正式勝敗でもありません。差の理由は下のEventから「④ 理由を確認する」のDecisionTraceで辿れます。</p>
     </div>
 
@@ -111,13 +112,13 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent}:Props)
 
     <h4>1350年の土地Title・相続・統治委任</h4>
     <table aria-label="1350年の土地Titleの保持者と相続・統治委任" data-testid="integrated-final-titles">
-      <thead><tr><th scope="col">土地Title</th><th scope="col">保持者 A0</th><th scope="col">保持者 A1</th><th scope="col">相続PENDING A0/A1</th><th scope="col">有効な統治委任 A0/A1</th></tr></thead>
+      <thead><tr><th scope="col">土地Title</th><th scope="col">保持者 A0</th><th scope="col">保持者 A1</th><th scope="col">相続PENDING件数 A0/A1</th><th scope="col">期間内の統治委任件数 A0/A1（法的有効性とは別）</th></tr></thead>
       <tbody>{titleIds.map(id=>{
         const a=f(titles0,id) as typeof titles0[number]|undefined,b=f(titles1,id) as typeof titles1[number]|undefined
         return <tr key={id}><th scope="row">{a?.region??b?.region}（{id}）</th><td>{a?.holder??'—'}</td><td>{b?.holder??'—'}</td>
-          <td>{a?.pendingCases??'—'} / {b?.pendingCases??'—'}</td><td>{a?.activeMandates??'—'} / {b?.activeMandates??'—'}</td></tr>
+          <td>{a?.pendingCases??'—'} / {b?.pendingCases??'—'}</td><td>{a?.mandatesInPeriod??'—'} / {b?.mandatesInPeriod??'—'}</td></tr>
       })}</tbody>
     </table>
-    <p className="note">Titleごとの厳格な技術判定の阻害理由は、下の「1350年のナルヴェン王朝存続条件（試験判定）」で確認できます。</p>
+    <p className="note">「保持者未確定」は保持者が決まっていない状態そのもので、相続PENDING件数は実際に記録された審査の件数です（未確定でも件数が0のことがあります）。「期間内の統治委任」は年の期間条件に合う記録の件数で、厳格Goalでの法的適格性を示しません。Titleごとの厳格な技術判定の阻害理由は、下の「1350年のナルヴェン王朝存続条件（試験判定）」で確認できます。</p>
   </div>
 }

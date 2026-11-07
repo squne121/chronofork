@@ -95,17 +95,19 @@ export function lineageRows(initial:WorldState,final:WorldState|undefined):reado
 }
 
 export type TitleRow=Readonly<{
-  titleId:Id;region:string;holder:string;pendingCases:number;activeMandates:number
+  titleId:Id;region:string;holder:string;holderUndetermined:boolean;pendingCases:number;mandatesInPeriod:number
 }>
-/** 1350年(最終snapshot)の土地Title保持者・相続PENDING・統治委任。補完せず記録だけを読む。 */
+/** 1350年(最終snapshot)の土地Title保持者・相続PENDING件数・期間内の統治委任件数。補完せず記録だけを読む。
+ * 統治委任は年の期間条件だけで数えた件数で、厳格Goalでの法的適格性は判定しない。保持者未確定と相続PENDING件数は別の事実として分ける。 */
 export function titleRows(final:WorldState|undefined):readonly TitleRow[]{
   if(!final)return []
   const names=namesOf(final)
   return final.titles.filter(t=>t.kind==='TERRITORIAL').map(t=>({
     titleId:t.titleId,
     region:final.regions.find(r=>r.regionId===t.regionId)?.name??t.regionId,
-    holder:t.holder.status==='HELD'?(names.person(t.holder.personId)??t.holder.personId):'未確定（相続PENDING）',
+    holder:t.holder.status==='HELD'?(names.person(t.holder.personId)??t.holder.personId):'保持者未確定',
+    holderUndetermined:t.holder.status!=='HELD',
     pendingCases:final.legal.cases.filter(c=>c.titleId===t.titleId&&c.kind==='SUCCESSION'&&c.status==='PENDING').length,
-    activeMandates:final.legal.controlMandates.filter(m=>m.regionId===t.regionId&&m.effectiveFromYear<=final.year&&final.year<m.endExclusiveYear).length,
+    mandatesInPeriod:final.legal.controlMandates.filter(m=>m.regionId===t.regionId&&m.effectiveFromYear<=final.year&&final.year<m.endExclusiveYear).length,
   })).sort((a,b)=>a.titleId.localeCompare(b.titleId))
 }

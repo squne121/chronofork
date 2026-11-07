@@ -5,8 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import App from '../../../src/ui/App.tsx'
 import { INTEGRATED_PLAY_DEFAULTS, playModeLabel, runPlayComparison } from '../../../src/ui/branch-play-source.ts'
 import type { PlayComparison, PlayInput, PlayView } from '../../../src/ui/branch-play-source.ts'
-import { buildOverview } from '../../../src/ui/integrated-overview.ts'
+import { buildOverview, titleRows } from '../../../src/ui/integrated-overview.ts'
 import type { PlayOutcome, PlayRunner } from '../../../src/ui/play-runner.ts'
+import { IntegratedOverview } from '../../../src/ui/IntegratedOverview.tsx'
 import { toDisplayView } from '../../../src/ui/play-view.ts'
 import { INTEGRATED_PAIR, INTEGRATED_SEED, INTEGRATED_TRUST_REDUCTION } from '../../../src/scenario/experimental/index.ts'
 import type { DecisionTrace, EventLogEntry } from '../../../src/simulation/contracts/index.ts'
@@ -114,6 +115,46 @@ describe('buildOverview: 差が無いときは差が確認されないと判定�
     const o = buildOverview(synthetic([[], []], [[ev('e9', 'MARRIAGE_REGISTER', [])], []]))
     expect(o.totalDifferences).toBe(1)
     expect(o.rows.find(r => r.category.key === 'marriage')?.a1Only).toHaveLength(1)
+  })
+})
+
+describe('表示文言: 保持者未確定・統治委任・省略の説明', () => {
+  const world = (holder: unknown, cases: unknown[], mandates: unknown[]) => ({
+    year: 1350, persons: [], groups: [], regions: [{ regionId: 'r1', name: '北部' }],
+    titles: [{ titleId: 't1', kind: 'TERRITORIAL', regionId: 'r1', holder }],
+    legal: { dynasties: [], cases, controlMandates: mandates },
+  }) as never
+  it('保持者未確定は相続PENDINGと書かず、PENDING件数は記録から別に数える', () => {
+    const [none] = titleRows(world({ status: 'UNDETERMINED' }, [], []))
+    expect(none.holder).toBe('保持者未確定')
+    expect(none.holderUndetermined).toBe(true)
+    expect(none.pendingCases).toBe(0)
+    const [pend] = titleRows(world({ status: 'UNDETERMINED' }, [{ titleId: 't1', kind: 'SUCCESSION', status: 'PENDING' }], []))
+    expect(pend.pendingCases).toBe(1)
+    expect(pend.holder).not.toContain('相続PENDING')
+  })
+  it('統治委任は期間条件の件数で、法的有効性とは別と明示する', () => {
+    const [r] = titleRows(world({ status: 'UNDETERMINED' }, [], [
+      { regionId: 'r1', effectiveFromYear: 1300, endExclusiveYear: 1400 },
+      { regionId: 'r1', effectiveFromYear: 1200, endExclusiveYear: 1300 },
+    ]))
+    expect(r.mandatesInPeriod).toBe(1)
+  })
+  it('画面に省略の全件数・対象・復元不可・限定処置を表示する', () => {
+    const base = synthetic([[], []], [[], []])
+    const fw = { year: 1350, persons: [], groups: [], regions: [], titles: [], legal: { dynasties: [], cases: [], controlMandates: [] } }
+    const side = (r: PlayComparison['a0']) => ({ ...r, initialWorld: { year: 1250, persons: [] }, result: { ...r.result, snapshots: [fw] } })
+    const v = {
+      ...base, a0: side(base.a0), a1: side(base.a1),
+      displayOmission: { fullEventCount: { a0: 50, a1: 51 }, fullTraceCount: { a0: 40, a1: 41 },
+        omittedEventsByType: { PERSON_PAIR_TRUST_SET: 30 }, omittedTracesByRule: { 'B-009': 30 } },
+    } as unknown as PlayView
+    render(<IntegratedOverview view={v} personLabel={id => id} onInspectEvent={() => {}} />)
+    const t = screen.getByTestId('integrated-omission').textContent ?? ''
+    for (const w of ['Event A0 50件', 'A1 41件', 'PERSON_PAIR_TRUST_SET 30件', 'B-009のTrace 30件', '完全に同一', '差のある記録は全て残', '後から閲覧できません', 'experimental試遊限定']) expect(t).toContain(w)
+    expect(screen.getByTestId('integrated-final-titles').textContent).toContain('法的有効性とは別')
+    expect(document.body.textContent).toContain('保持者未確定」は保持者が決まっていない状態そのもの')
+    expect(document.body.textContent).not.toContain('無損失')
   })
 })
 
