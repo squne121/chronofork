@@ -16,7 +16,7 @@ Playwright CLIによるAIのGUI試遊、正式Goal公開、正式シナリオデ
 
 `src/text/game.ts` は `src/ui/branch-play-source.ts` の既存A0/A1実験経路と `src/ui/timeline-source.ts` の型を再利用する**暫定アダプタ**。最終的には両UIが利用するゲームアプリケーションサービスへ移すが、現時点で未整備の複数枝や全介入項目を完成扱いしない。
 
-`npm run play:text -- --seed=1 --mode=FIXED_APPROVAL` でNode 22+のテキストセッションを開始する。
+`npm run play:text -- --seed=1 --mode=FIXED_APPROVAL` でNode 22+のテキストセッション（Node専用エントリポイントは\`scripts/text-game.ts\`）を開始する。
 
 | 入力 | プレイヤー／検証上の機能 |
 |---|---|
