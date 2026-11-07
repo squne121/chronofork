@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
-    "play:text": "node --experimental-strip-types src/cli/text-game.ts",
+    "play:text": "node --experimental-strip-types scripts/text-game.ts",
     "play:ui": "playwright cli"
   },
   "dependencies": {
