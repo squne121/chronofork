@@ -26,10 +26,12 @@ export type TraceSummary=Readonly<{matched:number;unchanged:number;changed:numbe
 
 /** actorRefの正規化キー。PERSON_PAIRは順序に依存させない。 */
 export function actorKey(ref:TargetRef):string{
-  return ref.kind==='PERSON_PAIR'?'PERSON_PAIR:'+[...ref.ids].sort().join('|'):ref.kind+':'+ref.id
+  return JSON.stringify(ref.kind==='PERSON_PAIR'
+    ?[ref.kind,...[...ref.ids].sort()]
+    :[ref.kind,ref.id])
 }
-const groupKey=(t:DecisionTrace)=>[t.year,t.phase,t.ruleId,actorKey(t.actorRef)].join('/')
-const candidateSignature=(t:DecisionTrace)=>t.candidates.map(c=>c.candidateId).sort().join('\u0000')
+const groupKey=(t:DecisionTrace)=>JSON.stringify([t.year,t.phase,t.ruleId,actorKey(t.actorRef)])
+const candidateSignature=(t:DecisionTrace)=>JSON.stringify(t.candidates.map(c=>c.candidateId).sort())
 
 function bucket<T>(items:readonly T[],key:(t:T)=>string):Map<string,T[]>{
   const m=new Map<string,T[]>()

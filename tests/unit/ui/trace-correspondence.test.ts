@@ -34,6 +34,25 @@ describe('correspondTraces: 判断の意味での対応付け',()=>{
   it('PERSON_PAIRは順序に依存せず正規化される',()=>{
     expect(actorKey(pair('a','b'))).toBe(actorKey({kind:'PERSON_PAIR',ids:['b','a']}))
   })
+  it('人物ID内に区切り文字があっても、別ペアを同じactorとみなさない',()=>{
+    const first=pair('a|b','c')
+    const second=pair('a','b|c')
+    expect(actorKey(first)).not.toBe(actorKey(second))
+    const result=correspondTraces([tr('trace:0',first,['x'])],[tr('trace:0',second,['x'])])
+    expect(result.pairs).toHaveLength(0)
+    expect(result.a0Only).toHaveLength(1)
+    expect(result.a1Only).toHaveLength(1)
+  })
+  it('候補IDの区切り文字衝突で、異なる候補を誤対応させない',()=>{
+    const a0=[tr('t0',P('p'),['a\u0000b','c']),tr('t1',P('p'),['q'])]
+    const a1=[tr('t0',P('p'),['a','b\u0000c']),tr('t1',P('p'),['q'])]
+    const c=correspondTraces(a0,a1)
+    expect(c.pairs).toHaveLength(1)
+    expect(c.pairs[0]?.before.candidates[0]?.candidateId).toBe('q')
+    expect(c.ambiguous).toHaveLength(1)
+    expect(c.ambiguous[0]?.before).toHaveLength(1)
+    expect(c.ambiguous[0]?.after).toHaveLength(1)
+  })
   it('候補の新規追加: 1対1のactorは対応し、候補差は変更として見える',()=>{
     const r=compareTraces([tr('t0',P('p'),['c1'])],[tr('t0',P('p'),['c1','c2'])],[],[])
     expect(r.summary.matched).toBe(1)
