@@ -41,6 +41,16 @@ const trialGoalStatus=(g:GoalEvaluation|null):string=>{
   if(g.status==='NOT_ACHIEVED')return '条件に不一致（技術検証）'
   return g.status==='INVALID_INPUT'?'データ不正で評価不能':'対象年ではない'
 }
+const goalAssessments=(g:GoalEvaluation|null)=>
+  g?.status==='ACHIEVED'||g?.status==='NOT_ACHIEVED'?g.assessments:[]
+/** 厳格な1350年GoalのTitle別判定をそのまま読む。未確定の権限は補完しない。 */
+const titleGoalEvidence=(g:GoalEvaluation|null,titleId:string):string=>{
+  if(g===null||g.status==='INVALID_INPUT'||g.status==='NOT_EVALUABLE')return '判定根拠なし'
+  const a=g.assessments.find(x=>x.titleId===titleId)
+  if(!a)return 'Titleの評価記録なし'
+  if(a.qualifies)return '条件に一致'
+  return a.failures.map(code=>GOAL_FAILURE_LABEL[code]).join('、')||'不一致の原因未記録'
+}
 const centralTitleEvidence=(g:GoalEvaluation|null):string=>{
   if(g===null||g.status==='INVALID_INPUT'||g.status==='NOT_EVALUABLE')return '判定根拠なし'
   const a=g.assessments.find(x=>x.titleId==='title-exp-central')
@@ -90,6 +100,16 @@ export function InterventionComparePanel(p:Props){
       </dl>
     )}
   </div>
+  const finalA0=p.comparison?.a0.result.snapshots.at(-1)
+  const goalA0=p.comparison?.a0.result.technicalGoal??null
+  const goalA1=p.comparison?.a1.result.technicalGoal??null
+  const titleIds=[...new Set([...goalAssessments(goalA0),...goalAssessments(goalA1)]
+    .filter(a=>!a.failures.includes('NOT_TERRITORIAL')).map(a=>a.titleId))].sort()
+  const titleLabel=(titleId:string)=>{
+    const regionId=finalA0?.titles.find(t=>t.titleId===titleId)?.regionId
+    const region=finalA0?.regions.find(r=>r.regionId===regionId)
+    return region?region.name+'（'+titleId+'）':titleId
+  }
   const pair=input?[input.firstPersonId,input.secondPersonId].sort() as [string,string]:PLAY_DEMO_PAIR
   const b4=(choice:BranchChoice)=>p.comparison?.[choice.toLowerCase() as 'a0'|'a1'].result.decisionTraces.find(t=>
     t.year===p.year&&t.ruleId==='B-004'&&t.actorRef.kind==='PERSON_PAIR'&&
@@ -199,6 +219,20 @@ export function InterventionComparePanel(p:Props){
           <summary>中央世襲所領について、判定根拠を見る</summary>
           <p data-testid="trial-goal-reasons-a0">A0: {centralTitleEvidence(p.comparison.a0.result.technicalGoal)}</p>
           <p data-testid="trial-goal-reasons-a1">A1: {centralTitleEvidence(p.comparison.a1.result.technicalGoal)}</p>
+        </details>
+        <details data-testid="trial-goal-all-titles">
+          <summary>すべての土地Titleの条件不足をA0/A1で比べる</summary>
+          {titleIds.length===0?<p>土地Titleの評価記録はありません。</p>:(
+            <table aria-label="1350年の土地Title別技術判定">
+              <thead><tr><th scope="col">土地Title</th><th scope="col">A0 介入なし</th><th scope="col">A1 介入あり</th></tr></thead>
+              <tbody>{titleIds.map(id=><tr key={id} data-testid={'trial-goal-title-'+id}>
+                <th scope="row">{titleLabel(id)}</th>
+                <td>{titleGoalEvidence(goalA0,id)}</td>
+                <td>{titleGoalEvidence(goalA1,id)}</td>
+              </tr>)}</tbody>
+            </table>
+          )}
+          <p className="note">各行は1350年の実Titleと既存のevaluateGoal判定に基づきます。未確定の保持者・承認・統治権限を補完せず、正式勝敗ではありません。</p>
         </details>
         <p className="note">実計算した1350年のWorldStateを既存の厳格Goalで照合した非権威の検証値です。発行者に関する通常法制のDEC-057は採用されていますが、現在の法令・契約・適格性の具体値は試験用で、全37ルールも未完成のため、正式勝敗を表しません。</p>
       </div>
