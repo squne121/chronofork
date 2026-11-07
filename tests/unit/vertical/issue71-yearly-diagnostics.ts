@@ -25,6 +25,7 @@ export function auditYearlyHistory(history:History,dynastyId:Id){
     const ts=history.decisionTraces.filter(t=>t.year===year)
     const legalAlive=w.persons.filter(p=>p.alive&&
       p.legalDynasty.status==='DETERMINED'&&p.legalDynasty.dynastyId===dynastyId)
+    const legalAliveIds=new Set(legalAlive.map(p=>p.personId))
     const married=new Set(w.legal.marriages.filter(m=>m.status==='ACTIVE').flatMap(m=>m.personIds))
     const available=w.persons.filter(p=>p.alive&&year-p.birthYear>=18&&!married.has(p.personId))
     const landTitles=w.titles.filter(t=>t.kind==='TERRITORIAL')
@@ -59,10 +60,8 @@ export function auditYearlyHistory(history:History,dynastyId:Id){
       pendingSuccessionTitleIds:[...new Set(pending.map(c=>c.titleId))].sort(),
       landTitleCount:landTitles.length,
       titlesHeld:held.length,
-      titlesHeldByLivingNalven:held.filter(t=>{
-        if(t.holder.status!=='HELD')return false
-        return legalAlive.some(p=>p.personId===t.holder.personId)
-      }).length,
+      titlesHeldByLivingNalven:held.filter(t=>t.holder.status==='HELD'&&
+        legalAliveIds.has(t.holder.personId)).length,
       titleUndetermined:landTitles.filter(t=>t.holder.status==='UNDETERMINED').length,
       mandatesRecorded:w.legal.controlMandates.length,
       mandateWindowsActive:mandateWindows.length,
