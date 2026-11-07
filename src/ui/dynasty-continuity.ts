@@ -31,7 +31,7 @@ const unverified=():ContinuityObservation=>({
 /** 実在した親子辺だけから1250年初期の人物を基点とした世代数を計算する。
  * 初期に存在する人物は血縁的に親子でも基点扱い。欠落/循環は家系の根拠を増やさない。
  */
-function descendantDepths(initial:WorldState,people:readonly Person[]):ReadonlyMap<Id,number>{
+export function descendantDepths(initial:WorldState,people:readonly Person[]):ReadonlyMap<Id,number>{
   const initialIds=new Set(initial.persons.map(p=>p.personId))
   const byId=new Map(people.map(p=>[p.personId,p]))
   const cache=new Map<Id,number>()

@@ -1,8 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { HistoryPanel, involves } from './HistoryPanel.tsx'
 import { InterventionComparePanel } from './InterventionComparePanel.tsx'
 import { runPlayComparison } from './branch-play-source.ts'
-import type { BranchChoice, PlayComparison, PlayInput } from './branch-play-source.ts'
+import type { BranchChoice, PlayInput, PlayView } from './branch-play-source.ts'
+import { workerPlayRunner } from './play-runner.ts'
+import type { PlayRunHandle, PlayRunner } from './play-runner.ts'
+import type { CalcInfo } from './IntegratedOverview.tsx'
 import { Inspector } from './Inspector.tsx'
 import { RegionMap } from './RegionMap.tsx'
 import { RunPanel } from './RunPanel.tsx'
@@ -25,10 +28,18 @@ function Unconnected({ children }: { children: string }) {
 }
 
 /** run は試験用の注入口。未指定なら初期化時に一度だけ試験計算を行う。 */
-export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) {
+export default function App({ run: injected, playRunner = workerPlayRunner }:
+  Readonly<{ run?: TimelineRun; playRunner?: PlayRunner }>) {
   const [run, setRun] = useState<TimelineRun>(() => injected ?? runExperimentalTimeline(DEFAULT_SEED))
   const [seedText, setSeedText] = useState(String(run.inputs.seed))
-  const [comparison, setComparison] = useState<PlayComparison | undefined>(undefined)
+  const [comparison, setComparison] = useState<PlayView | undefined>(undefined)
+  const [running, setRunning] = useState<{ startedAt: number } | undefined>(undefined)
+  const [elapsedSec, setElapsedSec] = useState(0)
+  const [notice, setNotice] = useState<string | undefined>(undefined)
+  const [calc, setCalc] = useState<CalcInfo | undefined>(undefined)
+  // 古い結果で上書きしないための世代番号と、キャンセル用の実行ハンドル。
+  const tokenRef = useRef(0)
+  const handleRef = useRef<PlayRunHandle | undefined>(undefined)
   const [playError, setPlayError] = useState<{code:string;message:string} | undefined>(undefined)
   const [activeBranch, setActiveBranch] = useState<BranchChoice>('A1')
   const { result } = run
@@ -81,7 +92,29 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
       setTraceId(undefined)
     }
   }
+  // 計算中の経過秒(実測できる値のみ)。進捗率・残り時間は出さない。
+  const startedAt = running?.startedAt
+  useEffect(() => {
+    if (startedAt === undefined) return
+    const id = setInterval(() => setElapsedSec(Math.floor((Date.now() - startedAt) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [startedAt])
+  // 画面を離れるときは計算を中断してWorkerを解放する。
+  useEffect(() => () => {
+    tokenRef.current++
+    handleRef.current?.cancel()
+  }, [])
+  const stopRunning = () => {
+    tokenRef.current++
+    handleRef.current?.cancel()
+    handleRef.current = undefined
+    setRunning(undefined)
+    setElapsedSec(0)
+  }
   const rerun = () => {
+    stopRunning()
+    setNotice(undefined)
+    setCalc(undefined)
     const seed = Number(seedText.trim())
     setRun(runExperimentalTimeline(seed))
     setComparison(undefined)
@@ -90,13 +123,7 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
     setTraceId(undefined)
   }
 
-  const runComparison = (input:PlayInput) => {
-    const outcome = runPlayComparison(input)
-    if (!outcome.ok) {
-      setPlayError({code:outcome.code,message:outcome.message})
-      return
-    }
-    const c=outcome.comparison
+  const applyView = (c:PlayView, input:PlayInput) => {
     setPlayError(undefined)
     setComparison(c)
     setActiveBranch('A1')
@@ -107,6 +134,48 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
     setEventId(undefined)
     setTraceId(undefined)
     setSelection(undefined)
+  }
+  const runComparison = (input:PlayInput) => {
+    setNotice(undefined)
+    if (input.mode === 'INTEGRATED_EXPERIMENTAL') {
+      // 100年のA0/A1はWorkerで再計算する。計算中の二重起動は無視し、古い結果は破棄する。
+      if (handleRef.current) return
+      const token = ++tokenRef.current
+      const started = Date.now()
+      setPlayError(undefined)
+      setElapsedSec(0)
+      setRunning({ startedAt: started })
+      let handle: PlayRunHandle
+      try {
+        handle = playRunner(input)
+      } catch (error) {
+        setRunning(undefined)
+        setPlayError({ code: 'WORKER_START_FAILED', message: error instanceof Error ? error.message : String(error) })
+        return
+      }
+      handleRef.current = handle
+      void handle.promise.then((o) => {
+        if (token !== tokenRef.current) return
+        handleRef.current = undefined
+        setRunning(undefined)
+        if (o.kind === 'CANCELLED') { setNotice('計算を中断しました。表示中の結果は変わっていません。'); return }
+        if (o.kind === 'FAILED') { setPlayError({ code: o.code, message: o.message }); return }
+        if (!o.result.ok) { setPlayError({ code: o.result.code, message: o.result.message }); return }
+        setCalc({ computeMs: o.computeMs, wallMs: Date.now() - started })
+        applyView(o.result.view, input)
+      })
+      return
+    }
+    const outcome = runPlayComparison(input)
+    if (!outcome.ok) {
+      setPlayError({code:outcome.code,message:outcome.message})
+      return
+    }
+    applyView(outcome.comparison, input)
+  }
+  const cancelRun = () => {
+    stopRunning()
+    setNotice('計算をキャンセルしました。表示中の結果は変わっていません。')
   }
   const switchBranch = (choice:BranchChoice) => {
     if (!comparison) return
@@ -174,6 +243,8 @@ export default function App({ run: injected }: Readonly<{ run?: TimelineRun }>) 
       <main className="layout">
         <div className="flow-col">
           <InterventionComparePanel seedText={seedText} year={year} comparison={comparison} error={playError}
+            running={running ? { elapsedSec } : undefined} notice={notice} calc={calc} onCancel={cancelRun}
+            onSeedText={setSeedText}
             activeBranch={activeBranch} onRun={runComparison} onViewBranch={switchBranch}
             onInspectEvent={openComparisonEvent} />
         </div>

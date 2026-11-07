@@ -1,6 +1,6 @@
 # Project Chronofork
 
-React + TypeScript + Vite によるゲーム開発リポジトリ。現在は開発基盤のみで、ゲーム機能は未実装です。
+React + TypeScript + Vite によるゲーム開発リポジトリ。現在は試験用の試遊UI（experimental / CALIBRATION_ONLY）のみで、正式なゲーム機能・勝敗は未成立です。
 承認済みMVP仕様は `docs/spec/`、実装契約は `docs/contracts/`、決定記録は `docs/decisions/` にあります。承認待ちの事項は `docs/spec/pending-approvals.md`。ライセンスは未設定です（権利の再利用条件は未決定）。
 
 ## 開発
@@ -12,6 +12,15 @@ npm run check      # 型検査 + ESLint + Vitest + ビルド
 npx playwright install chromium   # 初回のみ
 npm run test:e2e   # ビルド後に Playwright smoke
 ```
+
+## 試遊（experimental）
+
+`npm run dev` で起動し、ブラウザで表示されるURLを開きます（既定は http://localhost:5173/）。
+「介入して歴史を比べる」の「法制を試す方式」から、旧2方式に加え **統合法制・世代継続（experimental）** を選べます。
+入力欄にはPR #78 で実測したCALIBRATION_ONLYの例（seed 20260101・人物02/05・1250年・信頼-20・5年間）が入りますが、固定の歴史ではなく、変更した値で1250〜1350年のA0/A1を再計算します。100年分のため端末により1〜数分かかり、計算はWeb Workerで行うため画面は操作できます（キャンセル可）。
+
+- 長時間検証（オプトイン・通常CI対象外）: `CHRONOFORK_LONG_INTEGRATED_UI=1 npx vitest run tests/unit/ui/integrated-mode-long.test.ts` / `CHRONOFORK_E2E_INTEGRATED=1 npx playwright test integrated-mode`（要 `npm run build`）
+- 残件: 正式Goal（`goal=null`）・未実装37ルール・本人試遊は未完了。
 
 ## 運用
 
