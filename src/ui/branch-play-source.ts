@@ -185,6 +185,41 @@ export function runPlayComparison(input:PlayInput):PlayResult{
     return reject('CALCULATION_EXCEPTION',error instanceof Error?error.message:String(error))
   }
 }
+/** プレイヤー向けCLIとGUIが同じ試験世界・年次エンジンを使うためのA0読取入口。
+ * 技術Goalは正式勝敗ではなく、校正用のデータを正式シナリオに昇格させない。
+ */
+export type PlayBaselineResult =
+  | Readonly<{ok:true;a0:TimelineRun}>
+  | Readonly<{ok:false;code:string;message:string}>
+
+export function runPlayBaseline(seed:number,mode:PlayMode=PLAY_DEFAULT_MODE):PlayBaselineResult{
+  const fail=(code:string,message:string):PlayBaselineResult=>({ok:false,code,message})
+  if(mode!=='FIXED_APPROVAL'&&mode!=='ORDINARY_LAW')return fail('INVALID_MODE','試験用法制モードが不正です')
+  if(!Number.isSafeInteger(seed)||seed<0)return fail('INVALID_SEED','seedは0以上の安全整数が必要です')
+  const initial=playInitialWorld()
+  const legal=prepareExperimentalGoalContext(initial)
+  if(!legal.ok)return fail('INITIAL_LEGAL_EVIDENCE_INVALID',
+    legal.issues.map(i=>i.code+':'+i.path).join(' / '))
+  const ordinaryTrial=mode==='ORDINARY_LAW'?createExperimentalOrdinaryLegalTrial():undefined
+  if(ordinaryTrial){
+    const issues=verifyInitialLegalEvidence(initial,ordinaryTrial.book)
+    if(issues.length>0)return fail('INITIAL_ORDINARY_EVIDENCE_INVALID',
+      issues.map(i=>i.code+':'+i.path).join(' / '))
+  }
+  try{
+    const evaluators=createEvaluators(initial,[],legal.book,mode,ordinaryTrial)
+    const result=runTimeline(initial,{seed,branchId:'A0-play',evaluators,
+      goal:legal.goal,technicalGoalEvaluation:true})
+    if(result.status!=='COMPLETED')return fail('A0_HALTED',JSON.stringify(result.halt))
+    return {ok:true,a0:{
+      inputs:buildInputs(seed,Object.keys(evaluators),'A0-play',mode),
+      result,initialWorld:initial,
+    }}
+  }catch(error){
+    return fail('CALCULATION_EXCEPTION',error instanceof Error?error.message:String(error))
+  }
+}
+
 export type EventDelta=Readonly<{kind:'A1_ONLY'|'A0_ONLY'|'CHANGED';event:EventLogEntry;counterpart?:EventLogEntry}>
 /** 年をまたいだ比較にしない。IDの一致だけでなく内容差分も判定する。 */
 export function compareYear(c:PlayComparison,year:number):Readonly<{
