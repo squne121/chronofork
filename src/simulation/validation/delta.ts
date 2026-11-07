@@ -13,11 +13,16 @@ const isPlain = (v: unknown): v is Record<string, unknown> =>
 function sameExceptPairTrust(before: WorldState, after: WorldState): boolean {
   const b = before as unknown as Record<string, unknown>
   const a = after as unknown as Record<string, unknown>
-  for (const k of new Set([...Object.keys(b), ...Object.keys(a)])) {
+  const sameKeys = (x: object, y: object) => {
+    const kx = Object.keys(x), ky = Object.keys(y)
+    return kx.length === ky.length && kx.every((k) => Object.hasOwn(y, k))
+  }
+  if (!sameKeys(b, a)) return false
+  for (const k of Object.keys(b)) {
     if (k === 'pairTrust' || b[k] === a[k]) continue
     const x = b[k], y = a[k]
-    if (!isPlain(x) || !isPlain(y)) return false
-    for (const kk of new Set([...Object.keys(x), ...Object.keys(y)])) {
+    if (!isPlain(x) || !isPlain(y) || !sameKeys(x, y)) return false
+    for (const kk of Object.keys(x)) {
       if (x[kk] !== y[kk]) return false
     }
   }

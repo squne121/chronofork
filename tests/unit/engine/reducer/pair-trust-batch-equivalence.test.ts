@@ -108,6 +108,7 @@ describe('confirmPairTrustOnlyChangeValid: 肯定できた場合は全体検証�
     ['値が文字列', [k0, { ...rel(p1, p3), value: 'x' } as unknown as PersonPairTrust]],
     ['personIds が3件', [k0, { ...rel(p1, p3), personIds: [p1, p2, p3] } as unknown as PersonPairTrust]],
     ['pairTrust以外(persons)も変化', () => ({ ...mutate([k0, rel(p1, p3)]), persons: before.persons.slice(1) })],
+    ['未知トップレベルキー(undefined値)', () => ({ ...mutate([k0, rel(p1, p3)]), extra: undefined } as unknown as WorldState)],
     ['pairTrust以外(year)も変化', () => ({ ...mutate([k0, rel(p1, p3)]), year: before.year + 1 })],
     ['pairTrust以外(legal内)も変化', () => ({ ...mutate([k0, rel(p1, p3)]), legal: { ...before.legal, marriages: [...before.legal.marriages] } })],
   ]
@@ -126,7 +127,8 @@ describe('confirmPairTrustOnlyChangeValid: 肯定できた場合は全体検証�
   it('入力 world と同一参照や pairTrust 未設定の世界は安全側(false)または正しく扱う', () => {
     expect(confirmPairTrustOnlyChangeValid(before, before)).toBe(false)
     const noTrust = newWorld()
-    expect(confirmPairTrustOnlyChangeValid(noTrust, { ...noTrust, pairTrust: [rel(p1, p2)] })).toBe(true)
+    // pairTrust キー自体が新規に現れる場合は安全側(false)で、全体検証へフォールバックする。
+    expect(confirmPairTrustOnlyChangeValid(noTrust, { ...noTrust, pairTrust: [rel(p1, p2)] })).toBe(false)
   })
 })
 
@@ -230,5 +232,37 @@ describe('PERSON_PAIR_TRUST_SET の大量適用', () => {
     // 空白を含むIDでも、キー(JSON文字列)順で配置される。
     const quirky = { ...world, pairTrust: [] } as WorldState
     expect(applyOutcome(quirky, outcome('B-009', 3, [setCmd(rel(a, b))]), { transaction: newTx() }).status).toBe('APPLIED')
+  })
+
+  it('batchId付きで複数のPERSON_PAIR_TRUST_SETを1 unitに入れても全体再計算と同じ結果', () => {
+    const batch = pairs.slice(0, 6).map(([a, b]) => ({ ...setCmd(rel(a, b, 4)), batchId: 'batch-pt' }) as DomainCommand)
+    const r = run(world, outcome('B-009', 3, batch))
+    expect(r.status).toBe('APPLIED')
+    expect(r.units).toHaveLength(1)
+    expect(r.world.pairTrust).toHaveLength(6)
+    expect(validateWorldState(r.world).ok).toBe(true)
+    const bad = batch.slice(0, 5).concat({ ...setCmd(rel('person-zzz-a', 'person-zzz-b', 4), 'bad-b'), batchId: 'batch-pt' } as DomainCommand)
+    const rejected = run(world, outcome('B-009', 3, bad))
+    expect(rejected.status).toBe('REJECTED')
+    expect(rejected.world).toBe(world) // バッチ全体が原子的に拒否される
+  })
+
+  it('空白を含むIDでも挿入位置は従来の全体ソートと一致する', () => {
+    const w0 = newWorld()
+    const base = (w0.persons.map((p) => p.personId)).slice(0, 2) as [string, string]
+    const persons = [
+      ...w0.persons,
+      ...['a', 'a b', 'a-b'].map((id) => ({ ...w0.persons[0]!, personId: id })),
+    ]
+    const w = { ...w0, persons, pairTrust: [rel('a', 'a-b', 1, YEAR)] } as WorldState
+    const y = { ...w, year: YEAR + 1 } as WorldState
+    const r = run(y, outcome('B-009', 3, [setCmd(rel('a b', 'a-b', 2, YEAR + 1), undefined, YEAR + 1)]), newTx('main', YEAR + 1))
+    void base
+    const legacy = [...(y.pairTrust ?? []), rel('a b', 'a-b', 2, YEAR + 1)].sort((x, z) => {
+      const kx = JSON.stringify(x.personIds), kz = JSON.stringify(z.personIds)
+      return kx < kz ? -1 : kx > kz ? 1 : 0
+    })
+    if (r.status === 'APPLIED') expect(r.world.pairTrust).toEqual(legacy)
+    else expect(rejectionCodes(r)).toContain('INTEGRITY_VIOLATION') // 重複ID世界のため全体検証で拒否されても可
   })
 })
