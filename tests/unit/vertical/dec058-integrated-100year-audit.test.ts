@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest'
 import { createExperimentalWorld, createExperimentalOrdinaryLegalTrial, NALVEN_DYNASTY_ID } from '../../../src/scenario/experimental/index.ts'
 import { createAutonomousCalibrationEvaluators } from '../../../src/simulation/autonomy/index.ts'
 import type { AutonomyCalibration } from '../../../src/simulation/autonomy/index.ts'
-import type { B001PromotionInput } from '../../../src/simulation/rules/b/index.ts'
+import {childIdForMarriageYear} from '../../../src/simulation/rules/b/b002-worldstate.ts'
+import {attested,supportingCohorts,supportingClearances,supportingPersonId,
+  witnessedSonId,withC004BirthHistory} from './issue71-supporting-fixture.ts'
 import { runTimeline } from '../../../src/simulation/engine/index.ts'
 import { createRootBranch, forkHistory } from '../../../src/simulation/branching/index.ts'
 import type { StatModifier, WorldState } from '../../../src/simulation/contracts/index.ts'
@@ -19,28 +21,12 @@ import { EXPERIMENTAL_B009_CALIBRATION } from '../../../src/simulation/rules/b/i
 const START=1250, END=1350
 const P2='person-exp-02',P5='person-exp-05'
 const attestedId='person:experimental-census:east-cardon-1249'
-const attested:B001PromotionInput={
-  cohorts:[{
-    cohortId:'experimental-census:birth-1249-east-commons',
-    groupId:'group-east-commons',
-    birthYear:1249,memberCount:3,recordedYear:1249,
-    censusEvidenceId:'experimental-census:pre1250-age-group-evidence',
-    provenance:'CALIBRATION_ONLY',
-  }],
-  identities:[{
-    identityEvidenceId:'experimental-identity:cardon-person-1249',
-    cohortId:'experimental-census:birth-1249-east-commons',
-    memberOrdinal:0,personId:attestedId,
-    personName:'実験用の記名候補（史実・正式設定ではない）',
-    sex:'FEMALE',houseId:'house-cardon',recordedYear:1249,
-    provenance:'CALIBRATION_ONLY',
-  }],
-}
 const auto:AutonomyCalibration={
   status:'CALIBRATION_ONLY',
   birth:{minMotherAge:18,maxMotherAge:32,minFatherAge:18,chancePermille:1000},
   death:{minAge:60,riskStartAge:59,basePermille:0,increasePerYearPermille:1000,maxPermille:1000},
-  marriage:{minAdultAge:18,maxCandidatePairs:500},
+  // SUPP個別化後の全pair走査で予算上限を越えないよう、校正専用枠だけ拡張。
+  marriage:{minAdultAge:18,maxCandidatePairs:1600},
 }
 const contract:NextgenContractCalibration={
   ...EXPERIMENTAL_NEXTGEN_CONTRACT,
@@ -62,18 +48,21 @@ const trialModifier:StatModifier={
 const integrationCase=process.env.CHRONOFORK_ISSUE71_LONGRUN==='1'?it:it.skip
 describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格・厳格Goal',()=>{
   integrationCase('実Stateから昇格→成人婚姻→孫世代へ進み、1350年の成功/失敗を正確に診断',()=>{
-    const world=createExperimentalWorld()
+    const world=withC004BirthHistory(createExperimentalWorld())
     expect(world.year).toBe(START)
     const trial=createExperimentalOrdinaryLegalTrial()
     const createEvaluators=(startWorld:WorldState,ledger:readonly StatModifier[])=>{
       const cfg=createAutonomousCalibrationEvaluators({
         branchStartWorld:startWorld,ledger,trustBase:[{personIds:[P2,P5],value:80}],
-        nextgenMarriage:{book:trial.book,laws:trial.laws,calibration:contract},
+        nextgenMarriage:{book:trial.book,laws:trial.laws,calibration:contract,
+          supportingKinshipClearances:supportingClearances},
         reviewedLegal:{book:trial.book,ordinaryLaws:trial.laws},
         spouseDeathDissolution:true,promotion:attested,
+        supportingMarriage:{cohorts:supportingCohorts,maxRecordsPerYear:1,
+          maxAliveSupporting:1,perCohortSamples:1,maximumPreviewAge:65},
         autonomy:auto,
         b009Calibration:{...EXPERIMENTAL_B009_CALIBRATION,
-          initialTrust:25,annualDelta:1,houseSupportWeight:2,sameHouseBonus:10,maxPairs:500},
+          initialTrust:25,annualDelta:1,houseSupportWeight:2,sameHouseBonus:10,maxPairs:1600},
       })
       if(!cfg.ok)throw new Error('INVALID_INTEGRATED_EVALUATORS:'+cfg.issues.join('; '))
       return cfg.evaluators
@@ -113,8 +102,60 @@ describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格�
       .filter(p=>[p.fatherId,p.motherId].some(parentId=>familyChildren.some(child=>child.personId===parentId)))
     const promotedPairs=result.decisionTraces.filter(t=>t.ruleId==='B-004'&&
       t.actorRef.kind==='PERSON_PAIR'&&t.actorRef.ids.includes(attestedId))
+    // C004匿名出生履歴(1260) → B001 SUPPORTING少数登録 → B004/B005 → A-LEG01 → B002/A-DYN02。
+    // 成功を仮定せず、全段階を元のEvent/Trace/WorldStateから観測して比較する。
+    const supportRecords=result.eventLog.filter(e=>e.eventType==='PERSON_SUPPORTING_RECORD')
+    const supportedPerson=final.persons.find(p=>p.personId===supportingPersonId)
+    const witnessedSon=final.persons.find(p=>p.personId===witnessedSonId)
+    const supportingPairTraces=result.decisionTraces.filter(t=>t.ruleId==='B-005'&&
+      t.actorRef.kind==='PERSON_PAIR'&&t.actorRef.ids[0]===witnessedSonId&&
+      t.actorRef.ids[1]===supportingPersonId)
+    const supportedMarriage=final.legal.marriages.find(m=>
+      m.personIds.includes(witnessedSonId)&&m.personIds.includes(supportingPersonId))
+    const supportingChildren=final.persons.filter(p=>
+      p.fatherId===witnessedSonId&&p.motherId===supportingPersonId)
+    const evidenceYears=final.demographics.anonymousBirthHistory?.filter(s=>
+      s.groupId==='group-east-elite'&&s.year===1260)??[]
+    const supportingStatus={
+      cohortId:supportingCohorts[0]!.cohortId,
+      supportingPersonId,confirmedKinshipRecordId:supportingClearances[0]!.clearanceId,
+      sourceBirthYear:1260,backing:evidenceYears.map(e=>e.anonymousBirths),
+      recordYears:supportRecords.map(e=>e.year),
+      supportingRole:supportedPerson?.interactionRole??'UNRECORDED',
+      witnessedSonBorn:witnessedSon?.birthYear??null,
+      witnessedSonSex:witnessedSon?.sex??null,
+      b005Yearly: supportingPairTraces.map(t=>({year:t.year,status:t.status,
+        reasons:t.reasonCodes,clearanceId:t.candidates[0]?.inputs.supportingKinshipClearanceId??null})),
+      legalMarriageYear:supportedMarriage?.registeredYear??null,
+      marriageB002Children:supportingChildren.map(p=>({birthYear:p.birthYear,
+        dynastyStatus:p.legalDynasty.status,
+        dynastyId:p.legalDynasty.status==='DETERMINED'?p.legalDynasty.dynastyId:null})),
+      lastBorn:Math.max(0,...supportingChildren.map(p=>p.birthYear)),
+    }
+    console.info('CHRONOFORK_ISSUE71_SUPPORTING_CHAIN='+JSON.stringify(supportingStatus))
+    expect(evidenceYears).toHaveLength(1)
+    expect(evidenceYears[0]!.anonymousBirths).toBeGreaterThan(0)
+    expect(supportRecords.length).toBeGreaterThan(0)
+    expect(supportedPerson?.interactionRole).toBe('SUPPORTING')
+    expect(witnessedSon).toMatchObject({birthYear:1252,sex:'MALE'})
+    expect(supportingPairTraces.length).toBeGreaterThan(0)
+    // 同一人物の禁親確認なしでの合法婚姻や、補助人物の直接操作昇格は作らない。
+    if(supportedMarriage){
+      expect(supportingPairTraces.some(t=>t.status==='ACCEPT'&&
+        t.candidates[0]?.inputs.supportingKinshipClearanceId===
+          supportingClearances[0]!.clearanceId)).toBe(true)
+      const childDynasty=supportedMarriage.contract?.clauses.find(c=>
+        c.kind==='CHILD_LEGAL_DYNASTY')?.dynastyId
+      if(childDynasty)expect(supportingChildren.every(p=>
+        p.legalDynasty.status==='DETERMINED'&&p.legalDynasty.dynastyId===childDynasty)).toBe(true)
+    }else{
+      expect(supportingChildren).toHaveLength(0)
+    }
+
     const audit={
       provenance:'CALIBRATION_ONLY',seed:20260101,fromYear:START,toYear:END,
+      supportingMarriageC004:true,supportingRecords:supportRecords.length,
+      supportingMarriages:supportedMarriage?1:0,supportingChildren:supportingChildren.length,
       timeline:result.status,formalGoal:result.goal,technicalGoalStatus:goal.status,
       legacyRulesUnimplemented:result.coverage.todoRuleIds.length,
       promotionEvents:promotionEvents.length,dissolutionEvents:dissolutionEvents.length,
@@ -190,6 +231,9 @@ describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格�
     console.info('CHRONOFORK_ISSUE71_A1_ANNUAL='+JSON.stringify(a1))
     console.info('CHRONOFORK_ISSUE71_A0_A1_SUMMARY='+JSON.stringify({
       provenance:'CALIBRATION_ONLY',seed:result.seed,
+      supportingC004:true,
+      supportingRecordsA0:result.eventLog.filter(e=>e.eventType==='PERSON_SUPPORTING_RECORD').length,
+      supportingRecordsA1:a1Result.eventLog.filter(e=>e.eventType==='PERSON_SUPPORTING_RECORD').length,
       intervention:trialModifier,
       a0:a0.summary,a1:a1.summary,
       exactTechnicalGoalA0:a0.goal,
@@ -197,5 +241,5 @@ describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格�
       autonomousHistory:'NOT_ESTABLISHED',
     }))
     // strict Goal は測定値とだけ比較する。ACHIEVED/NOT_ACHIEVEDを強制しない。
-  },600000) // A0/A1の100年間を実再計算する長時間校正。CIで実測後、通常必須から分離する。
+  },900000) // A0/A1の100年間を実再計算する長時間校正。CIで実測後、通常必須から分離する。
 })
