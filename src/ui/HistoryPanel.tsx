@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DecisionTrace, EventLogEntry, Id, TargetRef } from '../simulation/contracts/index.ts'
 import type { TimelineResult } from '../simulation/engine/index.ts'
 import type { EntityKind, Selection, WorldIndex } from './inspection-source.ts'
@@ -8,6 +8,19 @@ import { formatDelta, formatJson, numericChanges } from './timeline-source.ts'
 import type { TraceIndex } from './timeline-source.ts'
 
 const REF_KIND: Partial<Record<string, EntityKind>> = { GROUP: 'group', REGION: 'region', PERSON: 'person' }
+
+// EventLogに記録された種別の別名。未知の種別は元の識別子をそのまま表示する。
+const EVENT_TYPE_LABELS: Readonly<Record<string, string>> = {
+  POPULATION_COHORT: '人口の年次更新',
+  MARRIAGE_REGISTER: '婚姻成立',
+  PERSON_BIRTH: '出生',
+  PERSON_DEATH: '死亡',
+  MARRIAGE_DISSOLVE: '婚姻終了',
+  LEGAL_DYNASTY_SET: '法的王朝の確定',
+  LEGAL_TITLE_TRANSFER: '称号の移転',
+}
+const eventTypeLabel = (type: string) =>
+  EVENT_TYPE_LABELS[type] ? `${EVENT_TYPE_LABELS[type]}（${type}）` : type
 
 function refKey(r: TargetRef): string {
   return r.kind === 'PERSON_PAIR' ? `PERSON_PAIR:${r.ids.join('+')}` : `${r.kind}:${r.id}`
@@ -74,6 +87,13 @@ export function HistoryPanel(p: Props) {
   const event = p.eventId ? history.event(p.eventId) : undefined
   const trace = p.traceId ? history.trace(p.traceId) : undefined
   const options = targetOptions(p.allEvents, p.refIndex)
+  const [typeFilter, setTypeFilter] = useState('')
+  const types = [...new Set(p.allEvents.map((e) => e.eventType))].sort()
+  // 別枝へ切り替えた結果、種別が存在しなくなっても選択表示と一覧を一致させる。
+  const activeType = types.includes(typeFilter) ? typeFilter : ''
+  const visibleEvents = activeType ? p.events.filter((e) => e.eventType === activeType) : p.events
+  const typeCounts = new Map<string, number>()
+  for (const e of p.events) typeCounts.set(e.eventType, (typeCounts.get(e.eventType) ?? 0) + 1)
   const names: EventNames = {
     person: (id) => p.refIndex.person(id)?.name,
     group: (id) => p.refIndex.group(id)?.name,
@@ -114,14 +134,28 @@ export function HistoryPanel(p: Props) {
             ))}
           </select>
         </label>
+        <label>
+          事件種別{' '}
+          <select value={activeType} onChange={(e) => setTypeFilter(e.target.value)} data-testid="event-type">
+            <option value="">すべての種別</option>
+            {types.map((type) => (
+              <option key={type} value={type}>
+                {eventTypeLabel(type)}（{typeCounts.get(type) ?? 0}件）
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
-      {p.events.length === 0 ? (
+      <p className="note" data-testid="chronicle-count" aria-live="polite">
+        表示 {visibleEvents.length}件／現在の年・対象条件 {p.events.length}件（EventLog全体 {p.allEvents.length}件）
+      </p>
+      {visibleEvents.length === 0 ? (
         <p data-testid="chronicle-status">
           この条件に該当する実計算済みの事件はありません（{p.result.eventLog.length === 0 ? '計算結果全体でも EventLog は空です' : `全体では${p.result.eventLog.length}件`}）。
         </p>
       ) : (
         <ol data-testid="chronicle-list" className="event-list">
-          {p.events.map((e) => (
+          {visibleEvents.map((e) => (
             <li key={e.eventId}>
               <button
                 type="button"
@@ -144,6 +178,11 @@ export function HistoryPanel(p: Props) {
       )}
 
       <div data-testid="event-detail" aria-live="polite" className="detail">
+        {event && activeType && event.eventType !== activeType && (
+          <p className="note" data-testid="selected-event-outside-filter">
+            選択中の事件は種別フィルタの対象外です。詳細と判断根拠は引き続き閲覧できます。
+          </p>
+        )}
         {p.eventId && !event ? (
           <p className="missing">参照不明（Event {p.eventId}）</p>
         ) : event ? (
