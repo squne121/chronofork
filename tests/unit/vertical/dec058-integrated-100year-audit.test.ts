@@ -56,8 +56,12 @@ const trialModifier:StatModifier={
   startYear:1250,endExclusiveYear:1255,
   decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
 }
+// 2×100年の統合試験は所要時間が必須quick-checkの制限を超えるため、
+ // tests/CLAUDE.mdに従い通常はSKIP。最新mainでの実走証拠はPR記録のCI #42338475380。
+ // 実行: CHRONOFORK_ISSUE71_LONGRUN=1 npm test -- dec058-integrated-100year-audit
+const integrationCase=process.env.CHRONOFORK_ISSUE71_LONGRUN==='1'?it:it.skip
 describe('DEC-058統合 / 1250〜1350年の家系・婚姻終了・人口昇格・厳格Goal',()=>{
-  it('実Stateから昇格→成人婚姻→孫世代へ進み、1350年の成功/失敗を正確に診断',()=>{
+  integrationCase('実Stateから昇格→成人婚姻→孫世代へ進み、1350年の成功/失敗を正確に診断',()=>{
     const world=createExperimentalWorld()
     expect(world.year).toBe(START)
     const trial=createExperimentalOrdinaryLegalTrial()
