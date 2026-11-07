@@ -1,7 +1,7 @@
 // 共通 reducer: evaluateRule が返した型付き DomainCommand を、安全かつ原子的に WorldState へ適用する。
 // 純粋関数: 入力の WorldState / Transaction を変更せず、新しい値を返す。EventLog は生成しない。
 import type { DomainCommand, Id, RuleOutcome, WorldState } from '../../contracts/index.ts'
-import { validateWorldState } from '../../validation/index.ts'
+import { confirmPairTrustOnlyChangeValid, validateWorldState } from '../../validation/index.ts'
 import { checkCommandAuthority, checkOutcomeHeader } from './authority.ts'
 import { canonicalize, cloneData } from './canonical.ts'
 import { diffWorld } from './diff.ts'
@@ -194,12 +194,16 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
 
   // 5) 既存の WorldState バリデータ（整合性）。ERROR が 1 件でもあれば拒否する（入力は開始時に検証済み）。
   // 構造・列挙値・参照・不変条件のすべてを validateWorldState で検証する（checkWorldIntegrity だけでは見逃す）。
-  const after = validateWorldState(draft.world)
-  const introduced = after.diagnostics.filter((d) => d.severity === 'ERROR')
-  if (!after.ok) {
-    return {
-      status: 'REJECTED',
-      rejections: [{ ...fail('INTEGRITY_VIOLATION', `適用すると WorldState の整合性が壊れます: ${introduced.map((d) => d.code).join(', ')}`), diagnostics: introduced }],
+  // unit 開始時点の world は検証済み。pairTrust だけが変わった場合は、変更部分を同一の検査コードで確認して全体の再検証を省く
+  // （確認できなければ従来どおり全体検証で正確な診断を得る）。
+  if (!confirmPairTrustOnlyChangeValid(world, draft.world)) {
+    const after = validateWorldState(draft.world)
+    const introduced = after.diagnostics.filter((d) => d.severity === 'ERROR')
+    if (!after.ok) {
+      return {
+        status: 'REJECTED',
+        rejections: [{ ...fail('INTEGRITY_VIOLATION', `適用すると WorldState の整合性が壊れます: ${introduced.map((d) => d.code).join(', ')}`), diagnostics: introduced }],
+      }
     }
   }
 

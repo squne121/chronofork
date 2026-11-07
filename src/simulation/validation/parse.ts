@@ -455,6 +455,11 @@ function deferred(d: Sink, v: unknown, p: string): DeferredEffect {
   }
 }
 
+/** pairTrust 配列だけの構造検証（全体検証と同一の personPairTrust を使う）。 */
+export function parsePairTrustRecords(list: unknown, d: Sink): PersonPairTrust[] {
+  return arr(d, { pairTrust: list }, 'pairTrust', '$', (v, q) => personPairTrust(d, v, q))
+}
+
 /** 構造検証。診断を `d` へ追加し、複製した WorldState を返す（エラー時の戻り値は使わないこと）。 */
 export function parseWorldState(input: unknown, d: Sink): WorldState {
   const p = '$'
