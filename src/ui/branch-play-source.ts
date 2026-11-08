@@ -1,6 +1,10 @@
 // 実シミュレーションを利用したUI専用のA0/A1分岐実験。
 // 未来の出来事や勝敗をハードコードしない。法的承認証拠・係数はsynthetic/CALIBRATION_ONLY。
-import { createExperimentalWorld, createExperimentalOrdinaryLegalTrial, prepareExperimentalGoalContext, EXPERIMENTAL_NALVEN_GOAL } from '../scenario/experimental/index.ts'
+import {
+  createExperimentalWorld, createExperimentalOrdinaryLegalTrial, prepareExperimentalGoalContext, EXPERIMENTAL_NALVEN_GOAL,
+  createExperimentalIntegratedEvaluators, createExperimentalIntegratedTimelineOptions,
+  INTEGRATED_PAIR, INTEGRATED_SEED, INTEGRATED_START_YEAR, INTEGRATED_TRUST_REDUCTION,
+} from '../scenario/experimental/index.ts'
 import { verifyInitialLegalEvidence } from '../simulation/legal/evidence.ts'
 import type { OrdinaryLaw } from '../simulation/legal/ordinary-authority.ts'
 import type { OrdinaryMarriageReview } from '../simulation/rules/a/index.ts'
@@ -45,10 +49,19 @@ const TEST_MARRIAGE_APPROVAL:MarriageApprovalEvidence={
   },
 }
 /** 試験用法制の切替。変更できるのは試験用シナリオ構成で、ゲーム内の法的状態ではない。 */
-export type PlayMode='FIXED_APPROVAL'|'ORDINARY_LAW'
+export type PlayMode='FIXED_APPROVAL'|'ORDINARY_LAW'|'INTEGRATED_EXPERIMENTAL'
 export const PLAY_DEFAULT_MODE:PlayMode='FIXED_APPROVAL'
-export const playModeLabel=(mode:PlayMode):string=>mode==='ORDINARY_LAW'
-  ? '通常法制（experimental）':'旧・1260年の明示承認試験'
+export const playModeLabel=(mode:PlayMode):string=>mode==='INTEGRATED_EXPERIMENTAL'
+  ? '統合法制・世代継続（experimental）'
+  : mode==='ORDINARY_LAW'?'通常法制（experimental）':'旧・1260年の明示承認試験'
+/**
+ * 統合モードの初期入力例。PR #78 で実測した CALIBRATION_ONLY の条件であり、強制的な歴史イベントではない。
+ * 利用者が変更した値で必ず再計算する（ここは入力欄の初期値にだけ使う）。
+ */
+export const INTEGRATED_PLAY_DEFAULTS=Object.freeze({
+  seed:INTEGRATED_SEED,year:INTEGRATED_START_YEAR,pair:INTEGRATED_PAIR,
+  signedDelta:INTEGRATED_TRUST_REDUCTION.signedDelta,durationYears:5,
+})
 export type PlayInput=Readonly<{
   mode?:PlayMode
   seed:number
@@ -59,15 +72,27 @@ export type PlayInput=Readonly<{
   durationYears:number
 }>
 export type BranchChoice='A0'|'A1'
-export type PlayComparison=Readonly<{
+/**
+ * ブラウザへ転送する表示用ビューが、完全な結果から省略した件数。
+ * 省略はA0/A1で完全に同一かつ相互参照が閉じている高頻度の信頼更新(PERSON_PAIR_TRUST_SET / B-009)に限る。
+ */
+export type DisplayOmission=Readonly<{
+  fullEventCount:Readonly<{a0:number;a1:number}>
+  fullTraceCount:Readonly<{a0:number;a1:number}>
+  omittedEventsByType:Readonly<Record<string,number>>
+  omittedTracesByRule:Readonly<Record<string,number>>
+}>
+/** UIが読む範囲。Worker経由では完全版のroot/branchを持ち込まず、このビューだけを受け取る。 */
+export type PlayView=Readonly<{
   mode:PlayMode
   input:PlayInput
   modifier:StatModifier
-  root:Branch
-  branch:Branch
   a0:TimelineRun
   a1:TimelineRun
+  /** 転送用ビューのときだけ付く。無ければ完全な結果。 */
+  displayOmission?:DisplayOmission
 }>
+export type PlayComparison=PlayView&Readonly<{root:Branch;branch:Branch}>
 export type PlayResult=
   | Readonly<{ok:true;comparison:PlayComparison}>
   | Readonly<{ok:false;code:string;message:string}>
@@ -131,7 +156,7 @@ function asTimelineRun(branch:Branch,parent:TimelineRun,mode:PlayMode):TimelineR
 /** 決定的再計算の本物の結果だけ返す。停止時は部分結果を表示用「成功」と扱わない。 */
 export function runPlayComparison(input:PlayInput):PlayResult{
   const mode=input.mode??PLAY_DEFAULT_MODE
-  if(mode!=='FIXED_APPROVAL'&&mode!=='ORDINARY_LAW')return reject('INVALID_MODE','試験用法制モードが不正です')
+  if(mode!=='FIXED_APPROVAL'&&mode!=='ORDINARY_LAW'&&mode!=='INTEGRATED_EXPERIMENTAL')return reject('INVALID_MODE','試験用法制モードが不正です')
   if(!Number.isSafeInteger(input.seed)||input.seed<0)return reject('INVALID_SEED','seedは0以上の安全整数が必要です')
   if(!Number.isSafeInteger(input.year)||input.year<START_YEAR||input.year>=GOAL_YEAR)
     return reject('INVALID_YEAR','介入年は1250〜1349年の整数が必要です')
@@ -141,6 +166,7 @@ export function runPlayComparison(input:PlayInput):PlayResult{
     return reject('INVALID_DURATION','期間は1年以上、1350年を超えない整数が必要です')
   const pair=normalizePersonPair(input.firstPersonId,input.secondPersonId)
   if(pair===null)return reject('INVALID_PERSON_PAIR','異なる2人の人物を選択してください')
+  if(mode==='INTEGRATED_EXPERIMENTAL')return runIntegratedComparison(input,pair)
   const initial=playInitialWorld()
   const legal=prepareExperimentalGoalContext(initial)
   if(!legal.ok)return reject('INITIAL_LEGAL_EVIDENCE_INVALID',legal.issues.map(i=>i.code+':'+i.path).join(' / '))
@@ -185,9 +211,48 @@ export function runPlayComparison(input:PlayInput):PlayResult{
     return reject('CALCULATION_EXCEPTION',error instanceof Error?error.message:String(error))
   }
 }
+const pairModifier=(input:PlayInput,pair:readonly [Id,Id]):StatModifier=>({
+  modifierId:'ui:modifier:'+JSON.stringify([input.year,pair,input.signedDelta,input.durationYears]),
+  interventionId:'ui:intervention:'+JSON.stringify([input.year,pair]),
+  targetRef:{kind:'PERSON_PAIR',ids:pair},statKey:PAIR_TRUST_STAT_KEY,
+  signedDelta:input.signedDelta,startYear:input.year,
+  endExclusiveYear:input.year+input.durationYears,
+  decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
+})
+/**
+ * 統合法制・世代継続（experimental）。実装側の共通ファクトリだけを使い、A0/A1に同一の初期世界・法令・評価器を与える。
+ * A1だけが介入台帳を追加する。fork年初のWorldStateと新ledgerを毎回ファクトリへ渡す。
+ */
+function runIntegratedComparison(input:PlayInput,pair:readonly [Id,Id]):PlayResult{
+  const mode:PlayMode='INTEGRATED_EXPERIMENTAL'
+  const a0Setup=createExperimentalIntegratedTimelineOptions('A0-play')
+  const initial=a0Setup.world
+  if(pair.some(id=>!initial.persons.some(p=>p.personId===id)))
+    return reject('UNKNOWN_PERSON','対象人物が1250年の試験世界に存在しません')
+  const modifier=pairModifier(input,pair)
+  try{
+    const timeline=runTimeline(initial,{...a0Setup.options,seed:input.seed})
+    if(timeline.status!=='COMPLETED')return reject('A0_HALTED',JSON.stringify(timeline.halt))
+    const root=createRootBranch(timeline,[],a0Setup.options.evaluators)
+    if(!root.ok)return reject('A0_ROOT_REJECTED',root.code+':'+root.message)
+    const rerun=forkHistory({
+      parent:root.branch,branchId:'A1-play',forkYear:input.year,modifiers:[modifier],
+      evaluatorsFor:({ledger})=>createExperimentalIntegratedEvaluators(
+        root.branch.snapshots[input.year-root.branch.startYear]!,ledger),
+    })
+    if(!rerun.ok)return reject('FORK_REJECTED',rerun.code+':'+rerun.message)
+    if(rerun.branch.status!=='COMPLETED')return reject('A1_HALTED',JSON.stringify(rerun.branch.halt))
+    const a0:TimelineRun={inputs:buildInputs(input.seed,Object.keys(a0Setup.options.evaluators),'A0-play',mode),
+      result:timeline,initialWorld:initial}
+    const a1=asTimelineRun(rerun.branch,a0,mode)
+    return {ok:true,comparison:{mode,input,modifier,root:root.branch,branch:rerun.branch,a0,a1}}
+  }catch(error){
+    return reject('CALCULATION_EXCEPTION',error instanceof Error?error.message:String(error))
+  }
+}
 export type EventDelta=Readonly<{kind:'A1_ONLY'|'A0_ONLY'|'CHANGED';event:EventLogEntry;counterpart?:EventLogEntry}>
 /** 年をまたいだ比較にしない。IDの一致だけでなく内容差分も判定する。 */
-export function compareYear(c:PlayComparison,year:number):Readonly<{
+export function compareYear(c:PlayView,year:number):Readonly<{
   a0World:WorldState|undefined;a1World:WorldState|undefined;
   events:readonly EventDelta[];traces:readonly TraceDelta[];traceSummary:TraceSummary
 }>{
