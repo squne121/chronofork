@@ -27,6 +27,18 @@ Playwright CLIによるAIのGUI試遊、正式Goal公開、正式シナリオデ
 | `debug 1260 A1 B-004` | 指定年・RuleIDの内部Trace/Event/実行状態を明示的に取得 |
 | `help` / `exit` | 利用案内／終了 |
 
+### 起動モード
+
+`--mode=` は `FIXED_APPROVAL`（既定）／`ORDINARY_LAW`／`INTEGRATED_EXPERIMENTAL`。それ以外は起動時に拒否し非ゼロ終了する。
+
+`INTEGRATED_EXPERIMENTAL` は mainの `createExperimentalIntegratedTimelineOptions` / `createExperimentalIntegratedEvaluators` を再利用する（`--seed` は実行のseedとして上書きする）。A0単独実行（`observe` 等）と `intervene` 内のA0は同じ `prepareRoot`/`runRootTimeline` を通り、完全に一致する。A1は同じ初期世界の介入年初のWorldStateと、許可された介入だけを加えた台帳で `forkHistory` により再計算する。`technicalGoal` は正式Goalではなく、PLAYERには出さずDEBUGのみ。例: `npm run play:text -- --mode=INTEGRATED_EXPERIMENTAL --seed=20260101 --json`。
+
+### メモリと表示の違い（GUIとCLI）
+
+- GUI（PR #91）はWorkerから画面へ転送する**表示用ビュー**で、A0/A1で内容が完全に同一の高頻度記録（`PERSON_PAIR_TRUST_SET` Eventと`B-009` DecisionTrace）を省略する。省略件数は表示され、省略した個別詳細は現UIでは閲覧できない。
+- CLIは省略せず、**完全なEventLog・DecisionTraceを保持**する（`debug`はその実データを返す）。これは「省略データが消失した」という意味ではなく、表示ビューの技術的処置の違いである。勝敗や因果関係の根拠にはしない。
+- 統合100年のA0＋A1は完全保持のためメモリが大きい（実測: 1セッションの最大RSSは約4.4GB）。`npm run play:text` はNodeのヒープ上限を `--max-old-space-size=6144` で引き上げて起動する。メモリの少ない環境では不足しうる。`intervene` 実行時は先に単独A0を解放する。計算は1セッション内で、A0単独約1分、`intervene`はA0再計算を含め約1分以上かかる（環境依存）。
+
 標準はテキスト形式、`--json`は機械向けJSON Lines出力。単一プロセス内でA0/A1結果を保持するが、永続セーブ・A2以降・独立した実験ノート保存は未実装。AIが観測・仮説・予測・試行・棄却・未解決を保持する実験ノートは後続のテスト基盤側の責務とし、ゲーム内部の`DecisionTrace`に混ぜない。
 
 **注意:** 初期実装の`inspect`などが開発UIで既に閲覧できる情報を反映していても、それは最終的なプレイヤー情報公開範囲の採用ではない。正式実装では可視性の単一契約を定め、GUI/テキストの情報差異を検証する。

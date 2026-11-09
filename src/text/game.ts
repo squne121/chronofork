@@ -164,6 +164,8 @@ export class TextGameSession {
   }
 
   intervene(input:Omit<PlayInput,'mode'|'seed'>):TextResult{
+    // 統合100年実行はメモリが大きいため、比較結果で置き換わる単独A0を先に解放する（必要なら決定的に再計算される）。
+    this.baseline=undefined
     const result=runPlayComparison({...input,mode:this.mode,seed:this.seed})
     if(!result.ok)return fail(result.code,result.message)
     this.comparison=result.comparison

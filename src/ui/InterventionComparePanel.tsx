@@ -1,19 +1,27 @@
 // A0/A1の試験用介入操作。描画用の差分は実WorldState/EventLog/DecisionTraceからのみ取得する。
 // GAME-01〜05と正式勝敗は未成立。CALIBRATION_ONLYの明示法的承認だけを試験で注入する。
 import { useState } from 'react'
-import { compareYear, directlyInvolvesPair, playPersonOptions, playModeLabel, PLAY_DEFAULT_MODE, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
+import { compareYear, directlyInvolvesPair, playPersonOptions, playModeLabel, INTEGRATED_PLAY_DEFAULTS, PLAY_DEFAULT_MODE, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
 import { observeDynastyContinuity } from './dynasty-continuity.ts'
 import type { ContinuityObservation } from './dynasty-continuity.ts'
 import { NALVEN_DYNASTY_ID } from '../scenario/experimental/index.ts'
 import { childIdsOfPair } from './event-summary.ts'
-import type { BranchChoice, PlayComparison, PlayInput, PlayMode } from './branch-play-source.ts'
+import type { BranchChoice, PlayInput, PlayMode, PlayView } from './branch-play-source.ts'
+import { IntegratedOverview } from './IntegratedOverview.tsx'
+import type { CalcInfo } from './IntegratedOverview.tsx'
 import type { GoalEvaluation, GoalFailureCode } from '../simulation/goal.ts'
 
 type Props=Readonly<{
   seedText:string
   year:number
-  comparison?:PlayComparison
+  comparison?:PlayView
   error?:Readonly<{code:string;message:string}>
+  /** 統合モードの計算中。他の操作は妨げないが、二重起動はできない。 */
+  running?:Readonly<{elapsedSec:number}>
+  notice?:string
+  calc?:CalcInfo
+  onCancel:()=>void
+  onSeedText:(text:string)=>void
   activeBranch:BranchChoice
   onRun:(input:PlayInput)=>void
   onViewBranch:(choice:BranchChoice)=>void
@@ -57,6 +65,11 @@ const centralTitleEvidence=(g:GoalEvaluation|null):string=>{
   if(!a)return '中央世襲所領の評価記録なし'
   return a.qualifies?'中央世襲所領は条件に一致':`中央世襲所領: ${a.failures.map(x=>GOAL_FAILURE_LABEL[x]).join('、')}`
 }
+/** HALTED(計算が規則上継続できず停止)とゲーム内の勝敗は別物。 */
+const errorHeading=(code:string)=>code.endsWith('_HALTED')
+  ?'計算停止（HALTED。ゲーム内の勝敗ではありません）'
+  :code==='CANCELLED'?'計算を中断しました':code.startsWith('WORKER_')?'計算を実行できませんでした（ブラウザ側の失敗。ゲームの結果ではありません）'
+  :'計算不成立（ゲーム内の勝敗ではありません）'
 const countAlive=(c:readonly {alive:boolean}[])=>c.filter(x=>x.alive).length
 const countMarried=(w:{legal:{marriages:readonly {status:string}[]}})=>w.legal.marriages.filter(m=>m.status==='ACTIVE').length
 const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filter(t=>t.holder.status==='HELD').length
@@ -146,19 +159,33 @@ export function InterventionComparePanel(p:Props){
     <p className="note">対象の2人の信頼を一時的に変え、1250〜1350年の実WorldStateを再計算します。法令や出生・死亡の具体値はCALIBRATION_ONLYで、どちらの方式も正式な勝敗・全自律歴史ではありません。</p>
     <h3 className="step-title"><span className="step-no">1</span>試験方式と介入を選ぶ</h3>
     <label>法制を試す方式
-      <select data-testid="play-law-mode" value={mode} onChange={e=>{
+      <select data-testid="play-law-mode" value={mode} disabled={!!p.running} onChange={e=>{
         const next=e.target.value as PlayMode
         setMode(next)
+        if(next==='INTEGRATED_EXPERIMENTAL'){
+          // PR #78 の実測条件を「初期入力例」として入れるだけ。以降は入力欄の値で再計算する。
+          p.onSeedText(String(INTEGRATED_PLAY_DEFAULTS.seed))
+          setFirstId(INTEGRATED_PLAY_DEFAULTS.pair[0]);setSecondId(INTEGRATED_PLAY_DEFAULTS.pair[1])
+          setYearText(String(INTEGRATED_PLAY_DEFAULTS.year));setDeltaText(String(INTEGRATED_PLAY_DEFAULTS.signedDelta))
+          setDurationText(String(INTEGRATED_PLAY_DEFAULTS.durationYears))
+          return
+        }
+        // 統合モードの初期例から戻したときは、従来の試験用の初期例へ戻す。
+        setFirstId(PLAY_DEMO_PAIR[0]);setSecondId(PLAY_DEMO_PAIR[1])
+        setDeltaText(String(PLAY_DEMO_DELTA));setDurationText(String(PLAY_DEMO_DURATION))
         // 1250年からの介入が国内法制の差分を観測しやすい初期例。実際のイベント年は固定しない。
         if(next==='ORDINARY_LAW')setYearText('1250')
         else setYearText(String(PLAY_DEMO_YEAR))
       }}>
         <option value="FIXED_APPROVAL">旧・1260年の明示承認試験</option>
         <option value="ORDINARY_LAW">通常法制（experimental）</option>
+        <option value="INTEGRATED_EXPERIMENTAL">統合法制・世代継続（experimental）</option>
       </select>
     </label>
     <p className="note" data-testid="play-mode-description">
-      {mode==='ORDINARY_LAW'
+      {mode==='INTEGRATED_EXPERIMENTAL'
+        ?'SUPPORTING登録・婚姻・出生・死亡・婚姻終了・法的王朝・相続・統治委任を一つの構成で通し、1250〜1350年を再計算します（100年分のため端末により1〜数分かかります。計算中も画面は操作できます）。入力欄の初期値はPR #78で実測したCALIBRATION_ONLYの例で、歴史の固定イベントではありません。'
+        :mode==='ORDINARY_LAW'
         ?'同一国内の背景法令・当事者の試験適格性と、その年のB-005交渉意思から婚姻・相続・新委任を審査します。特定年の婚姻承認は予約しません。'
         :'従来の1260年限定の明示承認証拠による婚姻試験です。通常法制の自律承認ではありません。'}
     </p>
@@ -167,7 +194,7 @@ export function InterventionComparePanel(p:Props){
     </p>}
     <form className="compare-form" onSubmit={e=>{
       e.preventDefault()
-      if(valid)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
+      if(valid&&!p.running)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
         signedDelta:delta,durationYears:duration,mode})
     }}>
       <div className="form-grid">
@@ -192,11 +219,18 @@ export function InterventionComparePanel(p:Props){
         </label>
       </div>
       <h3 className="step-title"><span className="step-no">2</span>再計算する</h3>
-      <button type="submit" disabled={!valid} data-testid="branch-run" className="cta">介入して再計算</button>
-      <span className="note"> 例：{personName(PLAY_DEMO_PAIR[0])}と{personName(PLAY_DEMO_PAIR[1])}、{mode==='ORDINARY_LAW'?'1250':'1260'}年、+20、5年。出生・相続・委任は実計算の結果次第です。</span>
+      <button type="submit" disabled={!valid||!!p.running} data-testid="branch-run" className="cta">介入して再計算</button>
+      {p.running&&<button type="button" onClick={p.onCancel} data-testid="branch-cancel">計算をキャンセル</button>}
+      <span className="note"> {mode==='INTEGRATED_EXPERIMENTAL'
+        ?`初期入力例：${personName(INTEGRATED_PLAY_DEFAULTS.pair[0])}と${personName(INTEGRATED_PLAY_DEFAULTS.pair[1])}、${INTEGRATED_PLAY_DEFAULTS.year}年、${INTEGRATED_PLAY_DEFAULTS.signedDelta}、${INTEGRATED_PLAY_DEFAULTS.durationYears}年間（seed ${INTEGRATED_PLAY_DEFAULTS.seed}）。`
+        :`例：${personName(PLAY_DEMO_PAIR[0])}と${personName(PLAY_DEMO_PAIR[1])}、${mode==='ORDINARY_LAW'?'1250':'1260'}年、+20、5年。`}出生・相続・委任は実計算の結果次第です。</span>
     </form>
     {!valid&&<p role="status" className="missing" data-testid="branch-invalid">seed、介入年、相異なる2人、0以外の補正値、1350年を超えない期間を指定してください。</p>}
-    {p.error&&<p role="alert" className="halt" data-testid="branch-error">計算不成立（敗北ではありません）: {p.error.code} / {p.error.message}</p>}
+    {p.running&&<p role="status" className="note" data-testid="branch-running">
+      計算中です（経過 {p.running.elapsedSec}秒）。完了までの目安は測れないため表示しません。この間も年表・地図の閲覧など他の操作ができます。
+    </p>}
+    {p.notice&&<p role="status" className="note" data-testid="branch-notice">{p.notice}</p>}
+    {p.error&&<p role="alert" className="halt" data-testid="branch-error">{errorHeading(p.error.code)}: {p.error.code} / {p.error.message}</p>}
     {!p.comparison&&<p className="note" data-testid="branch-empty">まだ比較結果はありません。上の「介入して再計算」を押すと、ここにA0/A1の違いが表示されます。</p>}
     {p.comparison&&input&&before&&after&&<div data-testid="branch-results" className="compare-results">
       <h3 className="step-title"><span className="step-no">3</span>同じ年のA0/A1を比べる</h3>
@@ -210,6 +244,8 @@ export function InterventionComparePanel(p:Props){
         <p className="note">「A1にだけ記録」は、介入ありの歴史にだけ確定したEventです（A0にだけ記録はその逆）。</p>
         <p className="note">正式勝敗: 未成立。これは試験版の差分であり、単独原因の断定ではありません。</p>
       </div>
+      {p.comparison.mode==='INTEGRATED_EXPERIMENTAL'&&<IntegratedOverview view={p.comparison} calc={p.calc}
+        personLabel={personName} onInspectEvent={p.onInspectEvent}/>}
       <div className="headline" data-testid="trial-goal-summary">
         <h4>1350年のナルヴェン王朝存続条件（試験判定）</h4>
         <p data-testid="trial-goal-mode">試験方式：{playModeLabel(p.comparison.mode)}</p>

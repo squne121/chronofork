@@ -63,7 +63,7 @@ describe('NodeテキストCLIの起動・実世界操作',()=>{
 
   it.each([
     ['--seed=abc'],['--seed=-1'],['--seed=1.5'],['--seed=0x10'],['--seed='],['--mode=BAD'],
-    ['--mode=INTEGRATED_EXPERIMENTAL'],['--mode='],['--unknown'],['--json','--seed=1e3'],
+    ['--mode=integrated_experimental'],['--mode='],['--unknown'],['--json','--seed=1e3'],
   ])('起動引数 %s は起動時に拒否して非ゼロ終了する',(...args)=>{
     const p=spawnSync(process.execPath,['--experimental-strip-types','scripts/text-game.ts',...args],
       {input:'observe 1250\nexit\n',encoding:'utf8',timeout:60000,cwd:process.cwd()})

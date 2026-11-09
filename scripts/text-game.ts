@@ -7,7 +7,7 @@ import type { TextResult } from '../src/text/game.ts'
 import type { PlayMode } from '../src/ui/branch-play-source.ts'
 
 const HELP=`Project Chronofork — テキスト操作 (EXPERIMENTAL / CALIBRATION_ONLY)
-起動: npm run play:text -- [--seed=0以上の整数] [--mode=FIXED_APPROVAL|ORDINARY_LAW] [--json]
+起動: npm run play:text -- [--seed=0以上の整数] [--mode=FIXED_APPROVAL|ORDINARY_LAW|INTEGRATED_EXPERIMENTAL] [--json]
 入力コマンド（1行ずつ）:
   observe [year=1250] [A0|A1]         指定年の世界とEventを観測
   inspect <person|region|group|title|event|trace> <id> [year=1250] [A0|A1]
@@ -18,7 +18,7 @@ const HELP=`Project Chronofork — テキスト操作 (EXPERIMENTAL / CALIBRATIO
 注: 現段階はGUIと同じ試験用の人物ペア信頼1操作→A1比較に限定。
     結果イベント・正式Goalを直接操作できません。`
 
-const MODES=['FIXED_APPROVAL','ORDINARY_LAW'] as const
+const MODES=['FIXED_APPROVAL','ORDINARY_LAW','INTEGRATED_EXPERIMENTAL'] as const
 function parseStartup(flags:readonly string[]):{seed:number;mode:PlayMode;json:boolean}|string{
   let seed=1,mode:PlayMode='FIXED_APPROVAL',json=false
   for(const f of flags){
