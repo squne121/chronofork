@@ -64,6 +64,8 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent,onInspe
         <dt>対象の2人</dt><dd>{personLabel(input.firstPersonId)}・{personLabel(input.secondPersonId)}</dd>
         <dt>介入</dt><dd>{input.year}年から{input.durationYears}年間、信頼 {input.signedDelta>0?'+':''}{input.signedDelta}</dd>
         <dt>計算範囲</dt><dd>1250年〜1350年（A0とA1で同じ初期世界・法令・評価器、A1だけ介入台帳を追加）</dd>
+        {view.a0Source&&<><dt>原史A0</dt><dd data-testid="integrated-a0-source">{view.a0Source==='REUSED'
+          ?'同じ条件の保存済み計算結果を再利用（今回は再計算していません）':'今回計算'}</dd></>}
         {calc&&<><dt>実測時間（Worker内の計算）</dt><dd data-testid="integrated-compute-time">{sec(calc.computeMs)}</dd>
           <dt>実測時間（操作から表示まで）</dt><dd data-testid="integrated-wall-time">{sec(calc.wallMs)}</dd></>}
         <dt>正式勝敗 / 自律歴史</dt><dd>goal=null（未成立）/ NOT_ESTABLISHED</dd>

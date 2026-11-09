@@ -22,6 +22,9 @@ import { normalizePersonPair } from '../simulation/intervention/index.ts'
 import type { MarriageApprovalEvidence } from '../simulation/rules/a/index.ts'
 import { EXPERIMENTAL_TUNING } from '../simulation/tuning.ts'
 import type { TimelineRun } from './timeline-source.ts'
+import { buildA0CacheKey, countsOf } from './a0-cache.ts'
+import type { A0Source, SingleA0Cache } from './a0-cache.ts'
+export type { A0Source } from './a0-cache.ts'
 import type { ProgressBranch, ProgressObserver } from './play-progress.ts'
 export type { PlayProgress, ProgressObserver } from './play-progress.ts'
 import { compareTraces } from './trace-correspondence.ts'
@@ -93,6 +96,8 @@ export type PlayView=Readonly<{
   a1:TimelineRun
   /** 転送用ビューのときだけ付く。無ければ完全な結果。 */
   displayOmission?:DisplayOmission
+  /** A0を今回計算したか、保存済みを再利用したか。キャッシュ非対応の経路では常にCOMPUTED。 */
+  a0Source?:A0Source
 }>
 export type PlayComparison=PlayView&Readonly<{root:Branch;branch:Branch}>
 export type PlayResult=
@@ -214,8 +219,25 @@ function forkEvaluators(c:RootContext,state:WorldState,ledger:readonly StatModif
   return c.integrated?createExperimentalIntegratedEvaluators(state,ledger)
     :createEvaluators(state,ledger,c.legal!.book,c.mode,c.ordinaryTrial)
 }
+/** A0を一意に決める入力すべて。介入(年・人物・補正・期間)は含めない。 */
+function a0CacheKeyOf(c:RootContext):string{
+  return buildA0CacheKey({
+    mode:c.mode,seed:c.seed,rngVersion:'chronofork-rng-2',rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,
+    tuning:EXPERIMENTAL_TUNING,initialWorld:c.initial,
+    ...(c.integrated
+      ?{integrated:{goal:c.integrated.options.goal,ruleIds:Object.keys(c.integrated.options.evaluators).sort()}}
+      :{legal:{goal:c.legal?.goal,book:c.legal?.book,ordinary:c.ordinaryTrial,
+        calibration:BIRTH_MORTALITY_CALIBRATION,trustBase:TRUST_BASE,approval:TEST_MARRIAGE_APPROVAL}}),
+  })
+}
+export type PlayRunOptions=Readonly<{
+  /** 指定したときだけA0を保持/再利用する。省略時は従来どおり毎回計算する。 */
+  cache?:SingleA0Cache
+  /** A0を再計算せず保存済みを使うと決まった時点で一度だけ呼ぶ(A0の年次進捗は出さない)。 */
+  onA0Reused?:()=>void
+}>
 /** 決定的再計算の本物の結果だけ返す。停止時は部分結果を表示用「成功」と扱わない。 */
-export function runPlayComparison(input:PlayInput,observer?:ProgressObserver):PlayResult{
+export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,options:PlayRunOptions={}):PlayResult{
   const mode=input.mode??PLAY_DEFAULT_MODE
   if(mode!=='FIXED_APPROVAL'&&mode!=='ORDINARY_LAW'&&mode!=='INTEGRATED_EXPERIMENTAL')return reject('INVALID_MODE','試験用法制モードが不正です')
   if(!Number.isSafeInteger(input.seed)||input.seed<0)return reject('INVALID_SEED','seedは0以上の安全整数が必要です')
@@ -241,22 +263,34 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver):Pl
     decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
   }
   try{
-    const rootRun=runRootTimeline(prep.context,observer)
-    if(!rootRun.ok)return reject(rootRun.code,rootRun.message)
-    const {timeline,evaluators:rootEvaluators,a0}=rootRun
-    const root=createRootBranch(timeline,[],rootEvaluators)
-    if(!root.ok)return reject('A0_ROOT_REJECTED',root.code+':'+root.message)
+    const key=options.cache?a0CacheKeyOf(prep.context):''
+    const cached=options.cache?.get(key)
+    let root:Branch,a0:TimelineRun,a0Source:A0Source
+    if(cached){
+      root=cached.root;a0=cached.a0;a0Source='REUSED'
+      options.onA0Reused?.()
+    }else{
+      const rootRun=runRootTimeline(prep.context,observer)
+      if(!rootRun.ok)return reject(rootRun.code,rootRun.message)
+      const {timeline,evaluators:rootEvaluators}=rootRun
+      const made=createRootBranch(timeline,[],rootEvaluators)
+      if(!made.ok)return reject('A0_ROOT_REJECTED',made.code+':'+made.message)
+      root=made.branch;a0Source='COMPUTED'
+      // 表示用A0はrootの凍結済み配列を共有する(同内容の複製を二重に保持しない)。
+      a0={...rootRun.a0,result:{...timeline,snapshots:root.snapshots,eventLog:root.eventLog,decisionTraces:root.decisionTraces}}
+      options.cache?.put({key,root,a0,counts:countsOf(root)})
+    }
     const rerun=forkHistory({
-      parent:root.branch,branchId:'A1-play',forkYear:input.year,
+      parent:root,branchId:'A1-play',forkYear:input.year,
       modifiers:[modifier],
       ...progressHook('A1',observer),
       evaluatorsFor:({ledger})=>forkEvaluators(prep.context,
-        root.branch.snapshots[input.year-root.branch.startYear]!,ledger),
+        root.snapshots[input.year-root.startYear]!,ledger),
     })
     if(!rerun.ok)return reject('FORK_REJECTED',rerun.code+':'+rerun.message)
     if(rerun.branch.status!=='COMPLETED')return reject('A1_HALTED',JSON.stringify(rerun.branch.halt))
     const a1=asTimelineRun(rerun.branch,a0,mode)
-    return {ok:true,comparison:{mode,input,modifier,root:root.branch,branch:rerun.branch,a0,a1}}
+    return {ok:true,comparison:{mode,input,modifier,root,branch:rerun.branch,a0,a1,a0Source}}
   }catch(error){
     return reject('CALCULATION_EXCEPTION',error instanceof Error?error.message:String(error))
   }

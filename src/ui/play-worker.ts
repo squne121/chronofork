@@ -4,10 +4,13 @@ import { runPlayComparison } from './branch-play-source.ts'
 import type { PlayInput, PlayView } from './branch-play-source.ts'
 import { toDisplayView } from './play-view.ts'
 import type { PlayProgress } from './play-progress.ts'
+import { SingleA0Cache } from './a0-cache.ts'
 
 export type WorkerRequest=Readonly<{input:PlayInput}>
 export type WorkerResponse=
   | Readonly<{kind:'PROGRESS';progress:PlayProgress}>
+  /** A0を再計算せず保存済みを使う。A0の年次進捗は送らない(再計算したように見せない)。 */
+  | Readonly<{kind:'A0_REUSED'}>
   | Readonly<{ok:true;view:PlayView;computeMs:number;viewMs:number}>
   | Readonly<{ok:false;code:string;message:string;computeMs:number}>
 
@@ -15,12 +18,15 @@ const ctx=self as unknown as {
   onmessage:((e:MessageEvent<WorkerRequest>)=>void)|null
   postMessage:(m:WorkerResponse)=>void
 }
+/** このWorkerが生きている間だけ、同一世界線のA0を1件保持する。terminateで必ず破棄される。 */
+const a0Cache=new SingleA0Cache()
 ctx.onmessage=e=>{
   const t0=performance.now()
   let response:WorkerResponse
   try{
     // 進捗は小さなDTOだけを送る。WorldState・ログは最終結果まで送らない。
-    const r=runPlayComparison(e.data.input,progress=>ctx.postMessage({kind:'PROGRESS',progress}))
+    const r=runPlayComparison(e.data.input,progress=>ctx.postMessage({kind:'PROGRESS',progress}),
+      {cache:a0Cache,onA0Reused:()=>ctx.postMessage({kind:'A0_REUSED'})})
     const computeMs=performance.now()-t0
     if(!r.ok)response={ok:false,code:r.code,message:r.message,computeMs}
     else{
@@ -29,6 +35,7 @@ ctx.onmessage=e=>{
       response={ok:true,view,computeMs,viewMs:performance.now()-t1}
     }
   }catch(error){
+    a0Cache.clear() // 失敗の原因が保持物に由来しないと言えないので捨てて再計算に倒す
     response={ok:false,code:'WORKER_EXCEPTION',message:error instanceof Error?error.message:String(error),computeMs:performance.now()-t0}
   }
   ctx.postMessage(response)
