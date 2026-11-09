@@ -7,6 +7,10 @@ import {
 } from '../../../src/ui/HistoricalChangesExplorer.tsx'
 import { EVENT_CATEGORIES } from '../../../src/ui/integrated-overview.ts'
 import type { CategoryRow } from '../../../src/ui/integrated-overview.ts'
+import type { PlayView } from '../../../src/ui/branch-play-source.ts'
+
+const emptyRun = { result: { eventLog: [], decisionTraces: [], snapshots: [] } }
+const emptyView = { a0: emptyRun, a1: emptyRun } as unknown as PlayView
 
 afterEach(cleanup)
 
@@ -29,8 +33,8 @@ describe('HistoricalChangesExplorer — 認定済みEventの表示専用分類',
     const succession = event('case-1280', 1280, 'LEGAL_CASE_SET', [{ kind: 'REGION', id: 'r-east' }])
     const rows = [row('marriage', [marriage]), row('birth', [], [birth]), row('case', [], [succession])]
     const onInspect = vi.fn()
-    render(<HistoricalChangesExplorer rows={rows} totalDifferences={3} worldA0={undefined} worldA1={undefined}
-      onInspectEvent={onInspect}/>)
+    render(<HistoricalChangesExplorer rows={rows} view={emptyView} totalDifferences={3} worldA0={undefined} worldA1={undefined}
+      onInspectEvent={onInspect} onInspectTrace={() => {}}/>)
 
     const buttons = () => within(screen.getByTestId('change-list')).getAllByRole('button')
     expect(buttons()).toHaveLength(3)
@@ -57,8 +61,8 @@ describe('HistoricalChangesExplorer — 認定済みEventの表示専用分類',
 
   it('分類対象と分類外と全Event差分の件数を混同させない', () => {
     const rows = [row('marriage', [event('marriage-1250', 1250, 'MARRIAGE_REGISTER')])]
-    render(<HistoricalChangesExplorer rows={rows} totalDifferences={3}
-      worldA0={undefined} worldA1={undefined} onInspectEvent={() => {}}/>)
+    render(<HistoricalChangesExplorer rows={rows} view={emptyView} totalDifferences={3}
+      worldA0={undefined} worldA1={undefined} onInspectEvent={() => {}} onInspectTrace={() => {}}/>)
     const counter = screen.getByTestId('change-count').textContent ?? ''
     expect(counter).toContain('分類対象 全1件')
     expect(counter).toContain('分類外 2件')
@@ -79,8 +83,8 @@ describe('HistoricalChangesExplorer — 認定済みEventの表示専用分類',
     const birthEvents = Array.from({ length: 25 }, (_, i) =>
       event('birth-' + String(i), 1270 + (i % 3), 'PERSON_BIRTH'))
     const onInspect = vi.fn()
-    render(<HistoricalChangesExplorer rows={[row('birth', [], birthEvents)]} totalDifferences={25}
-      worldA0={undefined} worldA1={undefined} onInspectEvent={onInspect}/>)
+    render(<HistoricalChangesExplorer rows={[row('birth', [], birthEvents)]} view={emptyView} totalDifferences={25}
+      worldA0={undefined} worldA1={undefined} onInspectEvent={onInspect} onInspectTrace={() => {}}/>)
     const list = screen.getByTestId('change-list')
     expect(within(list).getAllByRole('button')).toHaveLength(20)
     fireEvent.click(screen.getByTestId('change-more'))
