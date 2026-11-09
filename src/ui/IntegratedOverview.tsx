@@ -1,6 +1,7 @@
 // 統合法制・世代継続(experimental)の結果一覧。出典・差分判定・経過・親子・Title。
 // 実WorldState/EventLog/DecisionTraceの読み取りだけを表示し、正式勝敗・史実として扱わない。
 import { useMemo } from 'react'
+import { HistoricalChangesExplorer } from './HistoricalChangesExplorer.tsx'
 import type { DecisionTrace } from '../simulation/contracts/index.ts'
 import { INTEGRATED_PLAY_DEFAULTS, playModeLabel } from './branch-play-source.ts'
 import type { BranchChoice, PlayView } from './branch-play-source.ts'
@@ -92,6 +93,8 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent,onInspe
       {om&&<p className="note" data-testid="integrated-count-note">この画面のEvent/Trace件数は、同一記録を省略した後の表示分です（省略した個別詳細は閲覧できません）。全件数と省略件数は上の「入力条件と計算結果の出典」を参照してください。</p>}
       <p className="note">単独原因の断定ではなく、正式勝敗でもありません。差の理由は下のEventから「④ 理由を確認する」のDecisionTraceで辿れます。</p>
     </div>
+
+    <HistoricalChangesExplorer rows={overview.rows} worldA0={final0} worldA1={final1} onInspectEvent={onInspectEvent}/>
 
     <section aria-labelledby="integrated-evidence-heading" data-testid="integrated-evidence">
       <h4 id="integrated-evidence-heading">介入が参照された判断を調べる（A1）</h4>
