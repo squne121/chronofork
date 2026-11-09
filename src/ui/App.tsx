@@ -217,6 +217,9 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
     setEventId(undefined)
     setTraceId(trace.traceId)
     setSelection(undefined)
+    // Eventからの移動と同様、縦長の比較欄から理由欄へ画面を移す。
+    // Trace詳細への個別フォーカスはHistoryPanel側の既存処理に任せる。
+    setTimeout(() => document.getElementById('reasons')?.scrollIntoView?.({ block: 'start' }), 0)
   }
 
   const source: InspectionSource = {
