@@ -49,7 +49,7 @@ describe('DEC-073 — 選択対象のA0/A1実記録比較', () => {
     expect(onTrace).toHaveBeenCalledWith('A1','trace-A1-1250')
     expect(onEvent).not.toHaveBeenCalled()
     fireEvent.change(target,{target:{value:'PERSON:p5'}})
-    expect(screen.getByTestId('target-comparison').textContent).toContain('PERSON:p5')
+    expect(screen.getByTestId('target-comparison').textContent).toContain('人物: p5（介入対象）のA0/A1記録を比べる')
   })
 
   it('A0の婚姻成立Eventと、A1の不採択Traceを混同せず別々に開ける', () => {
