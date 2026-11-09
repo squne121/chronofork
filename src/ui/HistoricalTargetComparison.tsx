@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react'
 import type { DecisionTrace, TargetRef } from '../simulation/contracts/index.ts'
 import type { BranchChoice, PlayView } from './branch-play-source.ts'
 import { eventHeadline, inCategory, namesOf, EVENT_CATEGORIES } from './integrated-overview.ts'
-import { eventTargetKeys } from './HistoricalChangesExplorer.tsx'
 
 const PAGE_SIZE = 12
 const STATUS_LABEL: Readonly<Record<DecisionTrace['status'], string>> = {
@@ -36,7 +35,7 @@ function BranchEvidence({ choice, run, targetKey, year, categoryKey, onInspectEv
   const events = useMemo(() => {
     const category = EVENT_CATEGORIES.find(c => c.key === categoryKey)
     return run.result.eventLog.filter(e => (!year || String(e.year) === year) &&
-      (!category || inCategory(e, category)) && eventTargetKeys(e).includes(targetKey))
+      (!category || inCategory(e, category)) && e.involvedRefs.some(ref => actorMatches(ref, targetKey)))
   }, [run, targetKey, year, categoryKey])
   const traces = useMemo(() =>
     run.result.decisionTraces.filter(t => (!year || String(t.year) === year) && actorMatches(t.actorRef, targetKey)),
