@@ -10,7 +10,9 @@ import type { CategoryRow } from '../../../src/ui/integrated-overview.ts'
 import type { PlayView } from '../../../src/ui/branch-play-source.ts'
 
 const emptyRun = { result: { eventLog: [], decisionTraces: [], snapshots: [] } }
-const emptyView = { a0: emptyRun, a1: emptyRun } as unknown as PlayView
+const emptyView = { a0: emptyRun, a1: emptyRun,
+  input: {seed:20260101,year:1250,firstPersonId:'p2',secondPersonId:'p5',signedDelta:-20,durationYears:5},
+} as unknown as PlayView
 
 afterEach(cleanup)
 
