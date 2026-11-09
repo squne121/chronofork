@@ -8,8 +8,23 @@ import { NALVEN_DYNASTY_ID } from '../scenario/experimental/index.ts'
 import { childIdsOfPair } from './event-summary.ts'
 import type { BranchChoice, PlayInput, PlayMode, PlayView } from './branch-play-source.ts'
 import { IntegratedOverview } from './IntegratedOverview.tsx'
+import type { PlayProgress, ProgressState } from './play-progress.ts'
 import type { CalcInfo } from './IntegratedOverview.tsx'
 import type { GoalEvaluation, GoalFailureCode } from '../simulation/goal.ts'
+
+/** 途中経過が止まった理由。どれも「結果が確定した」ことを意味しない。 */
+export type ProgressEnd='CANCELLED'|'HALTED'|'FAILED'
+const END_LABEL:Record<ProgressEnd,string>={
+  CANCELLED:'キャンセルされました',HALTED:'歴史計算が停止しました（HALTED）',FAILED:'計算に失敗しました',
+}
+/** 計算済みの年・区間・実際の進み具合のみ。残り時間・未来のEventは出さない。 */
+function ProgressLine({label,p,ended}:{label:string;p?:PlayProgress;ended:boolean}){
+  if(!p)return <li data-testid={`progress-${label}`}>{label}：{ended?'未着手':'開始待ち'}（確定した年はありません）</li>
+  return <li data-testid={`progress-${label}`}>
+    {label}：{p.startYear}年→{p.goalYear}年の再計算で、{p.confirmedYear}年初まで計算済み
+    （{p.transitionsDone}/{p.transitionsTotal}年分、記録されたEvent {p.eventCount}件）
+  </li>
+}
 
 type Props=Readonly<{
   seedText:string
@@ -18,6 +33,9 @@ type Props=Readonly<{
   error?:Readonly<{code:string;message:string}>
   /** 統合モードの計算中。他の操作は妨げないが、二重起動はできない。 */
   running?:Readonly<{elapsedSec:number}>
+  /** 確定済みの年次進捗（A0/A1別）。途中経過であり結果ではない。 */
+  progress?:ProgressState
+  progressEnd?:ProgressEnd
   notice?:string
   calc?:CalcInfo
   onCancel:()=>void
@@ -230,6 +248,14 @@ export function InterventionComparePanel(p:Props){
     {p.running&&<p role="status" className="note" data-testid="branch-running">
       計算中です（経過 {p.running.elapsedSec}秒）。完了までの目安は測れないため表示しません。この間も年表・地図の閲覧など他の操作ができます。
     </p>}
+    {(p.running||p.progressEnd)&&<div className="note" data-testid="branch-progress">
+      <p><strong>{p.progressEnd?`途中経過（未確定）：${END_LABEL[p.progressEnd]}`:'途中経過（未確定）'}</strong>
+        ：下の数値は確定済みの年までです。最終結果・勝敗ではありません。</p>
+      <ul>
+        <ProgressLine label="A0" p={p.progress?.a0} ended={!!p.progressEnd}/>
+        <ProgressLine label="A1" p={p.progress?.a1} ended={!!p.progressEnd}/>
+      </ul>
+    </div>}
     {p.notice&&<p role="status" className="note" data-testid="branch-notice">{p.notice}</p>}
     {p.error&&<p role="alert" className="halt" data-testid="branch-error">{errorHeading(p.error.code)}: {p.error.code} / {p.error.message}</p>}
     {!p.comparison&&<p className="note" data-testid="branch-empty">まだ比較結果はありません。上の「介入して再計算」を押すと、ここにA0/A1の違いが表示されます。</p>}

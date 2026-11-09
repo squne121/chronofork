@@ -33,9 +33,21 @@ test.describe('統合モード: 起動・計算中の操作・キャンセル(�
     // 経過秒が進む(実測できる値のみ。進捗率は出さない)。
     await expect(page.getByTestId('branch-running')).toContainText(/経過 [1-9]\d*秒/, { timeout: 15_000 })
 
+    // 実Workerから確定済みの年次進捗がA0として届く。%・残り時間・結果断定は出さず、単調に増える。
+    await expect(page.getByTestId('progress-A0')).toContainText(/\d{4}年初まで計算済み/, { timeout: 30_000 })
+    const yearOf = async () => Number(/(\d{4})年初まで/.exec(await page.getByTestId('progress-A0').innerText())?.[1])
+    const y1 = await yearOf()
+    await expect.poll(yearOf, { timeout: 30_000 }).toBeGreaterThan(y1)
+    await expect(page.getByTestId('branch-progress')).toContainText('途中経過（未確定）')
+    await expect(page.getByTestId('branch-progress')).not.toContainText(/%|残り|勝利/)
+
     await page.getByTestId('branch-cancel').click()
     await expect(page.getByTestId('branch-running')).toHaveCount(0)
     await expect(page.getByTestId('branch-notice')).toContainText('キャンセル')
+    await expect(page.getByTestId('branch-progress')).toContainText('キャンセルされました')
+    const frozen = await yearOf()
+    await page.waitForTimeout(1500)
+    expect(await yearOf()).toBe(frozen) // キャンセル後は古いWorkerの通知で更新されない
     await expect(page.getByTestId('branch-run')).toBeEnabled()
     await expect(page.getByTestId('branch-results')).toHaveCount(0)
     await expect(page.locator('body')).not.toContainText('参照不明')

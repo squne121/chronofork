@@ -2,20 +2,22 @@
 import { runPlayComparison } from './branch-play-source.ts'
 import type { PlayInput, PlayResult, PlayView } from './branch-play-source.ts'
 import type { WorkerResponse } from './play-worker.ts'
+import type { ProgressObserver } from './play-progress.ts'
 
 export type PlayOutcome=
   | Readonly<{kind:'DONE';result:Readonly<{ok:true;view:PlayView}>|Extract<PlayResult,{ok:false}>;computeMs:number}>
   | Readonly<{kind:'CANCELLED'}>
   | Readonly<{kind:'FAILED';code:string;message:string}>
 export type PlayRunHandle=Readonly<{promise:Promise<PlayOutcome>;cancel:()=>void}>
-export type PlayRunner=(input:PlayInput)=>PlayRunHandle
+/** onProgress は確定済みの年次進捗だけ。完了・失敗・キャンセル後は呼ばれない。 */
+export type PlayRunner=(input:PlayInput,onProgress?:ProgressObserver)=>PlayRunHandle
 
 /** 実ブラウザ用。実行ごとに新しいWorkerを作り、完了・失敗・キャンセルで必ず終了する。 */
-export const workerPlayRunner:PlayRunner=input=>{
+export const workerPlayRunner:PlayRunner=(input,onProgress)=>{
   let worker:Worker|undefined
+  let done=false
   let settle:(o:PlayOutcome)=>void=()=>{}
   const promise=new Promise<PlayOutcome>(resolve=>{
-    let done=false
     settle=o=>{if(done)return;done=true;worker?.terminate();resolve(o)}
     if(typeof Worker==='undefined'){settle({kind:'FAILED',code:'WORKER_UNAVAILABLE',message:'このブラウザではWeb Workerを利用できません'});return}
     try{
@@ -25,6 +27,7 @@ export const workerPlayRunner:PlayRunner=input=>{
     }
     worker.onmessage=(e:MessageEvent<WorkerResponse>)=>{
       const m=e.data
+      if('kind' in m){if(!done)onProgress?.(m.progress);return}
       settle({kind:'DONE',computeMs:m.computeMs,
         result:m.ok?{ok:true,view:m.view}:{ok:false,code:m.code,message:m.message}})
     }
@@ -36,9 +39,9 @@ export const workerPlayRunner:PlayRunner=input=>{
 }
 
 /** テスト用。同期で完全な計算を行い、Workerと同じ形で返す(縮約はしない)。 */
-export const inlinePlayRunner:PlayRunner=input=>{
+export const inlinePlayRunner:PlayRunner=(input,onProgress)=>{
   const t0=performance.now()
-  const r=runPlayComparison(input)
+  const r=runPlayComparison(input,onProgress)
   const outcome:PlayOutcome={kind:'DONE',computeMs:performance.now()-t0,
     result:r.ok?{ok:true,view:r.comparison}:r}
   return {promise:Promise.resolve(outcome),cancel:()=>{}}

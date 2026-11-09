@@ -164,7 +164,7 @@ function forkUnchecked(input: ForkInput): ForkResult {
 
   let suffix: TimelineResult
   try {
-    suffix = runTimeline(copy(at as WorldState), { seed: parent.seed, branchId, evaluators })
+    suffix = runTimeline(copy(at as WorldState), { seed: parent.seed, branchId, evaluators, ...(input.onYearCommitted ? { onYearCommitted: input.onYearCommitted } : {}) })
   } catch (e) {
     return reject('RECOMPUTE_FAILED', `再計算を開始できません: ${e instanceof Error ? e.message : String(e)}`)
   }

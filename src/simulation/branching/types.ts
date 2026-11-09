@@ -1,7 +1,7 @@
 // 分岐履歴の公開型。親の TimelineResult を書き換えず、前史 prefix（継承）と実再計算 suffix の出典区分を保持する。
 // goal / coverage / autonomousHistory は意図的に持たない（prefix+suffix から合成・偽造しない）。
 import type { DecisionTrace, EventLogEntry, Id, StatModifier, WorldState, Year } from '../contracts/index.ts'
-import type { EvaluatorMap, RuleCoverage, RunHalt } from '../engine/index.ts'
+import type { EvaluatorMap, RuleCoverage, RunHalt, YearProgress } from '../engine/index.ts'
 import type { StatModifierIssue } from '../contracts/index.ts'
 import type { StatModifierLedger } from '../intervention/index.ts'
 
@@ -71,6 +71,8 @@ export type ForkInput = Readonly<{
   evaluatorsFor?: BranchEvaluatorFactory
   /** 指定する場合は親と同値でなければならない（矛盾は拒否）。 */
   seed?: number
+  /** 観測専用。fork 年から 1350 年までの実再計算で確定した年だけ通知する（結果に影響しない）。 */
+  onYearCommitted?: (progress: YearProgress) => void
 }>
 
 export type ForkRejectCode =
