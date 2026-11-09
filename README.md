@@ -13,6 +13,25 @@ npx playwright install chromium   # 初回のみ
 npm run test:e2e   # ビルド後に Playwright smoke
 ```
 
+## テキスト操作・AIプレイテスト（試験版）
+
+Node.js 22+で `npm run play:text -- --seed=1 --mode=FIXED_APPROVAL`（`ORDINARY_LAW`、`INTEGRATED_EXPERIMENTAL` も指定可）を起動し、次のテキストコマンドで現在のGUIと同じexperimental試験世界を観測・操作できます。機械向けには `--json`（JSON Lines）を指定します。
+
+```text
+observe 1250 A0
+inspect person person-exp-01 1250 A0
+intervene 1260 person-exp-04 person-exp-05 20 5
+compare 1261
+debug 1260 A1 B-004
+exit
+```
+
+統合モードは100年のA0/A1を計算するため数分・数GBのメモリを要します（`npm run play:text` はヒープ上限6GBで起動）。GUIの表示用ビューは同一の高頻度Event/Traceを省略しますが、CLIは完全な結果を保持します（省略は消失ではなく表示処置の違い。詳細は契約書）。統合モードの実計算CLI検証（オプトイン・通常CI対象外）: `CHRONOFORK_LONG_INTEGRATED_TEXT=1 NODE_OPTIONS=--max-old-space-size=6144 npx vitest run tests/unit/text/integrated-mode-long.test.ts`
+
+`debug` は明示したときだけ内部Event/Trace等を出力します。ゲーム内の歴史や勝敗を新たに生成するものではありません。現段階は `CALIBRATION_ONLY` のA0/A1人物ペア信頼試験のみで、正式勝敗・A2以降の保存・全介入方式は未完成です。
+
+採用した検証手段: Vitest + fast-check（短いプロパティ検査）、Playwright Test（回帰E2E）、Playwright CLI（探索用の `npm run play:ui -- --help`）。長時間多seed試験・AIのGUI試遊は通常CIとは分離します。詳細は `docs/contracts/text-playtest-interface.md`。
+
 ## 試遊（experimental）
 
 `npm run dev` で起動し、ブラウザで表示されるURLを開きます（既定は http://localhost:5173/）。
