@@ -102,10 +102,22 @@ export function HistoricalChangesExplorer({ rows, view, totalDifferences, worldA
   // 分類外の信頼更新などを「歴史上の変化160件」と誤読させない。
   const outsideCount = totalDifferences - changes.length
   const categories = rows.map(r => r.category)
-  const years = [...new Set(changes.map(x => x.event.year))].sort((a, b) => a - b)
-  const targetKeys = [...new Set(changes.flatMap(x => eventTargetKeys(x.event)))]
-  const targets = targetKeys.map(key => ({ key, label: targetName(key, [worldA0, worldA1]) }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'ja'))
+  // Event差がなくても、プレイヤーが介入した実在の2人の履歴・判断を比較できる。
+  // 介入の対象IDは実際の実行入力に限定し、架空のEventや人物は生成しない。
+  const interventionKeys = [...new Set([
+    `PERSON:${view.input.firstPersonId}`, `PERSON:${view.input.secondPersonId}`,
+  ])]
+  const years = [...new Set([view.input.year, ...changes.map(x => x.event.year)])].sort((a, b) => a - b)
+  const targetKeys = [...new Set([...interventionKeys, ...changes.flatMap(x => eventTargetKeys(x.event))])]
+  const targets = targetKeys.map(key => ({
+    key,
+    label: targetName(key, [worldA0, worldA1, view.a0.initialWorld, view.a1.initialWorld]) +
+      (interventionKeys.includes(key) ? '（介入対象）' : ''),
+  })).sort((a, b) => {
+    const aPriority = interventionKeys.indexOf(a.key), bPriority = interventionKeys.indexOf(b.key)
+    if (aPriority !== -1 || bPriority !== -1) return (aPriority === -1 ? Infinity : aPriority) - (bPriority === -1 ? Infinity : bPriority)
+    return a.label.localeCompare(b.label, 'ja')
+  })
   const activeCategory = categories.some(c => c.key === category) ? category : ''
   const activeYear = years.some(y => String(y) === year) ? year : ''
   const activeTarget = targetKeys.includes(target) ? target : ''
@@ -121,7 +133,8 @@ export function HistoricalChangesExplorer({ rows, view, totalDifferences, worldA
       <h4 id="change-explorer-heading">歴史の変化を探す（Eventの記録差）</h4>
       <p className="note">
         実際のEventを分野・発生年・関与対象で絞ります。現行のEvent IDによる比較を使用し、事件の重要度や介入との因果は判定しません。
-        婚姻の見送りなどEventにならない判断は、下のDecisionTraceから確認してください。
+        婚姻の見送りなどEventにならない判断は、DecisionTraceから確認してください。
+        介入した2人はEvent差が0件でも選択でき、A0/A1それぞれの記録を調べられます。
       </p>
       <div className="filters">
         <label>分野
@@ -133,10 +146,10 @@ export function HistoricalChangesExplorer({ rows, view, totalDifferences, worldA
         <label>年
           <select data-testid="change-year" value={activeYear} onChange={e => { setYear(e.target.value); resetLimit() }}>
             <option value="">全年</option>
-            {years.map(y => <option key={y} value={String(y)}>{y}年</option>)}
+            {years.map(y => <option key={y} value={String(y)}>{y}年{y === view.input.year ? '（介入開始年）' : ''}</option>)}
           </select>
         </label>
-        <label>Eventの関与対象
+        <label>調べる対象
           <select data-testid="change-target" value={activeTarget} onChange={e => { setTarget(e.target.value); resetLimit() }}>
             <option value="">すべての対象</option>
             {targets.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
@@ -148,7 +161,7 @@ export function HistoricalChangesExplorer({ rows, view, totalDifferences, worldA
         分類外には人物ペア信頼の更新などが含まれます。同一Eventが複数分野に該当しても重複計上しません。
       </p>
       {shown.length === 0
-        ? <p data-testid="change-empty">この条件に一致するEventの記録差はありません。判断Traceや各枝の全記録は従来の欄から確認できます。</p>
+        ? <p data-testid="change-empty">この条件に一致するEventの記録差はありません。介入した2人を選ぶと、両枝に記録された確定Eventと判断Traceを調べられます。</p>
         : <>
           <ol className="compare-event-list" data-testid="change-list">
             {shown.slice(0, limit).map(record =>
@@ -169,7 +182,7 @@ export function HistoricalChangesExplorer({ rows, view, totalDifferences, worldA
           year={activeYear} categoryKey={activeCategory}
           onInspectEvent={onInspectEvent} onInspectTrace={onInspectTrace}/>
         : <p className="note" data-testid="target-comparison-hint">
-          対象のA0/A1を見比べるには、上の「Eventの関与対象」を選択してください。
+          対象のA0/A1を見比べるには、上の「調べる対象」を選択してください。介入した2人は記録差がなくても選べます。
         </p>}
     </section>
   )
