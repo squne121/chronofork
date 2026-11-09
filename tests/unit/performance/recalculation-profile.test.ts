@@ -49,6 +49,8 @@ const msRound = (n: number) => Math.round(n * 100) / 100
 // Set CHRONOFORK_PROFILE_YEAR_DETAIL=1 to run a separate 100-year per-year profile.
 // CHRONOFORK_PROFILE_OUT=<path> writes the JSON report to a file. Large heaps need
 // NODE_OPTIONS=--max-old-space-size=12288 (history is multi-GB when held in memory).
+// Run each case in a separate process: maxRSS / memoryUsage are process-cumulative.
+// sha256 is for cross-run comparison (repeat runs must match); one run alone proves nothing.
 // Do NOT treat structuredClone as a measurement of real browser Worker transport.
 it.skipIf(process.env.CHRONOFORK_PROFILE !== '1')(
   'P0: integrated 100-year A0 / fork / optional UI / optional annual profile',
@@ -137,6 +139,7 @@ it.skipIf(process.env.CHRONOFORK_PROFILE !== '1')(
         comparisonTotalMsIncludingFreshA0: compareRun.ms,
         displayConversionMs: viewRun.ms,
         structuredCloneProxyMs: cloneRun.ms,
+        structuredCloneNote: 'Node same-thread copy only; NOT a bound on Worker postMessage cost',
         // Worker.postMessageの実搬送・React描画はここでは計測できない。
         workerTransferMs: 'UNVERIFIED',
         reactRenderMs: 'UNVERIFIED',
@@ -154,11 +157,15 @@ it.skipIf(process.env.CHRONOFORK_PROFILE !== '1')(
       arch: process.arch,
       seed: INTEGRATED_SEED,
       forkYear,
+      recalcYears: 1350 - forkYear,
+      isFullRecompute: forkYear === INTEGRATED_START_YEAR,
+      digestNote: 'recorded for cross-run comparison; not itself a determinism proof',
       yearRange: [INTEGRATED_START_YEAR, 1350],
       timingsMs: {
         a0: a0Run.ms,
         rootBranch: rootRun.ms,
-        forkSuffix: forkRun.ms,
+        // forkYear=1250(=開始年)では全100年の再計算になり、A0とほぼ同コスト。
+        forkRecalc: forkRun.ms,
         hashOverhead: hashRun.ms,
       },
       counts: {
