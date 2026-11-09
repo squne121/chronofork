@@ -21,9 +21,37 @@ const tr=(id:string,year:number,status:DecisionTrace['status'],actorRef:TargetRe
 const run=(events:readonly EventLogEntry[],traces:readonly DecisionTrace[]) =>
   ({result:{eventLog:events,decisionTraces:traces,snapshots:[]}} as unknown as PlayView['a0'])
 const view=(a0:ReturnType<typeof run>,a1:ReturnType<typeof run>):PlayView =>
-  ({a0,a1} as PlayView)
+  ({a0,a1,input:{seed:20260101,year:1250,firstPersonId:'p2',secondPersonId:'p5',signedDelta:-20,durationYears:5}} as PlayView)
 
 describe('DEC-073 — 選択対象のA0/A1実記録比較', () => {
+  it('Event差分0件でも介入した2人を選択でき、介入年にA0/A1の実Traceを別々に開ける', () => {
+    const onEvent=vi.fn(),onTrace=vi.fn()
+    const v=view(run([], [tr('trace-A0-1250',1250,'ACCEPT',pair)]),
+      run([], [tr('trace-A1-1250',1250,'ACCEPT',pair)]))
+    render(<HistoricalChangesExplorer rows={[]} totalDifferences={0} view={v}
+      worldA0={undefined} worldA1={undefined}
+      onInspectEvent={onEvent} onInspectTrace={onTrace}/>)
+    expect(screen.getByTestId('change-empty')).toBeTruthy()
+    expect(screen.getByTestId('change-count').textContent).toContain('全Event記録差 0件')
+    const target=screen.getByTestId('change-target') as HTMLSelectElement
+    expect([...target.options].map(o=>o.value)).toEqual(['','PERSON:p2','PERSON:p5'])
+    expect([...target.options].slice(1).every(o=>o.textContent?.includes('介入対象'))).toBe(true)
+    const years=screen.getByTestId('change-year') as HTMLSelectElement
+    expect([...years.options].map(o=>o.value)).toEqual(['','1250'])
+    expect([...years.options][1]?.textContent).toContain('介入開始年')
+    fireEvent.change(target,{target:{value:'PERSON:p2'}})
+    fireEvent.change(years,{target:{value:'1250'}})
+    expect(screen.getByTestId('target-count-a0').textContent).toContain('確定Event 0件／判断Trace 1件')
+    expect(screen.getByTestId('target-count-a1').textContent).toContain('確定Event 0件／判断Trace 1件')
+    fireEvent.click(within(screen.getByTestId('target-trace-list-a0')).getByRole('button'))
+    fireEvent.click(within(screen.getByTestId('target-trace-list-a1')).getByRole('button'))
+    expect(onTrace).toHaveBeenCalledWith('A0','trace-A0-1250')
+    expect(onTrace).toHaveBeenCalledWith('A1','trace-A1-1250')
+    expect(onEvent).not.toHaveBeenCalled()
+    fireEvent.change(target,{target:{value:'PERSON:p5'}})
+    expect(screen.getByTestId('target-comparison').textContent).toContain('PERSON:p5')
+  })
+
   it('A0の婚姻成立Eventと、A1の不採択Traceを混同せず別々に開ける', () => {
     const a0event=ev('marriage-a0',1250,'MARRIAGE_REGISTER',[pair])
     const a1trace=tr('trace-a1',1250,'REJECT',pair)
