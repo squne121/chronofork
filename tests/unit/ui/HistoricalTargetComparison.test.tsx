@@ -72,11 +72,11 @@ describe('DEC-073 — 選択対象のA0/A1実記録比較', () => {
   })
 
   it('長い内部識別子を含む出生児は表示名のみ短縮し、実IDで閲覧できる', () => {
-    const childId = 'person:b002:auto:[1251,\"nested-id\"]'
+    const childId = 'person:b002:auto:[1251,"nested-id"]'
     const child = ev('birth-child', 1251, 'PERSON_BIRTH', [{kind:'PERSON',id:childId}])
     const category = EVENT_CATEGORIES.find(c => c.key === 'birth')!
     const rows:CategoryRow[] = [{category,a0:[child],a1:[],a0Only:[child],a1Only:[],changed:[]}]
-    const world = {persons:[{personId:childId,name:'試験用自律児 1251 (marriage:normal:[1250,\"nested\"])'}],
+    const world = {persons:[{personId:childId,name:'試験用自律児 1251 (marriage:normal:[1250,"nested"])'}],
       houses:[],groups:[],countries:[],regions:[]} as unknown as WorldState
     render(<HistoricalChangesExplorer rows={rows} totalDifferences={1}
       view={view(run([child],[]),run([],[]))} worldA0={world} worldA1={world}
