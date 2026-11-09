@@ -80,18 +80,23 @@ function targetName(key: string, worlds: readonly (WorldState | undefined)[]): s
 
 type Props = Readonly<{
   rows: readonly CategoryRow[]
+  /** buildOverviewのEvent差分総数。9分類外も含めた、表示用の実記録差。 */
+  totalDifferences: number
   worldA0: WorldState | undefined
   worldA1: WorldState | undefined
   onInspectEvent: (branch: BranchChoice, eventId: string) => void
 }>
 
 /** UX第1段階：分野・発生年・Event直接関与対象から実際の記録差を探す。 */
-export function HistoricalChangesExplorer({ rows, worldA0, worldA1, onInspectEvent }: Props) {
+export function HistoricalChangesExplorer({ rows, totalDifferences, worldA0, worldA1, onInspectEvent }: Props) {
   const [category, setCategory] = useState('')
   const [year, setYear] = useState('')
   const [target, setTarget] = useState('')
   const [limit, setLimit] = useState(PAGE_SIZE)
   const changes = useMemo(() => collectChangeRecords(rows), [rows])
+  // 同じbuildOverviewの差分集合から、分類に含まれないEventを明示する。
+  // 分類外の信頼更新などを「歴史上の変化160件」と誤読させない。
+  const outsideCount = totalDifferences - changes.length
   const categories = rows.map(r => r.category)
   const years = [...new Set(changes.map(x => x.event.year))].sort((a, b) => a - b)
   const targetKeys = [...new Set(changes.flatMap(x => eventTargetKeys(x.event)))]
@@ -135,7 +140,8 @@ export function HistoricalChangesExplorer({ rows, worldA0, worldA1, onInspectEve
         </label>
       </div>
       <p className="note" data-testid="change-count" aria-live="polite">
-        条件に一致する記録差 {shown.length}件（分類対象の記録差 全{changes.length}件）。同一Eventが複数分野に該当しても重複計上しません。
+        条件に一致する分類対象の記録差 {shown.length}件／既存9分野の分類対象 全{changes.length}件／分類外 {outsideCount}件（全Event記録差 {totalDifferences}件）。
+        分類外には人物ペア信頼の更新などが含まれます。同一Eventが複数分野に該当しても重複計上しません。
       </p>
       {shown.length === 0
         ? <p data-testid="change-empty">この条件に一致するEventの記録差はありません。判断Traceや各枝の全記録は従来の欄から確認できます。</p>
