@@ -26,6 +26,7 @@ type Props=Readonly<{
   onRun:(input:PlayInput)=>void
   onViewBranch:(choice:BranchChoice)=>void
   onInspectEvent:(choice:BranchChoice,id:string)=>void
+  onInspectTrace:(choice:BranchChoice,id:string)=>void
 }>
 const persons=playPersonOptions()
 /** 既知のEvent種別だけ平易な見出しを付ける。未知の種別は生の種別名をそのまま出す（用語を創作しない）。 */
@@ -245,7 +246,7 @@ export function InterventionComparePanel(p:Props){
         <p className="note">正式勝敗: 未成立。これは試験版の差分であり、単独原因の断定ではありません。</p>
       </div>
       {p.comparison.mode==='INTEGRATED_EXPERIMENTAL'&&<IntegratedOverview view={p.comparison} calc={p.calc}
-        personLabel={personName} onInspectEvent={p.onInspectEvent}/>}
+        personLabel={personName} onInspectEvent={p.onInspectEvent} onInspectTrace={p.onInspectTrace}/>}
       <div className="headline" data-testid="trial-goal-summary">
         <h4>1350年のナルヴェン王朝存続条件（試験判定）</h4>
         <p data-testid="trial-goal-mode">試験方式：{playModeLabel(p.comparison.mode)}</p>
