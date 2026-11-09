@@ -32,7 +32,8 @@ describe('統合モードの初期入力例(CALIBRATION_ONLY)', () => {
     expect(code({ signedDelta: 0 })).toBe('INVALID_DELTA')
     expect(code({ durationYears: 101 })).toBe('INVALID_DURATION')
     expect(code({ secondPersonId: 'person-exp-02' })).toBe('INVALID_PERSON_PAIR')
-    expect(code({ firstPersonId: 'person-none' })).toBe('UNKNOWN_PERSON')
+    // 対象の存在は fork年初の実WorldState(A0の計算後)で判定する(Issue #104)ため、UNKNOWN_PERSON は
+    // 計算前の拒否ではない。実データでの検証は later-key-intervention-long.test.ts(オプトイン)で行う。
   })
 })
 
