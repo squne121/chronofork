@@ -115,7 +115,8 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
     await expect(page.getByTestId('active-branch')).toContainText('A0')
     await expect(page.getByTestId('trace-detail')).toContainText('DecisionTrace')
     await expect(page.getByTestId('trace-detail')).toBeInViewport({ratio:0.01})
-  
+  })
+
   test('1280px: Event差分ゼロでも介入した2人を選び、A0/A1の判断Traceを開ける', async ({page}) => {
     await page.setViewportSize({width:1280,height:900})
     await page.goto('/')
@@ -142,5 +143,4 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
     await expect(page.getByTestId('trace-detail')).toContainText('B-004')
     await expect(page.getByTestId('trace-detail')).toBeInViewport({ratio:0.01})
   })
-})
 })
