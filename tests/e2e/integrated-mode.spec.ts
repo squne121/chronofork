@@ -98,4 +98,22 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
       await expect(page.getByTestId('trace-detail')).toBeVisible()
     })
   }
+
+  test('960px: 対象比較のTraceリンクは詳細を画面内へ移動する', async ({page}) => {
+    await page.setViewportSize({width:960,height:900})
+    await page.goto('/')
+    await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
+    // 実計算で差分が生まれ、人物02が対象選択肢に出現する試験条件。
+    await page.getByTestId('branch-trust-delta').fill('-40')
+    await page.getByTestId('branch-run').click()
+    await expect(page.getByTestId('branch-results')).toBeVisible({timeout:12*60_000})
+    await expect(page.getByTestId('branch-error')).toHaveCount(0)
+    await page.getByTestId('change-target').selectOption('PERSON:person-exp-02')
+    const traceLink=page.getByTestId('target-trace-list-a0').getByRole('button').first()
+    await expect(traceLink).toBeVisible()
+    await traceLink.click()
+    await expect(page.getByTestId('active-branch')).toContainText('A0')
+    await expect(page.getByTestId('trace-detail')).toContainText('DecisionTrace')
+    await expect(page.getByTestId('trace-detail')).toBeInViewport({ratio:0.01})
+  })
 })
