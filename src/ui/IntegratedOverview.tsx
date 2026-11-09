@@ -1,6 +1,7 @@
 // 統合法制・世代継続(experimental)の結果一覧。出典・差分判定・経過・親子・Title。
 // 実WorldState/EventLog/DecisionTraceの読み取りだけを表示し、正式勝敗・史実として扱わない。
 import { useMemo } from 'react'
+import type { DecisionTrace } from '../simulation/contracts/index.ts'
 import { INTEGRATED_PLAY_DEFAULTS, playModeLabel } from './branch-play-source.ts'
 import type { BranchChoice, PlayView } from './branch-play-source.ts'
 import { buildOverview, eventHeadline, lineageRows, namesOf, titleRows } from './integrated-overview.ts'
@@ -12,9 +13,11 @@ type Props=Readonly<{
   calc?:CalcInfo
   personLabel:(id:string)=>string
   onInspectEvent:(choice:BranchChoice,id:string)=>void
+  onInspectTrace:(choice:BranchChoice,id:string)=>void
 }>
 const sec=(ms:number)=>(ms/1000).toFixed(1)+'秒'
 const MAX_LIST=40
+const MAX_EVIDENCE_LINKS=8
 
 function LineageTable({rows,label}:Readonly<{rows:readonly LineageRow[];label:string}>){
   return <details data-testid={'integrated-lineage-'+label.toLowerCase()}>
@@ -32,7 +35,7 @@ function LineageTable({rows,label}:Readonly<{rows:readonly LineageRow[];label:st
   </details>
 }
 
-export function IntegratedOverview({view,calc,personLabel,onInspectEvent}:Props){
+export function IntegratedOverview({view,calc,personLabel,onInspectEvent,onInspectTrace}:Props){
   const overview=useMemo(()=>buildOverview(view),[view])
   const final0=view.a0.result.snapshots.at(-1),final1=view.a1.result.snapshots.at(-1)
   const names0=useMemo(()=>namesOf(final0),[final0]),names1=useMemo(()=>namesOf(final1),[final1])
@@ -42,6 +45,13 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent}:Props)
   const titleIds=[...new Set([...titles0,...titles1].map(t=>t.titleId))].sort()
   const input=view.input,om=view.displayOmission
   const noDiff=overview.totalDifferences===0&&overview.finalWorldIdentical===true
+  const interventionTraces=useMemo(()=>
+    view.a1.result.decisionTraces.filter(t=>t.modifierIds.includes(view.modifier.modifierId)),[view])
+  const traceLink=(t:DecisionTrace)=><li key={t.traceId}>
+    <button type="button" onClick={()=>onInspectTrace('A1',t.traceId)}>
+      {t.year}年・{t.ruleId}・{t.status}（対応Event {t.eventIds.length}件）の判断根拠を開く
+    </button>
+  </li>
   const f=<T,>(rows:readonly T[],id:string)=>rows.find(r=>(r as {titleId:string}).titleId===id)
   return <div className="panel integrated-overview" data-testid="integrated-overview">
     <h3 className="step-title"><span className="step-no">3</span>統合モードの結果（{playModeLabel(view.mode)}）</h3>
@@ -83,6 +93,23 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent}:Props)
       <p className="note">単独原因の断定ではなく、正式勝敗でもありません。差の理由は下のEventから「④ 理由を確認する」のDecisionTraceで辿れます。</p>
     </div>
 
+    <section aria-labelledby="integrated-evidence-heading" data-testid="integrated-evidence">
+      <h4 id="integrated-evidence-heading">介入が参照された判断を調べる（A1）</h4>
+      <p className="note">A1のDecisionTraceに今回の介入IDが記録された判断です。Eventが変わらなくても根拠を開けます。参照されたことは、判断結果や歴史が変化した証明ではありません。</p>
+      {interventionTraces.length===0
+        ?<p data-testid="integrated-no-evidence">表示可能なDecisionTraceには、この介入を参照した記録がありません。</p>
+        :<>
+          <p data-testid="integrated-evidence-count">介入を参照した判断Trace: {interventionTraces.length}件</p>
+          <ul className="compare-trace-list" data-testid="integrated-evidence-links">
+            {interventionTraces.slice(0,MAX_EVIDENCE_LINKS).map(traceLink)}
+          </ul>
+          {interventionTraces.length>MAX_EVIDENCE_LINKS&&<details>
+            <summary>さらに{interventionTraces.length-MAX_EVIDENCE_LINKS}件の判断根拠を開く</summary>
+            <ul className="compare-trace-list">{interventionTraces.slice(MAX_EVIDENCE_LINKS).map(traceLink)}</ul>
+          </details>}
+        </>}
+    </section>
+
     <h4>1250〜1350年の経過（Event種別ごと）</h4>
     <table aria-label="Event種別ごとのA0/A1件数" data-testid="integrated-timeline-table">
       <thead><tr><th scope="col">種別</th><th scope="col">A0 介入なし</th><th scope="col">A1 介入あり</th><th scope="col">差分</th></tr></thead>
@@ -101,7 +128,17 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent}:Props)
         <p>A1で追加・内容が違うEvent</p>
         <ul className="compare-event-list">{[...r.a1Only,...r.changed].slice(0,MAX_LIST).map(e=><li key={e.eventId}>
           <button type="button" onClick={()=>onInspectEvent('A1',e.eventId)}>{eventHeadline(e,names1,r.category.label)}</button>
-        </li>)}</ul></>}
+        </li>)}</ul>
+        {[...r.a1Only,...r.changed].length>MAX_LIST&&<p className="note">ほか{[...r.a1Only,...r.changed].length-MAX_LIST}件は「④ 理由を確認する」の年表で表示できます。</p>}</>}
+      {r.a0Only.length>0&&<>
+        <p>A0にだけ記録されたEvent（A1では記録なし）</p>
+        <ul className="compare-event-list" data-testid={'integrated-a0-only-'+r.category.key}>
+          {r.a0Only.slice(0,MAX_LIST).map(e=><li key={e.eventId}>
+            <button type="button" onClick={()=>onInspectEvent('A0',e.eventId)}>{eventHeadline(e,names0,r.category.label)}</button>
+          </li>)}
+        </ul>
+        {r.a0Only.length>MAX_LIST&&<p className="note">ほか{r.a0Only.length-MAX_LIST}件はA0の年表で確認できます。</p>}
+      </>}
     </details>)}
 
     <h4>子・孫の実親子関係と法的王朝</h4>
