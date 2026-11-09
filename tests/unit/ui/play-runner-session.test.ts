@@ -91,4 +91,13 @@ describe('Worker寿命管理', () => {
     workers[0]!.emit(DONE)
     expect((await h1.promise).kind).toBe('DONE')
   })
+
+  it('アイドル中のWorker障害では壊れたWorkerを捨て、次の実行は新しいWorkerを使う', async () => {
+    const run = make()
+    const h1 = run(INPUT); workers[0]!.emit(DONE); await h1.promise
+    workers[0]!.onerror?.({ message: 'died' })
+    expect(workers[0]!.terminated).toBe(true)
+    run(INPUT)
+    expect(workers).toHaveLength(2)
+  })
 })

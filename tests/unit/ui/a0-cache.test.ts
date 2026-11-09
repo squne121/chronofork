@@ -52,14 +52,13 @@ describe('A0キャッシュ', () => {
     const r = runPlayComparison(BASE, undefined, { cache })
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    const key = (cache as unknown as { '#entry'?: unknown })['#entry']
-    expect(key).toBeUndefined() // 内部状態は外から触れない
     // 破損の代理: 件数が合わない保持物は使えないと判定する。
     const entry = { key: 'k', root: r.comparison.root, a0: r.comparison.a0, counts: { snapshots: 1, events: 0, traces: 0 } }
     expect(isUsableA0Entry(entry, 'k')).toBe(false)
     const ok = { ...entry, counts: { snapshots: r.comparison.root.snapshots.length, events: r.comparison.root.eventLog.length, traces: r.comparison.root.decisionTraces.length } }
     expect(isUsableA0Entry(ok, 'k')).toBe(true)
     expect(isUsableA0Entry(ok, 'other-key')).toBe(false)
+    expect(isUsableA0Entry({ ...ok, root: { ...ok.root } }, 'k')).toBe(false) // 非凍結のすり替え
     expect(isUsableA0Entry({ ...ok, a0: { ...ok.a0, result: { ...ok.a0.result, snapshots: [...ok.a0.result.snapshots] } } }, 'k')).toBe(false)
     cache.put(ok)
     expect(cache.get('other-key')).toBeUndefined()

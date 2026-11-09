@@ -85,8 +85,8 @@ export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
         settle({kind:'DONE',computeMs:m.computeMs,
           result:m.ok?{ok:true,view:m.view}:{ok:false,code:m.code,message:m.message}})
       }
-      w.onerror=e=>settle({kind:'FAILED',code:'WORKER_ERROR',message:e.message||'Workerで未捕捉のエラーが発生しました'})
-      w.onmessageerror=()=>settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'計算結果をWorkerから受け取れませんでした'})
+      w.onerror=e=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_ERROR',message:e.message||'Workerで未捕捉のエラーが発生しました'})
+      w.onmessageerror=()=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'計算結果をWorkerから受け取れませんでした'})
       w.postMessage({input})
     })
     return {promise,cancel:()=>settle({kind:'CANCELLED'})}
