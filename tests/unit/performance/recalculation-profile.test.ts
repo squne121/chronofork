@@ -1,6 +1,7 @@
 // P0: 再計算の局所ベンチマーク。通常のquick-checkではskipし、手動で明示的に実行する。
 // 実ゲームの結果を変更しない。値は環境依存の実測値であり合格閾値ではない。
 import { createHash } from 'node:crypto'
+import { writeFileSync } from 'node:fs'
 import { performance } from 'node:perf_hooks'
 import { expect, it } from 'vitest'
 import {
@@ -22,9 +23,18 @@ type History = Readonly<{
   eventLog: readonly unknown[]
   decisionTraces: readonly unknown[]
 }>
-const digest = (h: History): string => createHash('sha256')
-  .update(JSON.stringify({ snapshots: h.snapshots, eventLog: h.eventLog, decisionTraces: h.decisionTraces }))
-  .digest('hex')
+// 履歴全体を1つのJSON文字列にすると文字列長上限を超えるため、要素ごとに逐次ハッシュする。
+// 入力順・内容が同一なら同一SHAになる（決定性検証用）。
+const digest = (h: History): string => {
+  const hash = createHash('sha256')
+  for (const [name, items] of [
+    ['snapshots', h.snapshots], ['eventLog', h.eventLog], ['decisionTraces', h.decisionTraces],
+  ] as const) {
+    hash.update(name + ':' + items.length + '\n')
+    for (const item of items) hash.update(JSON.stringify(item) + '\n')
+  }
+  return hash.digest('hex')
+}
 const measured = <T>(fn: () => T): { result: T; ms: number } => {
   const start = performance.now()
   const result = fn()
@@ -37,6 +47,8 @@ const msRound = (n: number) => Math.round(n * 100) / 100
 // Repeat with 1290 and 1340. Set CHRONOFORK_PROFILE_UI=1 for the full UI comparison +
 // toDisplayView + structuredClone (transfer proxy); it repeats the A0 calculation.
 // Set CHRONOFORK_PROFILE_YEAR_DETAIL=1 to run a separate 100-year per-year profile.
+// CHRONOFORK_PROFILE_OUT=<path> writes the JSON report to a file. Large heaps need
+// NODE_OPTIONS=--max-old-space-size=12288 (history is multi-GB when held in memory).
 // Do NOT treat structuredClone as a measurement of real browser Worker transport.
 it.skipIf(process.env.CHRONOFORK_PROFILE !== '1')(
   'P0: integrated 100-year A0 / fork / optional UI / optional annual profile',
@@ -135,7 +147,7 @@ it.skipIf(process.env.CHRONOFORK_PROFILE !== '1')(
       }
     }
 
-    console.info('CHRONOFORK_P0_RECALC_PROFILE', JSON.stringify({
+    const report = JSON.stringify({
       kind: 'EXPERIMENTAL_CALIBRATION_ONLY',
       node: process.version,
       platform: process.platform,
@@ -158,8 +170,12 @@ it.skipIf(process.env.CHRONOFORK_PROFILE !== '1')(
       sha256: hashRun.result,
       perYear,
       ui,
-      heapUsedBytesAfterProfile: process.memoryUsage().heapUsed,
-    }))
+      memoryBytesAfterProfile: process.memoryUsage(),
+      peakRssKb: process.resourceUsage().maxRSS,
+    })
+    // vitestがconsoleを抑制する設定でも結果を得られるよう、任意でファイルにも出力する。
+    if (process.env.CHRONOFORK_PROFILE_OUT) writeFileSync(process.env.CHRONOFORK_PROFILE_OUT, report + '\n')
+    console.info('CHRONOFORK_P0_RECALC_PROFILE', report)
   },
   600_000,
 )
