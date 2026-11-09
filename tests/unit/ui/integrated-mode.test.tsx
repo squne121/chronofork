@@ -149,7 +149,7 @@ describe('表示文言: 保持者未確定・統治委任・省略の説明', ()
       displayOmission: { fullEventCount: { a0: 50, a1: 51 }, fullTraceCount: { a0: 40, a1: 41 },
         omittedEventsByType: { PERSON_PAIR_TRUST_SET: 30 }, omittedTracesByRule: { 'B-009': 30 } },
     } as unknown as PlayView
-    render(<IntegratedOverview view={v} personLabel={id => id} onInspectEvent={() => {}} />)
+    render(<IntegratedOverview view={v} personLabel={id => id} onInspectEvent={() => {}} onInspectTrace={() => {}} />)
     const t = screen.getByTestId('integrated-omission').textContent ?? ''
     for (const w of ['Event A0 50件', 'A1 41件', 'PERSON_PAIR_TRUST_SET 30件', 'B-009のTrace 30件', '完全に同一', '差のある記録は全て残', '後から閲覧できません', 'experimental試遊限定']) expect(t).toContain(w)
     expect(screen.getByTestId('integrated-final-titles').textContent).toContain('法的有効性とは別')
@@ -272,5 +272,50 @@ describe('App: 統合モードの結果表示(実WorldState/EventLogを統合モ
     expect(button).toBeTruthy()
     fireEvent.click(button!)
     expect(screen.getByTestId('active-branch').textContent).toContain('A1')
+  }, 60000)
+
+  it('Event差がなくても介入を参照した実Traceへ直接移動できる（表示のみの同枝複写fixture）', async () => {
+    if (!real.ok) throw new Error(real.code)
+    // 表示用に同じ実計算枝をA0/A1へ割当て、「Event差なし」の閲覧経路だけを検証する。
+    const view: PlayView = { ...real.comparison, mode: 'INTEGRATED_EXPERIMENTAL', a0: real.comparison.a1 }
+    const recorded = view.a1.result.decisionTraces.find(t => t.modifierIds.includes(view.modifier.modifierId))
+    expect(recorded).toBeDefined()
+    if (!recorded) return
+    const { runner, calls } = controlledRunner()
+    render(<App playRunner={runner} />)
+    selectIntegrated()
+    fireEvent.click(screen.getByTestId('branch-run'))
+    await act(async () => { calls[0]!.resolve({ kind: 'DONE', computeMs: 1, result: { ok: true, view } }) })
+    expect(screen.getByTestId('integrated-verdict').textContent).toContain('差は確認されませんでした')
+    expect(screen.getByTestId('integrated-evidence-count').textContent).toContain('介入を参照した判断Trace:')
+    const buttons = [...screen.getByTestId('integrated-evidence-links').querySelectorAll('button')]
+    const link = buttons.find(b => (b.textContent ?? '').includes(`${recorded.year}年・${recorded.ruleId}`))
+    expect(link).toBeDefined()
+    fireEvent.click(link!)
+    expect(screen.getByTestId('trace-id').textContent).toBe(recorded.traceId)
+    expect(screen.getByTestId('event-detail').textContent).toContain('事件を選ぶと')
+    expect(screen.getByTestId('active-branch').textContent).toContain('A1')
+    expect(screen.getByTestId('current-year').textContent).toContain(`${recorded.year}年`)
+  }, 60000)
+
+  it('A0だけに記録されたEventのリンクはA0の実Event IDを渡す（表示fixture）', () => {
+    if (!real.ok) throw new Error(real.code)
+    const event = real.comparison.a1.result.eventLog.find(e => e.eventType === 'MARRIAGE_REGISTER')
+    expect(event).toBeDefined()
+    if (!event) return
+    // イベントを表示用の枝間で移すだけ。ゲーム計算・EventLog生成規則は変更しない。
+    const a0 = { ...real.comparison.a0, result: { ...real.comparison.a0.result,
+      eventLog: [...real.comparison.a0.result.eventLog.filter(e => e.eventId !== event.eventId), event] } }
+    const a1 = { ...real.comparison.a1, result: { ...real.comparison.a1.result,
+      eventLog: real.comparison.a1.result.eventLog.filter(e => e.eventId !== event.eventId) } }
+    const view: PlayView = { ...real.comparison, mode: 'INTEGRATED_EXPERIMENTAL', a0, a1 }
+    const selected: Array<[string, string]> = []
+    render(<IntegratedOverview view={view} personLabel={id => id}
+      onInspectEvent={(side,id) => selected.push([side,id])} onInspectTrace={() => {}} />)
+    fireEvent.click(screen.getByTestId('integrated-list-marriage').querySelector('summary')!)
+    const lost = screen.getByTestId('integrated-a0-only-marriage')
+    expect(lost.querySelectorAll('button').length).toBeGreaterThan(0)
+    fireEvent.click(lost.querySelector('button')!)
+    expect(selected).toEqual([['A0',event.eventId]])
   }, 60000)
 })

@@ -203,6 +203,22 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
     setTimeout(() => document.getElementById('reasons')?.scrollIntoView?.({ block: 'start' }), 0)
   }
 
+  // Eventが確定しなかった判断も、実際に記録されたDecisionTraceから直接検証できる。
+  const openComparisonTrace = (choice:BranchChoice,id:string) => {
+    if (!comparison) return
+    const chosen=choice==='A0'?comparison.a0:comparison.a1
+    const trace=chosen.result.decisionTraces.find(t=>t.traceId===id)
+    if (!trace || !snapshotOf(chosen.result,trace.year)) return
+    setActiveBranch(choice)
+    setRun(chosen)
+    setYear(trace.year)
+    setScope('year')
+    setTargetKey('')
+    setEventId(undefined)
+    setTraceId(trace.traceId)
+    setSelection(undefined)
+  }
+
   const source: InspectionSource = {
     label: run.inputs.scenarioId,
     world,
@@ -246,7 +262,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
             running={running ? { elapsedSec } : undefined} notice={notice} calc={calc} onCancel={cancelRun}
             onSeedText={setSeedText}
             activeBranch={activeBranch} onRun={runComparison} onViewBranch={switchBranch}
-            onInspectEvent={openComparisonEvent} />
+            onInspectEvent={openComparisonEvent} onInspectTrace={openComparisonTrace} />
         </div>
 
         <div className="reason-col" id="reasons">
