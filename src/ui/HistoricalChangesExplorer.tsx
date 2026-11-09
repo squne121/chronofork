@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import type { EventLogEntry, WorldState } from '../simulation/contracts/index.ts'
 import type { BranchChoice, PlayView } from './branch-play-source.ts'
 import { HistoricalTargetComparison } from './HistoricalTargetComparison.tsx'
+import { shortPersonName } from './event-summary.ts'
 import { eventHeadline, namesOf } from './integrated-overview.ts'
 import type { CategoryRow } from './integrated-overview.ts'
 
@@ -74,7 +75,7 @@ function targetName(key: string, worlds: readonly (WorldState | undefined)[]): s
       : kind === 'GROUP' ? w.groups.find(g => g.groupId === id)?.name
       : kind === 'COUNTRY' ? w.countries.find(c => c.countryId === id)?.name
       : kind === 'REGION' ? w.regions.find(r => r.regionId === id)?.name : undefined
-    if (name) return `${REF_LABEL[kind] ?? kind}: ${name}`
+    if (name) return `${REF_LABEL[kind] ?? kind}: ${kind === 'PERSON' ? shortPersonName(name) : name}`
   }
   return `${REF_LABEL[kind] ?? kind}: ${id}`
 }
