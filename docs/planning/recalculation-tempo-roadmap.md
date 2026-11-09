@@ -1,8 +1,8 @@
 # 再計算性能・テンポ改善ロードマップ
 
 - 記録日: 2026-11-08
-- ステータス: ユーザー採用の開発優先順序。実装・性能改善のPASSではない。
-- 根拠: `docs/decisions/adopted-decisions.md` DEC-067〜072。関連: DEC-016/023/025/026/037/042、`docs/contracts/first-vertical-slice.md`。
+- ステータス: 再計算性能・待機体験という領域内の作業順序。MVP開発全体の優先順位を定め直すものではなく、実装・性能改善のPASSでもない。
+- 根拠: `docs/decisions/adopted-decisions.md` DEC-067〜071。関連: DEC-016/023/025/026/037/042、`docs/contracts/first-vertical-slice.md`。
 - 正本境界: 本計画は技術改善の順序と製品版の上位要件を整理する。`docs/spec/mvp-spec.md`、GAME-01〜05、1350年Goal、介入ルール・係数・正式世界設定は変更しない。`experimental` / `CALIBRATION_ONLY`はそのまま維持。
 
 ## 何を改善するか
