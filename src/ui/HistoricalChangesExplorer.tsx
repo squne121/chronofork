@@ -2,7 +2,8 @@
 // 事件の重要度・原因・未成立判断は推測しない。年・関与対象・Event IDの比較のみ。
 import { useMemo, useState } from 'react'
 import type { EventLogEntry, WorldState } from '../simulation/contracts/index.ts'
-import type { BranchChoice } from './branch-play-source.ts'
+import type { BranchChoice, PlayView } from './branch-play-source.ts'
+import { HistoricalTargetComparison } from './HistoricalTargetComparison.tsx'
 import { eventHeadline, namesOf } from './integrated-overview.ts'
 import type { CategoryRow } from './integrated-overview.ts'
 
@@ -80,15 +81,17 @@ function targetName(key: string, worlds: readonly (WorldState | undefined)[]): s
 
 type Props = Readonly<{
   rows: readonly CategoryRow[]
+  view: PlayView
   /** buildOverviewのEvent差分総数。9分類外も含めた、表示用の実記録差。 */
   totalDifferences: number
   worldA0: WorldState | undefined
   worldA1: WorldState | undefined
   onInspectEvent: (branch: BranchChoice, eventId: string) => void
+  onInspectTrace: (branch: BranchChoice, traceId: string) => void
 }>
 
 /** UX第1段階：分野・発生年・Event直接関与対象から実際の記録差を探す。 */
-export function HistoricalChangesExplorer({ rows, totalDifferences, worldA0, worldA1, onInspectEvent }: Props) {
+export function HistoricalChangesExplorer({ rows, view, totalDifferences, worldA0, worldA1, onInspectEvent, onInspectTrace }: Props) {
   const [category, setCategory] = useState('')
   const [year, setYear] = useState('')
   const [target, setTarget] = useState('')
@@ -159,6 +162,14 @@ export function HistoricalChangesExplorer({ rows, totalDifferences, worldA0, wor
             続きを表示（残り{shown.length - limit}件）
           </button>}
         </>}
+      {activeTarget
+        ? <HistoricalTargetComparison view={view} targetKey={activeTarget}
+          targetLabel={targets.find(t => t.key === activeTarget)?.label ?? activeTarget}
+          year={activeYear} categoryKey={activeCategory}
+          onInspectEvent={onInspectEvent} onInspectTrace={onInspectTrace}/>
+        : <p className="note" data-testid="target-comparison-hint">
+          対象のA0/A1を見比べるには、上の「Eventの関与対象」を選択してください。
+        </p>}
     </section>
   )
 }
