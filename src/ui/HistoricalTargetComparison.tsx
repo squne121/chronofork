@@ -1,7 +1,7 @@
 // DEC-073 第2段階：関与対象に関係する確定Eventと判断Traceを、A0/A1別に閲覧する。
 // EventとTraceの同一性・因果・領主権の合法性を推定しない。元のIDにだけリンクする。
 import { useMemo, useState } from 'react'
-import type { DecisionTrace, EventLogEntry, TargetRef } from '../simulation/contracts/index.ts'
+import type { DecisionTrace, TargetRef } from '../simulation/contracts/index.ts'
 import type { BranchChoice, PlayView } from './branch-play-source.ts'
 import { eventHeadline, inCategory, namesOf, EVENT_CATEGORIES } from './integrated-overview.ts'
 import { eventTargetKeys } from './HistoricalChangesExplorer.tsx'
@@ -33,14 +33,13 @@ type BranchProps = Readonly<{
 function BranchEvidence({ choice, run, targetKey, year, categoryKey, onInspectEvent, onInspectTrace }: BranchProps) {
   const [eventLimit, setEventLimit] = useState(PAGE_SIZE)
   const [traceLimit, setTraceLimit] = useState(PAGE_SIZE)
-  const category = EVENT_CATEGORIES.find(c => c.key === categoryKey)
-  const yearMatches = (y: number) => !year || String(y) === year
-  const events = useMemo(() =>
-    run.result.eventLog.filter(e => yearMatches(e.year) &&
-      (!category || inCategory(e, category)) && eventTargetKeys(e).includes(targetKey)),
-  [run, targetKey, year, categoryKey])
+  const events = useMemo(() => {
+    const category = EVENT_CATEGORIES.find(c => c.key === categoryKey)
+    return run.result.eventLog.filter(e => (!year || String(e.year) === year) &&
+      (!category || inCategory(e, category)) && eventTargetKeys(e).includes(targetKey))
+  }, [run, targetKey, year, categoryKey])
   const traces = useMemo(() =>
-    run.result.decisionTraces.filter(t => yearMatches(t.year) && actorMatches(t.actorRef, targetKey)),
+    run.result.decisionTraces.filter(t => (!year || String(t.year) === year) && actorMatches(t.actorRef, targetKey)),
   [run, targetKey, year])
   const names = namesOf(run.result.snapshots.at(-1))
   const subtitle = choice === 'A0' ? '介入なしの歴史' : '介入ありの歴史'
