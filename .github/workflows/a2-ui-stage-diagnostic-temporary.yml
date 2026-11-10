@@ -33,15 +33,15 @@ jobs:
           part=part.replace("test.setTimeout(30*60_000)","test.setTimeout(9*60_000)",1)
           needle="  test('A0観測→A1第1介入→A2第2介入→1350年の厳格技術Goalと3枝の観測',async({page})=>{"
           extra=""" 
-    let currentStage='started'
-    const startMs=Date.now()
-    const mark=(stage:string)=>{currentStage=stage;console.log('[A2_STAGE]',stage,'elapsed_s',Math.round((Date.now()-startMs)/1000))}
-    const timer=setInterval(()=>console.log('[A2_HEARTBEAT]',currentStage,'elapsed_s',Math.round((Date.now()-startMs)/1000)),20000)
-    page.on('pageerror',e=>console.log('[A2_PAGE_ERROR]',String(e).slice(0,1000)))
-    page.on('crash',()=>console.log('[A2_PAGE_CRASH]',currentStage))
-    page.on('console',m=>{if(m.type()==='error') console.log('[A2_BROWSER_CONSOLE]',m.text().slice(0,800))})
-    try {
-"""
+              let currentStage='started'
+              const startMs=Date.now()
+              const mark=(stage:string)=>{currentStage=stage;console.log('[A2_STAGE]',stage,'elapsed_s',Math.round((Date.now()-startMs)/1000))}
+              const timer=setInterval(()=>console.log('[A2_HEARTBEAT]',currentStage,'elapsed_s',Math.round((Date.now()-startMs)/1000)),20000)
+              page.on('pageerror',e=>console.log('[A2_PAGE_ERROR]',String(e).slice(0,1000)))
+              page.on('crash',()=>console.log('[A2_PAGE_CRASH]',currentStage))
+              page.on('console',m=>{if(m.type()==='error') console.log('[A2_BROWSER_CONSOLE]',m.text().slice(0,800))})
+              try {
+          """
           assert needle in part
           part=part.replace(needle,needle+extra,1)
           markers=[
