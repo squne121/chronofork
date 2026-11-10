@@ -1,0 +1,63 @@
+name: a2-long-verification-temporary
+
+on:
+  push:
+    branches:
+      - feat/issue116-a2-same-year-intervention
+    paths:
+      - .github/workflows/a2-long-verification-temporary.yml
+
+permissions:
+  contents: read
+
+jobs:
+  strict-technical-goal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Show memory limits
+        run: |
+          free -h
+          if test -f /sys/fs/cgroup/memory.max; then cat /sys/fs/cgroup/memory.max; fi
+      - name: A0 to A1 to A2 real 100-year Goal evaluation
+        env:
+          CHRONOFORK_LONG_A2: "1"
+          NODE_OPTIONS: --max-old-space-size=5600
+        run: |
+          timeout 1000s npx vitest run tests/unit/ui/a2-integrated-long.test.ts --maxWorkers=1 --fileParallelism=false --reporter=verbose
+      - name: Memory diagnostics
+        if: always()
+        run: |
+          free -h
+          if test -f /sys/fs/cgroup/memory.events; then cat /sys/fs/cgroup/memory.events; fi
+  browser-playthrough:
+    needs: strict-technical-goal
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Real A0-A1-A2 integrated browser playthrough
+        env:
+          CI: "true"
+          CHRONOFORK_E2E_INTEGRATED: "1"
+          NODE_OPTIONS: --max-old-space-size=5600
+        run: |
+          timeout 1100s npx playwright test tests/e2e/integrated-mode.spec.ts --grep "A0観測→A1第1介入→A2第2介入" --workers=1 --retries=0 --reporter=line
+      - name: Memory diagnostics
+        if: always()
+        run: |
+          free -h
+          if test -f /sys/fs/cgroup/memory.events; then cat /sys/fs/cgroup/memory.events; fi
