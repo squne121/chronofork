@@ -60,5 +60,5 @@ export function toDisplayView(c:PlayComparison):PlayView{
     omittedEventsByType:tally(r0.eventLog.filter(e=>omitEvents.has(e.eventId)),e=>e.eventType),
     omittedTracesByRule:tally(r0.decisionTraces.filter(t=>omitTraces.has(t.traceId)),t=>t.ruleId),
   }
-  return {mode:c.mode,input:c.input,modifier:c.modifier,a0,a1,displayOmission}
+  return {mode:c.mode,input:c.input,modifier:c.modifier,a0,a1,displayOmission,...(c.a0Source?{a0Source:c.a0Source}:{})}
 }

@@ -157,6 +157,33 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
   })
 })
 
+test.describe('統合モード: A0キャッシュの実Worker再利用(オプトイン)', () => {
+  test.skip(!heavy, 'CHRONOFORK_E2E_INTEGRATED=1 のときだけ実行する(数分)')
+  test.setTimeout(20 * 60_000)
+
+  test('1回目は100年のA0を計算し、介入年を変えた2回目はA0を再利用してA1だけ年次進捗を出す', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/')
+    await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
+    await page.getByTestId('branch-fork-year').fill('1340')
+    await page.getByTestId('branch-run').click()
+    await expect(page.getByTestId('branch-results')).toBeVisible({ timeout: 12 * 60_000 })
+    await expect(page.getByTestId('integrated-a0-source')).toContainText('今回計算')
+    const firstMs = Number(/([\d.]+)/.exec(await page.getByTestId('integrated-wall-time').innerText())?.[1])
+
+    await page.getByTestId('branch-fork-year').fill('1345')
+    await page.getByTestId('branch-run').click()
+    // A0は再計算しない。偽のA0年次進捗を出さず、再利用と明示する。
+    await expect(page.getByTestId('progress-A0')).toContainText('再利用', { timeout: 60_000 })
+    await expect(page.getByTestId('progress-A0')).not.toContainText('年初まで計算済み')
+    await expect(page.getByTestId('integrated-a0-source')).toContainText('再利用', { timeout: 12 * 60_000 })
+    await expect(page.getByTestId('branch-error')).toHaveCount(0)
+    const secondMs = Number(/([\d.]+)/.exec(await page.getByTestId('integrated-wall-time').innerText())?.[1])
+    console.info('CHRONOFORK_E2E_A0CACHE=' + JSON.stringify({ firstSec: firstMs, secondSec: secondMs }))
+    expect(secondMs).toBeLessThan(firstMs)
+  })
+})
+
 test.describe('統合モード: 後出生KEY人物のGUI選択（Issue #104・オプトイン）', () => {
   test.skip(!heavy, 'CHRONOFORK_E2E_INTEGRATED=1 のときだけ実行する(A0取得と再計算で各1〜数分)')
   test.setTimeout(30 * 60_000)

@@ -21,7 +21,7 @@ afterEach(() => vi.unstubAllGlobals())
 const INPUT: PlayInput = { mode: 'INTEGRATED_EXPERIMENTAL', seed: 1, year: 1250, firstPersonId: 'a', secondPersonId: 'b', signedDelta: -20, durationYears: 5 }
 
 describe('workerPlayRunner の進捗中継', () => {
-  it('完了前のPROGRESSだけを中継し、DONE後・キャンセル後の通知は無視してWorkerを終了する', async () => {
+  it('完了前のPROGRESSだけを中継し、DONE後・キャンセル後の通知は無視する(キャンセルでWorker終了)', async () => {
     vi.stubGlobal('Worker', FakeWorker)
     const seen: number[] = []
     const h = workerPlayRunner(INPUT, (p) => seen.push(p.transitionsDone))
@@ -32,15 +32,17 @@ describe('workerPlayRunner の進捗中継', () => {
     w.emit({ kind: 'PROGRESS', progress: prog(3) })
     expect((await h.promise).kind).toBe('DONE')
     expect(seen).toEqual([1, 2])
-    expect(w.terminated).toBe(true)
+    expect(w.terminated).toBe(false) // 完了後もA0保持のためWorkerは残す(寿命は play-runner-session.test.ts)
 
     const h2 = workerPlayRunner(INPUT, (p) => seen.push(p.transitionsDone + 10))
     const w2 = FakeWorker.last
+    expect(w2).toBe(w) // 同じWorkerを再利用
     w2.emit({ kind: 'PROGRESS', progress: prog(1) })
     h2.cancel()
     w2.emit({ kind: 'PROGRESS', progress: prog(2) })
     expect((await h2.promise).kind).toBe('CANCELLED')
     expect(seen).toEqual([1, 2, 11])
+    expect(w2.terminated).toBe(true) // キャンセルはWorker(=保持A0)ごと破棄
   })
 })
 

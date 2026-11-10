@@ -54,6 +54,11 @@ const SUPPORTING_COHORT: SupportingMarriageCohort = {
 export const INTEGRATED_SUPPORTING_COHORTS: readonly SupportingMarriageCohort[] = Object.freeze([SUPPORTING_COHORT])
 export const INTEGRATED_SUPPORTING_PERSON_ID = supportingCandidateId(SUPPORTING_COHORT.cohortId, 0)
 
+/** SUPPORTING供給の件数・年齢上限(評価器構成と同一定数をidentityにも使う)。 */
+const INTEGRATED_SUPPORTING_LIMITS = Object.freeze({
+  maxRecordsPerYear: 1, maxAliveSupporting: 1, perCohortSamples: 1, maximumPreviewAge: 65,
+})
+
 /** 1250年P2×P5婚姻からB002が実出生した場合の1252年男子の安定ID(対象IDの固定のみ。出生を保証しない)。 */
 const integratedMarriageId = 'marriage:normal:' + JSON.stringify([INTEGRATED_START_YEAR, pairKey(INTEGRATED_PAIR)])
 export const INTEGRATED_WITNESSED_SON_ID = childIdForMarriageYear(
@@ -123,15 +128,29 @@ export function createExperimentalIntegratedEvaluators(
     reviewedLegal: { book: trial.book, ordinaryLaws: trial.laws },
     spouseDeathDissolution: true,
     promotion: INTEGRATED_PROMOTION,
-    supportingMarriage: {
-      cohorts: INTEGRATED_SUPPORTING_COHORTS, maxRecordsPerYear: 1,
-      maxAliveSupporting: 1, perCohortSamples: 1, maximumPreviewAge: 65,
-    },
+    supportingMarriage: { cohorts: INTEGRATED_SUPPORTING_COHORTS, ...INTEGRATED_SUPPORTING_LIMITS },
     autonomy: INTEGRATED_AUTONOMY,
     b009Calibration: INTEGRATED_B009_CALIBRATION,
   })
   if (!cfg.ok) throw new Error('INVALID_INTEGRATED_EVALUATORS:' + cfg.issues.join('; '))
   return cfg.evaluators
+}
+
+/**
+ * 統合A0の実行構成identity(読み取り専用)。createExperimentalIntegratedEvaluators が評価器へ渡す
+ * 法令・証拠・校正・SUPPORTING供給・禁親証拠・信頼基準と同じ定数/関数から都度導出し、手書きの固定値を持たない。
+ * A0キャッシュの同一性判定用(JSON.stringify可能)。値の変更や計算には関与しない。
+ */
+export function integratedRunConfigIdentity(): Readonly<Record<string, unknown>> {
+  const trial = createExperimentalOrdinaryLegalTrial()
+  return {
+    book: trial.book, laws: trial.laws,
+    nextgenContract: INTEGRATED_NEXTGEN_CONTRACT, supportingClearances: INTEGRATED_SUPPORTING_CLEARANCES,
+    trustBase: INTEGRATED_TRUST_BASE, promotion: INTEGRATED_PROMOTION,
+    supporting: { cohorts: INTEGRATED_SUPPORTING_COHORTS, ...INTEGRATED_SUPPORTING_LIMITS },
+    autonomy: INTEGRATED_AUTONOMY, b009: INTEGRATED_B009_CALIBRATION,
+    spouseDeathDissolution: true,
+  }
 }
 
 /** runTimeline 用の共通オプション。goalは正式Goalではなく技術評価(technicalGoalEvaluation)。 */

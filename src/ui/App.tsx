@@ -48,6 +48,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   // 古い結果で上書きしないための世代番号と、キャンセル用の実行ハンドル。
   const tokenRef = useRef(0)
   const handleRef = useRef<PlayRunHandle | undefined>(undefined)
+  const [a0Reused, setA0Reused] = useState(false)
   // 人物選択用のA0候補（明示操作で取得）。seed・モードを持ち、条件が変わると使われない。
   const [candidateSet, setCandidateSet] = useState<PlayCandidateSet | undefined>(undefined)
   const [fetchingCandidates, setFetchingCandidates] = useState(false)
@@ -117,9 +118,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   useEffect(() => () => {
     tokenRef.current++
     handleRef.current?.cancel()
+    playRunner.reset?.() // 保持中のA0とWorkerを破棄する
     candTokenRef.current++
     candHandleRef.current?.cancel()
-  }, [])
+  }, [playRunner])
   const stopCandidates = () => {
     candTokenRef.current++
     candHandleRef.current?.cancel()
@@ -158,9 +160,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     setRunning(undefined)
     setElapsedSec(0)
   }
-  const clearProgress = () => { setProgress({}); setProgressEnd(undefined) }
+  const clearProgress = () => { setProgress({}); setProgressEnd(undefined); setA0Reused(false) }
   const rerun = () => {
     stopRunning()
+    playRunner.reset?.() // 新規ゲーム/seed変更では前の世界線のA0を引き継がない
     clearProgress()
     setNotice(undefined)
     setCalc(undefined)
@@ -199,7 +202,8 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       setRunning({ startedAt: started })
       let handle: PlayRunHandle
       try {
-        handle = playRunner(input, (p) => { if (token === tokenRef.current) setProgress((s) => reduceProgress(s, p)) })
+        handle = playRunner(input, (p) => { if (token === tokenRef.current) setProgress((s) => reduceProgress(s, p)) },
+          { onA0Reused: () => { if (token === tokenRef.current) setA0Reused(true) } })
       } catch (error) {
         setRunning(undefined)
         setProgressEnd('FAILED')
@@ -321,7 +325,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       <main className="layout">
         <div className="flow-col">
           <InterventionComparePanel seedText={seedText} year={year} comparison={comparison} error={playError}
-            running={running ? { elapsedSec } : undefined} progress={progress} progressEnd={progressEnd} notice={notice} calc={calc} onCancel={cancelRun}
+            running={running ? { elapsedSec } : undefined} progress={progress} a0Reused={a0Reused} progressEnd={progressEnd} notice={notice} calc={calc} onCancel={cancelRun}
             onSeedText={setSeedText}
             candidateSet={candidateSet} fetchingCandidates={fetchingCandidates} candidateError={candidateError}
             onFetchCandidates={fetchCandidates} onCancelCandidates={() => { stopCandidates(); setNotice('人物候補の取得を中断しました。') }}
