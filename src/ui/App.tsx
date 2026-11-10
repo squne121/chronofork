@@ -398,7 +398,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           <section aria-labelledby="reserved-heading" className="panel">
             <h2 id="reserved-heading">未実装の機能</h2>
             <ul className="reserved" data-testid="reserved-areas">
-              <li>介入・2枝比較: <span className="badge badge-off">試験版で接続済み（CALIBRATION_ONLY）</span></li>
+              <li>介入・A0/A1/A2の3枝比較: <span className="badge badge-off">試験版で接続済み（CALIBRATION_ONLY）</span></li>
               <li>保存・A3以降の介入: <Unconnected>未実装</Unconnected></li>
               <li>人物・法制の正式自律判断: <Unconnected>未承認</Unconnected></li>
             </ul>
