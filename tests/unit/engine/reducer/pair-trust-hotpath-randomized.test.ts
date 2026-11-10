@@ -59,6 +59,7 @@ function mutateList(r: () => number, list: readonly PersonPairTrust[], allowDup:
     } else if (op < 0.75) next.splice(Math.floor(r() * (next.length + 1)), 0, rel(a, b, Math.floor(r() * 50)))
     else if (op < 0.85 && allowDup && next.length > 0) next.push(pick(r, next)) // 同一参照の重複
     else if (op < 0.92 && allowDup && next.length > 0) next.push({ ...pick(r, next) }) // 同一キー・別参照の重複
+    else if (op < 0.96 && next.length > 2) { const [x] = next.splice(Math.floor(r() * next.length), 1); next.splice(Math.floor(r() * (next.length + 1)), 0, x!) } // 1 件だけ移動
     else if (next.length > 1) next = [...next].reverse() // 並べ替え
   }
   return next
@@ -93,6 +94,16 @@ describe('diffWorld pairTrust 高速経路: 参照実装と乱数で同一出力
   })
 })
 
+/** 最適化前の confirmPairTrustOnlyChangeValid の重複確認（全記録のキー数）。他の確認は実装を共有する。 */
+const oldConfirm = (before: WorldState, after: WorldState): boolean => {
+  const list = after.pairTrust ?? []
+  const dupFree = new Set(list.map(key)).size === list.length
+  // 重複以外の条件は新実装と同じコードパスなので、重複なしの場合のみ新実装の結論に委ねる比較にならないよう、
+  // 重複ありなら false を期待、重複なしなら全体検証の ok に一致することを期待する。
+  if (!dupFree) return false
+  return validateWorldState(after).ok && before !== after
+}
+
 describe('confirmPairTrustOnlyChangeValid: 乱数で全体検証と矛盾しない（肯定は全体検証 ok、重複は否定）', () => {
   const before0 = { ...world, year: YEAR + 1 } as WorldState
   it('3000 件', () => {
@@ -106,6 +117,7 @@ describe('confirmPairTrustOnlyChangeValid: 乱数で全体検証と矛盾しな�
       const after = withTrust(before0, list)
       const quick = confirmPairTrustOnlyChangeValid(before, after)
       const full = validateWorldState(after).ok
+      expect(quick, `case ${i} 旧実装と不一致`).toBe(oldConfirm(before, after))
       if (quick) { confirmed++; expect(full, `case ${i} 肯定なのに全体検証NG`).toBe(true) }
       else rejected++
       // 重複・不正な after は必ず否定される（取りこぼしなし）。
@@ -179,5 +191,15 @@ describe('checkWorldIntegrity pairTrust 診断: 参照実装と乱数で内容�
       })
       expect(actual, `case ${i}`).toEqual(expected)
     }
+  })
+})
+
+describe('checkWorldIntegrity: pairTrust が人物以外の ID を指す場合は WRONG_REF_KIND（従来どおり）', () => {
+  it('HOUSE ID', () => {
+    const house = world.houses[0]!.houseId
+    const w = withTrust(world, [rel(personIds[0]!, house)].sort())
+    const d = checkWorldIntegrity(w).filter((x) => x.path.startsWith('$.pairTrust'))
+    expect(d.map((x) => x.code)).toContain('WRONG_REF_KIND')
+    expect(d.every((x) => x.target?.kind === 'PERSON_PAIR')).toBe(true)
   })
 })
