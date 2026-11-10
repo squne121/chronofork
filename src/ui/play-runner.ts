@@ -2,7 +2,10 @@
 // Workerは同一プレイ中の原史A0キャッシュの保持場所であり、寿命はこのモジュールが管理する。
 import { runPlayComparison } from './branch-play-source.ts'
 import type { PlayInput, PlayResult, PlayView } from './branch-play-source.ts'
-import type { WorkerResponse } from './play-worker.ts'
+import type { WorkerRequest, WorkerResponse } from './play-worker.ts'
+import { runPlayCandidates } from './play-candidates.ts'
+import type { PlayCandidateSet } from './play-candidates.ts'
+import type { PlayMode } from './branch-play-source.ts'
 import type { ProgressObserver } from './play-progress.ts'
 
 export type PlayOutcome=
@@ -82,6 +85,7 @@ export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
           if(m.kind==='PROGRESS')onProgress?.(m.progress);else hooks?.onA0Reused?.()
           return
         }
+        if(m.ok&&!('view' in m)){settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'想定外の応答です'});return}
         settle({kind:'DONE',computeMs:m.computeMs,
           result:m.ok?{ok:true,view:m.view}:{ok:false,code:m.code,message:m.message}})
       }
@@ -109,4 +113,52 @@ export const inlinePlayRunner:PlayRunner=(input,onProgress)=>{
   const outcome:PlayOutcome={kind:'DONE',computeMs:performance.now()-t0,
     result:r.ok?{ok:true,view:r.comparison}:r}
   return {promise:Promise.resolve(outcome),cancel:()=>{}}
+}
+
+/** 人物選択用のA0候補の取得結果。比較結果と混ざらないよう別の型にする。 */
+export type CandidatesOutcome=
+  | Readonly<{kind:'DONE';result:Readonly<{ok:true;set:PlayCandidateSet}>|Readonly<{ok:false;code:string;message:string}>;computeMs:number}>
+  | Readonly<{kind:'CANCELLED'}>
+  | Readonly<{kind:'FAILED';code:string;message:string}>
+export type CandidatesRunHandle=Readonly<{promise:Promise<CandidatesOutcome>;cancel:()=>void}>
+export type CandidatesRunner=(seed:number,mode:PlayMode)=>CandidatesRunHandle
+
+/**
+ * 実ブラウザ用。明示操作でA0を1回計算し、人物候補だけを受け取る(EventLog/DecisionTraceは転送しない)。
+ * 使い捨てのWorkerで実行し、完了・失敗・キャンセルで必ずterminateする。比較用の共有Worker・A0キャッシュには触れない。
+ */
+export const workerCandidatesRunner:CandidatesRunner=(seed,mode)=>{
+  let worker:Worker|undefined
+  let done=false
+  let settle:(o:CandidatesOutcome)=>void=()=>{}
+  const fail=(code:string,message:string):CandidatesOutcome=>({kind:'FAILED',code,message})
+  const promise=new Promise<CandidatesOutcome>(resolve=>{
+    settle=o=>{if(done)return;done=true;worker?.terminate();resolve(o)}
+    if(typeof Worker==='undefined'){settle(fail('WORKER_UNAVAILABLE','このブラウザではWeb Workerを利用できません'));return}
+    try{
+      worker=new Worker(new URL('./play-worker.ts',import.meta.url),{type:'module'})
+    }catch(error){
+      settle(fail('WORKER_START_FAILED',error instanceof Error?error.message:String(error)));return
+    }
+    worker.onmessage=(e:MessageEvent<WorkerResponse>)=>{
+      const m=e.data
+      if('kind' in m)return
+      settle(m.ok&&'candidates' in m
+        ?{kind:'DONE',computeMs:m.computeMs,result:{ok:true,set:m.candidates}}
+        :!m.ok?{kind:'DONE',computeMs:m.computeMs,result:{ok:false,code:m.code,message:m.message}}
+        :fail('WORKER_MESSAGE_ERROR','想定外の応答です'))
+    }
+    worker.onerror=e=>settle(fail('WORKER_ERROR',e.message||'Workerで未捕捉のエラーが発生しました'))
+    worker.onmessageerror=()=>settle(fail('WORKER_MESSAGE_ERROR','計算結果をWorkerから受け取れませんでした'))
+    const request:WorkerRequest={candidates:{seed,mode}}
+    worker.postMessage(request)
+  })
+  return {promise,cancel:()=>settle({kind:'CANCELLED'})}
+}
+
+/** テスト用。同期でA0候補を計算し、Workerと同じ形で返す。 */
+export const inlineCandidatesRunner:CandidatesRunner=(seed,mode)=>{
+  const t0=performance.now()
+  const r=runPlayCandidates(seed,mode)
+  return {promise:Promise.resolve({kind:'DONE',computeMs:performance.now()-t0,result:r} as CandidatesOutcome),cancel:()=>{}}
 }

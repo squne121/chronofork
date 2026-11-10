@@ -33,7 +33,7 @@ describe('A0キャッシュ', () => {
     expect(digest(second)).toBe(digest(runPlayComparison(other)))
     expect(digest(first)).toBe(digest(runPlayComparison(BASE)))
     if (first.ok && second.ok) expect(second.comparison.a0).toBe(first.comparison.a0)
-  })
+  }, 120_000) // 単独4秒だが、全テスト並列時はCPU競合で30秒既定を超えうる
 
   it('seedやモードが違えばヒットせず、新しいA0に置き換える(最大1件)', () => {
     const cache = new SingleA0Cache()

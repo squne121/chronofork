@@ -3,14 +3,19 @@
 import { runPlayComparison } from './branch-play-source.ts'
 import type { PlayInput, PlayView } from './branch-play-source.ts'
 import { toDisplayView } from './play-view.ts'
+import { runPlayCandidates } from './play-candidates.ts'
+import type { PlayCandidateSet } from './play-candidates.ts'
+import type { PlayMode } from './branch-play-source.ts'
 import type { PlayProgress } from './play-progress.ts'
 import { SingleA0Cache } from './a0-cache.ts'
 
-export type WorkerRequest=Readonly<{input:PlayInput}>
+/** 比較の再計算(input)か、人物選択用のA0候補の取得(candidates)。候補は必要な人物情報だけを返す。 */
+export type WorkerRequest=Readonly<{input:PlayInput}>|Readonly<{candidates:Readonly<{seed:number;mode:PlayMode}>}>
 export type WorkerResponse=
   | Readonly<{kind:'PROGRESS';progress:PlayProgress}>
   /** A0を再計算せず保存済みを使う。A0の年次進捗は送らない(再計算したように見せない)。 */
   | Readonly<{kind:'A0_REUSED'}>
+  | Readonly<{ok:true;candidates:PlayCandidateSet;computeMs:number}>
   | Readonly<{ok:true;view:PlayView;computeMs:number;viewMs:number}>
   | Readonly<{ok:false;code:string;message:string;computeMs:number}>
 
@@ -24,6 +29,12 @@ ctx.onmessage=e=>{
   const t0=performance.now()
   let response:WorkerResponse
   try{
+    if('candidates' in e.data){
+      const c=runPlayCandidates(e.data.candidates.seed,e.data.candidates.mode)
+      const computeMs=performance.now()-t0
+      ctx.postMessage(c.ok?{ok:true,candidates:c.set,computeMs}:{ok:false,code:c.code,message:c.message,computeMs})
+      return
+    }
     // 進捗は小さなDTOだけを送る。WorldState・ログは最終結果まで送らない。
     const r=runPlayComparison(e.data.input,progress=>ctx.postMessage({kind:'PROGRESS',progress}),
       {cache:a0Cache,onA0Reused:()=>ctx.postMessage({kind:'A0_REUSED'})})
