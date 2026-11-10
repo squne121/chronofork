@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { runPlayComparison } from '../../../src/ui/branch-play-source.ts'
 import type { PlayInput } from '../../../src/ui/branch-play-source.ts'
 import { SingleA0Cache, isUsableA0Entry } from '../../../src/ui/a0-cache.ts'
+import { integratedRunConfigIdentity, INTEGRATED_AUTONOMY, INTEGRATED_TRUST_BASE, INTEGRATED_B009_CALIBRATION, INTEGRATED_SUPPORTING_CLEARANCES } from '../../../src/scenario/experimental/index.ts'
 import type { PlayProgress } from '../../../src/ui/play-progress.ts'
 
 const BASE: PlayInput = { mode: 'ORDINARY_LAW', seed: 20260101, year: 1260, firstPersonId: 'person-exp-04', secondPersonId: 'person-exp-05', signedDelta: -20, durationYears: 5 }
@@ -65,7 +66,7 @@ describe('A0キャッシュ', () => {
     expect(cache.size).toBe(0) // 不一致で破棄
   })
 
-  it('A0がHALTEDの実行ではキャッシュしない / 入力不正でもキャッシュを汚さない', () => {
+  it('入力不正(介入年が範囲外)の実行ではキャッシュを汚さない', () => {
     const cache = new SingleA0Cache()
     const bad = runPlayComparison({ ...BASE, year: 1200 }, undefined, { cache })
     expect(bad.ok).toBe(false)
@@ -78,5 +79,20 @@ describe('A0キャッシュ', () => {
     cache.clear()
     const r = runPlayComparison(BASE, undefined, { cache })
     expect(r.ok && r.comparison.a0Source).toBe('COMPUTED')
+  })
+
+  it('統合モードの構成identityは実行構成の定数から導出され、安定し、実定数と一致する', () => {
+    const id = JSON.stringify(integratedRunConfigIdentity())
+    expect(JSON.stringify(integratedRunConfigIdentity())).toBe(id) // 呼出ごとに同一
+    const parsed = JSON.parse(id) as Record<string, unknown> & { supporting: { maxAliveSupporting: number }; supportingClearances: unknown[] }
+    // 評価器へ渡す法令・証拠・校正・SUPPORTING・禁親証拠・信頼基準が含まれる。
+    for (const k of ['book', 'laws', 'nextgenContract', 'supportingClearances', 'trustBase', 'promotion', 'supporting', 'autonomy', 'b009']) expect(parsed[k]).toBeDefined()
+    expect(parsed.supporting.maxAliveSupporting).toBe(1)
+    expect(parsed.supportingClearances.length).toBeGreaterThan(0)
+    // identityは実行構成の定数そのもの(手書き複製ではない)から導出される。
+    expect(parsed.autonomy).toEqual(JSON.parse(JSON.stringify(INTEGRATED_AUTONOMY)))
+    expect(parsed.trustBase).toEqual(JSON.parse(JSON.stringify(INTEGRATED_TRUST_BASE)))
+    expect(parsed.b009).toEqual(JSON.parse(JSON.stringify(INTEGRATED_B009_CALIBRATION)))
+    expect(parsed.supportingClearances).toEqual(JSON.parse(JSON.stringify(INTEGRATED_SUPPORTING_CLEARANCES)))
   })
 })

@@ -2,9 +2,10 @@
 // 未来の出来事や勝敗をハードコードしない。法的承認証拠・係数はsynthetic/CALIBRATION_ONLY。
 import {
   createExperimentalWorld, createExperimentalOrdinaryLegalTrial, prepareExperimentalGoalContext, EXPERIMENTAL_NALVEN_GOAL,
-  createExperimentalIntegratedEvaluators, createExperimentalIntegratedTimelineOptions,
+  createExperimentalIntegratedEvaluators, createExperimentalIntegratedTimelineOptions, integratedRunConfigIdentity,
   INTEGRATED_PAIR, INTEGRATED_SEED, INTEGRATED_START_YEAR, INTEGRATED_TRUST_REDUCTION,
 } from '../scenario/experimental/index.ts'
+import { rngVersion } from '../simulation/random.ts'
 import { verifyInitialLegalEvidence } from '../simulation/legal/evidence.ts'
 import type { OrdinaryLaw } from '../simulation/legal/ordinary-authority.ts'
 import type { OrdinaryMarriageReview } from '../simulation/rules/a/index.ts'
@@ -147,7 +148,7 @@ function createEvaluators(w:WorldState,ledger:readonly StatModifier[],book:Legal
 function buildInputs(seed:number,ids:readonly string[],branchId:string,mode:PlayMode):TimelineRun['inputs']{
   return {
     seed,scenarioId:'experimental / 亡国の王冠 / '+playModeLabel(mode)+' / '+branchId,
-    rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,rngVersion:'chronofork-rng-2',
+    rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,rngVersion,
     evaluatedRuleIds:ids,
   }
 }
@@ -235,10 +236,10 @@ function forkEvaluators(c:RootContext,state:WorldState,ledger:readonly StatModif
 /** A0を一意に決める入力すべて。介入(年・人物・補正・期間)は含めない。 */
 function a0CacheKeyOf(c:RootContext):string{
   return buildA0CacheKey({
-    mode:c.mode,seed:c.seed,rngVersion:'chronofork-rng-2',rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,
+    mode:c.mode,seed:c.seed,rngVersion,rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,
     tuning:EXPERIMENTAL_TUNING,initialWorld:c.initial,
     ...(c.integrated
-      ?{integrated:{goal:c.integrated.options.goal,ruleIds:Object.keys(c.integrated.options.evaluators).sort()}}
+      ?{integrated:{goal:c.integrated.options.goal,ruleIds:Object.keys(c.integrated.options.evaluators).sort(),config:integratedRunConfigIdentity()}}
       :{legal:{goal:c.legal?.goal,book:c.legal?.book,ordinary:c.ordinaryTrial,
         calibration:BIRTH_MORTALITY_CALIBRATION,trustBase:TRUST_BASE,approval:TEST_MARRIAGE_APPROVAL}}),
   })
