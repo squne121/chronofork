@@ -64,11 +64,11 @@ describe('Worker寿命管理', () => {
     expect(first.kind === 'DONE' && first.result.ok && 'view' in first.result).toBe(true)
     const h2 = run({ ...INPUT, second: { firstPersonId: 'a', secondPersonId: 'c', signedDelta: 15, durationYears: 5 } })
     const leanSecond = { mode: 'INTEGRATED_EXPERIMENTAL', input: { year: 1250 }, a0: {}, a1: {} }
-    workers[0]!.emit({ ok: true, secondView: leanSecond, computeMs: 11, viewMs: 4 })
+    workers[0]!.emit({ ok: true, secondView: leanSecond, a0Source: 'REUSED', computeMs: 11, viewMs: 4 })
     const result = await h2.promise
     expect(result.kind).toBe('DONE')
     if(result.kind!=='DONE'||!result.result.ok)return
-    expect(result.result).toEqual({ ok: true, secondView: leanSecond })
+    expect(result.result).toEqual({ ok: true, secondView: leanSecond, a0Source: 'REUSED' })
     expect('view' in result.result).toBe(false)
     expect(workers).toHaveLength(1)
     expect(workers[0]!.terminated).toBe(false)

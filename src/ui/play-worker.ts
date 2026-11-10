@@ -18,7 +18,7 @@ export type WorkerResponse=
   | Readonly<{ok:true;candidates:PlayCandidateSet;computeMs:number}>
   | Readonly<{ok:true;view:PlayView;computeMs:number;viewMs:number}>
   /** 既存A0/A1はブラウザに表示済み。第2介入時にはA1/A2差分だけを返し、重複した履歴の巨大転送を避ける。 */
-  | Readonly<{ok:true;secondView:PlayView;computeMs:number;viewMs:number}>
+  | Readonly<{ok:true;secondView:PlayView;a0Source:'COMPUTED'|'REUSED';computeMs:number;viewMs:number}>
   | Readonly<{ok:false;code:string;message:string;computeMs:number}>
 
 const ctx=self as unknown as {
@@ -47,7 +47,8 @@ ctx.onmessage=e=>{
       if(e.data.input.second){
         const second=r.comparison.second
         if(!second) response={ok:false,code:'A2_MISSING',message:'第2介入の計算結果がありません',computeMs}
-        else response={ok:true,secondView:toDisplayView(second),computeMs,viewMs:performance.now()-t1}
+        else response={ok:true,secondView:toDisplayView(second),a0Source:r.comparison.a0Source??'COMPUTED',
+          computeMs,viewMs:performance.now()-t1}
       }else{
         response={ok:true,view:toDisplayView(r.comparison),computeMs,viewMs:performance.now()-t1}
       }

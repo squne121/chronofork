@@ -231,7 +231,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
         }
         const view='secondView' in o.result
           ?comparison&&sameFirstIntervention(comparison.input,input)
-            ?{...comparison,second:o.result.secondView}
+            ?{...comparison,second:o.result.secondView,a0Source:o.result.a0Source}
             :undefined
           :o.result.view
         if(!view){
