@@ -98,7 +98,7 @@ export function ObservationPanel(p:Props){
           表示中の原史はseed {v.seed}です。入力seedが異なるため、再観測するまでこの結果から介入できません。
         </p>}
         {v&&seedMatches&&<p className="note" data-testid="obs-seed-active">観測中の原史seed {v.seed}</p>}
-      </div>}
+      </div>
     </header>
     {p.loading&&<div role="status" data-testid="obs-loading">
       <p>原史A0の確定データを取得中です。計算が完了するまで未来の結果を表示しません。</p>
