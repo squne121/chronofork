@@ -3,7 +3,7 @@
 import {cleanup,fireEvent,render,screen} from '@testing-library/react'
 import {afterEach,expect,it} from 'vitest'
 import App from '../../../../src/ui/App.tsx'
-import type {ObservationSlice,PlayInput,PlayView} from '../../../../src/ui/branch-play-source.ts'
+import type {ObservationSlice,PlayInput} from '../../../../src/ui/branch-play-source.ts'
 import type {PlayOutcome,PlayRunner} from '../../../../src/ui/play-runner.ts'
 import {createExperimentalIntegratedWorld} from '../../../../src/scenario/experimental/index.ts'
 afterEach(cleanup)
