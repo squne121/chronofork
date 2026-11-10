@@ -402,6 +402,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
             onInspectEvent={openComparisonEvent} onInspectTrace={openComparisonTrace} />
         </div>
 
+        {(!observation || !!comparison) && <>
         <div className="reason-col" id="reasons">
           <section aria-labelledby="year-heading" className="panel">
             <h2 id="year-heading"><span className="step-no">4</span>理由を確認する: 年を選ぶ</h2>
@@ -475,6 +476,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
             </ul>
           </section>
         </div>
+        </>}
       </main>
     </div>
   )
