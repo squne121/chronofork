@@ -1,0 +1,22 @@
+/* 人物ミニ家系図専用スタイル。.ft 配下に限定し、既存の index.css には触れない。 */
+.ft { display: flex; flex-direction: column; gap: 0.5rem; }
+.ft h3 { margin: 0; font-size: 1rem; }
+.ft-note { margin: 0; font-size: 0.8rem; }
+.ft-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ft-diagram { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.ft-row { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
+.ft-link { width: 0; height: 0.75rem; border-left: 2px solid currentColor; opacity: 0.4; }
+.ft-node { display: inline-flex; flex-direction: column; gap: 0.1rem; min-width: 7rem; padding: 0.35rem 0.6rem; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left; }
+button.ft-node { cursor: pointer; }
+button.ft-node:hover { background: rgba(127, 127, 127, 0.15); }
+.ft-node:focus-visible, .ft-title:focus-visible { outline: 3px solid #3b82f6; outline-offset: 2px; }
+.ft-self { border-width: 3px; font-weight: 600; }
+.ft-unknown { border-style: dashed; }
+.ft-dead .ft-name { text-decoration: line-through; text-decoration-thickness: 1px; }
+.ft-role { font-size: 0.75rem; }
+.ft-sub { font-size: 0.75rem; }
+.ft-facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.75rem; margin: 0; font-size: 0.85rem; }
+.ft-facts dt { font-weight: 600; }
+.ft-facts dd { margin: 0; }
+.ft-titles { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.ft-title { font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 4px; padding: 0.15rem 0.4rem; cursor: pointer; text-align: left; }
