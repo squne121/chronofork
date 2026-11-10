@@ -16,7 +16,7 @@ test.describe('統合モード: 起動・計算中の操作・キャンセル(�
     await expect(page.getByTestId('branch-duration')).toHaveValue('5')
     await expect(page.getByTestId('branch-person-one')).toHaveValue('person-exp-02')
     await expect(page.getByTestId('branch-person-two')).toHaveValue('person-exp-05')
-    await expect(page.getByLabel(/seed/)).toHaveValue('20260101')
+    await expect(page.getByTestId('seed-input')).toHaveValue('20260101')
 
     await page.getByTestId('branch-run').click()
     await expect(page.getByTestId('branch-running')).toContainText('計算中')

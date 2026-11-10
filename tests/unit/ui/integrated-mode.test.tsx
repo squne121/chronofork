@@ -189,7 +189,7 @@ describe('App: 統合モードの選択・実行・キャンセル', () => {
     expect(field('branch-duration')).toBe('5')
     expect(field('branch-person-one')).toBe('person-exp-02')
     expect(field('branch-person-two')).toBe('person-exp-05')
-    expect((screen.getByLabelText(/seed/) as HTMLInputElement).value).toBe('20260101')
+    expect((screen.getByTestId('seed-input') as HTMLInputElement).value).toBe('20260101')
     // 入力は変更できる(初期例は強制ではない)。
     fireEvent.change(screen.getByTestId('branch-trust-delta'), { target: { value: '-35' } })
     expect(field('branch-trust-delta')).toBe('-35')

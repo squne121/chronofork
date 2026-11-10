@@ -192,7 +192,7 @@ describe('App: 後出生人物のGUI選択', () => {
     const { c, p } = setup()
     await fetchAndResolve(c)
     setField('branch-fork-year', '1278'); setField('branch-person-two', LATER)
-    fireEvent.change(screen.getByLabelText(/seed/), { target: { value: '7' } })
+    fireEvent.change(screen.getByTestId('seed-input'), { target: { value: '7' } })
     expect(optionIds('branch-person-two')).not.toContain(LATER)
     expect(screen.getByTestId('candidate-status').textContent).toContain('初期人物のみ')
     expect((screen.getByTestId('branch-run') as HTMLButtonElement).disabled).toBe(true)
