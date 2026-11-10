@@ -167,7 +167,7 @@ describe('jsonSame: JSON.stringify の一致判定と同値', () => {
       {}, [], { a: 1 }, { a: 1, b: 2 }, { b: 2, a: 1 }, { a: [1, 2] }, { a: [1, 2, 3] }, { a: null }, { a: undefined }, { a: undefined, b: 1 }, { b: 1 },
       { a: NaN }, { a: Infinity }, { a: -0 }, { a: 0 }, { a: '1' }, { a: 1 }, { a: [undefined] }, { a: [null] }, { a: () => 1 }, { a: new Date(0) },
       { a: new Date(0).toISOString() }, { a: { b: { c: [1, { d: 2 }] } } }, { a: { b: { c: [1, { d: 3 }] } } }, { a: true }, { a: false }, { a: { toJSON: () => 5 } },
-      [[]], [{}], [null], Object.create(null), { a: 10 }, { a: Symbol.iterator }, { '': 1 }, { 0: 'x' }, ['x'],
+      [[]], [{}], [null], [{ toJSON: () => null }], { toJSON: () => [1] }, [1], Object.assign([1], { toJSON: () => 'q' }), Object.assign([2], { toJSON: () => 'q' }), Object.assign([], { toJSON: () => ({ a: 1 }) }), { x: [null] }, { x: [{ toJSON: () => null }] }, Object.create(null), { a: 10 }, { a: Symbol.iterator }, { '': 1 }, { 0: 'x' }, ['x'],
     ]
     for (const a of values) for (const b of values) {
       const expected = JSON.stringify(a) === JSON.stringify(b)

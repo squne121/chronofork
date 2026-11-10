@@ -15,7 +15,7 @@ const OMITTABLE_RULE='B-009'
  *  undefined・関数・非有限数・toJSON/非plain object等、JSON化で意味が変わる値に当たったら undefined を返して呼び出し側が文字列比較へ戻す。 */
 function jsonEqual(a:unknown,b:unknown):boolean|undefined{
   if(typeof a!==typeof b)return undefined
-  if(a===null||b===null)return a===b?true:(typeof a==='object'&&typeof b==='object'?false:undefined)
+  if(a===null||b===null)return a===b?true:undefined // 相手側のtoJSONがnullを返し得るため文字列比較へ任せる
   switch(typeof a){
     case 'string':case 'boolean':return a===b
     case 'number':return Number.isFinite(a)&&Number.isFinite(b as number)?a===b:undefined
@@ -23,6 +23,7 @@ function jsonEqual(a:unknown,b:unknown):boolean|undefined{
     default:return undefined
   }
   const x=a as Record<string,unknown>,y=b as Record<string,unknown>
+  if(typeof x.toJSON==='function'||typeof y.toJSON==='function')return undefined
   const xa=Array.isArray(x),ya=Array.isArray(y)
   if(xa!==ya)return false
   if(xa){
@@ -35,7 +36,6 @@ function jsonEqual(a:unknown,b:unknown):boolean|undefined{
   if((px!==Object.prototype&&px!==null)||(py!==Object.prototype&&py!==null))return undefined
   const kx=Object.keys(x),ky=Object.keys(y)
   // JSON化で脱落・変換される値(undefined・関数・symbol・toJSON)は、キー数の比較より前に文字列比較へ任せる。
-  if(typeof x.toJSON==='function'||typeof y.toJSON==='function')return undefined
   for(const o of [x,y])for(const k in o){
     const v=o[k],t=typeof v
     if(t==='undefined'||t==='function'||t==='symbol'||t==='bigint')return undefined
