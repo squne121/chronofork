@@ -238,6 +238,9 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
     setEventId(undefined)
     setTraceId(trace.traceId)
     setSelection(undefined)
+    // 縦長の比較欄から、年表の下にあるTrace詳細そのものへ移動する。
+    // Reactの描画完了後にスクロールし、HistoryPanel側のフォーカスも維持する。
+    setTimeout(() => document.querySelector('[data-testid="trace-detail"]')?.scrollIntoView?.({ block: 'start' }), 0)
   }
 
   const source: InspectionSource = {
