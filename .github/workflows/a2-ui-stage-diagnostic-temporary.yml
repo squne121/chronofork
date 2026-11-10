@@ -1,0 +1,80 @@
+name: a2-ui-stage-diagnostic-temporary
+
+on:
+  push:
+    branches: [feat/issue116-a2-same-year-intervention]
+    paths: [.github/workflows/a2-ui-stage-diagnostic-temporary.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  stage-log-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Add stage markers to E2E on checkout only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tests/e2e/integrated-mode.spec.ts')
+          s=p.read_text()
+          anchor="test.describe('統合モード: 同年・別ペアに追加介入してA2を作る（オプトイン）'"
+          i=s.index(anchor)
+          before,part=s[:i],s[i:]
+          part=part.replace("test.setTimeout(30*60_000)","test.setTimeout(9*60_000)",1)
+          needle="  test('A0観測→A1第1介入→A2第2介入→1350年の厳格技術Goalと3枝の観測',async({page})=>{"
+          extra=""" 
+    let currentStage='started'
+    const startMs=Date.now()
+    const mark=(stage:string)=>{currentStage=stage;console.log('[A2_STAGE]',stage,'elapsed_s',Math.round((Date.now()-startMs)/1000))}
+    const timer=setInterval(()=>console.log('[A2_HEARTBEAT]',currentStage,'elapsed_s',Math.round((Date.now()-startMs)/1000)),20000)
+    page.on('pageerror',e=>console.log('[A2_PAGE_ERROR]',String(e).slice(0,1000)))
+    page.on('crash',()=>console.log('[A2_PAGE_CRASH]',currentStage))
+    page.on('console',m=>{if(m.type()==='error') console.log('[A2_BROWSER_CONSOLE]',m.text().slice(0,800))})
+    try {
+"""
+          assert needle in part
+          part=part.replace(needle,needle+extra,1)
+          markers=[
+            ("    await page.goto('/')","before_navigation"),
+            ("    await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')","mode_selection"),
+            ("    await page.getByTestId('candidates-fetch').click()","start_A0_candidate_fetch"),
+            ("    await expect(page.getByTestId('candidate-status')).toContainText('A0の'","await_A0_candidate_fetch"),
+            ("    await page.getByTestId('branch-fork-year').fill('1269')","A0_candidates_returned"),
+            ("    await page.getByTestId('branch-run').click()","start_A1"),
+            ("    await expect(page.getByTestId('branch-results')).toBeVisible","await_A1_result"),
+            ("    await expect(page.getByTestId('a2-panel')).toBeVisible()","A1_result_visible"),
+            ("    await page.getByTestId('a2-run').click()","start_A2"),
+            ("    await expect(page.getByTestId('a2-results')).toBeVisible","await_A2_result"),
+            ("    await expect(page.getByTestId('a2-goal-summary')).toContainText","A2_result_visible"),
+            ("    await page.getByTestId('view-a2').click()","verify_branch_switching"),
+          ]
+          for needle,label in markers:
+            assert needle in part,needle
+            part=part.replace(needle,"    mark('"+label+"')\n"+needle,1)
+          assert part.rstrip().endswith("  })\n})")
+          part=part.rstrip()[:-len("  })\n})")] + "    mark('ALL_ASSERTIONS_PASSED')\n    } finally {clearInterval(timer)}\n  })\n})\n"
+          p.write_text(before+part)
+          print('STAGE_DIAGNOSTICS_INSTRUMENTED')
+          PY
+      - name: Browser E2E stage trace
+        env:
+          CI: "true"
+          CHRONOFORK_E2E_INTEGRATED: "1"
+          NODE_OPTIONS: --max-old-space-size=5600
+        run: |
+          timeout 580s npx playwright test tests/e2e/integrated-mode.spec.ts --grep "A0観測→A1第1介入→A2第2介入" --workers=1 --retries=0 --reporter=list
+      - name: Memory state
+        if: always()
+        run: |
+          free -h
+          if test -f /sys/fs/cgroup/memory.events; then cat /sys/fs/cgroup/memory.events; fi
