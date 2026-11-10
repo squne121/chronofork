@@ -18,8 +18,8 @@ it('介入前に実A0を観測すると、旧C004年表を同じ歴史と誤表�
     technicalGoal:null,goal:null,status:'COMPLETED',a0Source:'COMPUTED',
   }
   const runner:PlayRunner=Object.assign(
-    (_input:PlayInput):Readonly<{promise:Promise<PlayOutcome>;cancel:()=>void}>=>({
-      promise:Promise.resolve({kind:'FAILED',code:'NO_COMPARISON',message:'not used'}),
+    (input:PlayInput):Readonly<{promise:Promise<PlayOutcome>;cancel:()=>void}>=>({
+      promise:Promise.resolve({kind:'FAILED',code:'NO_COMPARISON',message:'not used for '+input.year}),
       cancel:()=>{},
     }),
     {observe:()=>({
