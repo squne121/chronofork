@@ -10,6 +10,7 @@ import type { BranchChoice, PlayInput, PlayMode, PlayView } from './branch-play-
 import { candidateLabel, candidateSetMatches, candidatesAtYear, extractCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
 import { IntegratedOverview } from './IntegratedOverview.tsx'
+import { FollowupInterventionPanel } from './FollowupInterventionPanel.tsx'
 import type { PlayProgress, ProgressState } from './play-progress.ts'
 import type { CalcInfo } from './IntegratedOverview.tsx'
 import type { GoalEvaluation, GoalFailureCode } from '../simulation/goal.ts'
@@ -48,9 +49,9 @@ type Props=Readonly<{
   candidateError?:Readonly<{code:string;message:string}>
   onFetchCandidates:(seed:number,mode:PlayMode)=>void
   onCancelCandidates:()=>void
-  activeBranch:BranchChoice
+  activeBranch:BranchChoice|'A2'
   onRun:(input:PlayInput)=>void
-  onViewBranch:(choice:BranchChoice)=>void
+  onViewBranch:(choice:BranchChoice|'A2')=>void
   onInspectEvent:(choice:BranchChoice,id:string)=>void
   onInspectTrace:(choice:BranchChoice,id:string)=>void
 }>
@@ -294,11 +295,20 @@ export function InterventionComparePanel(p:Props){
       <ul>
         <ProgressLine label="A0" p={p.progress?.a0} ended={!!p.progressEnd}/>
         <ProgressLine label="A1" p={p.progress?.a1} ended={!!p.progressEnd}/>
+        {(p.progress?.a2||p.comparison?.second)&&<ProgressLine label="A2" p={p.progress?.a2} ended={!!p.progressEnd}/>}
       </ul>
     </div>}
     {p.notice&&<p role="status" className="note" data-testid="branch-notice">{p.notice}</p>}
     {p.error&&<p role="alert" className="halt" data-testid="branch-error">{errorHeading(p.error.code)}: {p.error.code} / {p.error.message}</p>}
     {!p.comparison&&<p className="note" data-testid="branch-empty">まだ比較結果はありません。上の「介入して再計算」を押すと、ここにA0/A1の違いが表示されます。</p>}
+    {p.comparison&&p.comparison.mode==='INTEGRATED_EXPERIMENTAL'&&mode===p.comparison.mode&&
+      Number(p.seedText.trim())===p.comparison.input.seed&&
+      <FollowupInterventionPanel
+        key={JSON.stringify([p.comparison.input.seed,p.comparison.input.year,p.comparison.input.firstPersonId,
+          p.comparison.input.secondPersonId,p.comparison.input.signedDelta,p.comparison.input.durationYears])}
+        comparison={p.comparison} year={p.year} activeBranch={p.activeBranch} busy={!!p.running||!!p.fetchingCandidates}
+        onRun={p.onRun} onViewA2={()=>p.onViewBranch('A2')}/>
+    }
     {p.comparison&&input&&before&&after&&<div data-testid="branch-results" className="compare-results">
       <h3 className="step-title"><span className="step-no">3</span>同じ年のA0/A1を比べる</h3>
       <div className="headline" data-testid="branch-headline">
