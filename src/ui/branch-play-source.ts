@@ -23,6 +23,8 @@ import { normalizePersonPair } from '../simulation/intervention/index.ts'
 import type { MarriageApprovalEvidence } from '../simulation/rules/a/index.ts'
 import { EXPERIMENTAL_TUNING } from '../simulation/tuning.ts'
 import type { TimelineRun } from './timeline-source.ts'
+import { extractCandidates } from './play-candidates.ts'
+import type { PlayCandidateSet } from './play-candidates.ts'
 import { buildA0CacheKey, countsOf } from './a0-cache.ts'
 import type { A0Source, SingleA0Cache } from './a0-cache.ts'
 export type { A0Source } from './a0-cache.ts'
@@ -372,6 +374,8 @@ export type ObservationSlice = Readonly<{
   events:readonly EventLogEntry[]
   traces:readonly DecisionTrace[]
   counts:readonly ObservationYearCounts[]
+  /** 1250〜1350の実A0全snapshotから作成した軽量KEY人物候補。1年だけの候補ではない。 */
+  candidates:PlayCandidateSet
   technicalGoal:TimelineResult['technicalGoal']
   goal:TimelineResult['goal']
   status:TimelineResult['status']
@@ -382,6 +386,8 @@ export type ObservationResult =
   | Readonly<{ok:true;observation:ObservationSlice}>
   | Readonly<{ok:false;code:string;message:string}>
 
+// 保持中の同じA0に対して軽量KEY人物候補を再集計しない。Worker破棄でGC可能。
+const observationCandidateCache=new WeakMap<TimelineRun,PlayCandidateSet>()
 /** 実A0の確定結果だけを読む。UIが計算規則や架空の歴史を生成しないための純粋関数。 */
 export function sliceA0Observation(
   a0:TimelineRun,year:number,mode:'INTEGRATED_EXPERIMENTAL',a0Source:A0Source,
@@ -400,8 +406,14 @@ export function sliceA0Observation(
     if(ix>=0&&ix<counts.length)counts[ix]!.traces++
     if(t.year===year)traces.push(t)
   }
+  let candidates=observationCandidateCache.get(a0)
+  if(!candidates){
+    // 通常の候補APIと同じ適格性判定を使い、101年初の存在区間を保持する。
+    candidates=extractCandidates(a0.inputs.seed,mode,a0.result.snapshots)
+    observationCandidateCache.set(a0,candidates)
+  }
   return {
-    seed:a0.inputs.seed,mode,year,world,events,traces,counts,
+    seed:a0.inputs.seed,mode,year,world,events,traces,counts,candidates,
     goal:a0.result.goal,technicalGoal:a0.result.technicalGoal,status:a0.result.status,a0Source,
   }
 }

@@ -10,6 +10,9 @@ type Props = Readonly<{
   loading:boolean
   progress?:PlayProgress
   error?:Readonly<{code:string;message:string}>
+  seedText:string
+  onSeedText:(text:string)=>void
+  onReset:()=>void
   onLoad:(year:number)=>void
   onCancel:()=>void
   onIntervene:(year:number,personId:string)=>void
@@ -26,6 +29,8 @@ const reason=(codes:readonly string[])=>codes.length?codes.join('、'):'理由�
 /** PR-2: 介入前の原史A0を、証拠のある履歴だけで調べる。WorldStateは選択年の年初。 */
 export function ObservationPanel(p:Props){
   const v=p.observation
+  const seedValid=/^\d+$/.test(p.seedText.trim())&&Number.isSafeInteger(Number(p.seedText.trim()))&&Number(p.seedText.trim())>=0
+  const seedMatches=v!==undefined&&v.seed===Number(p.seedText.trim())&&seedValid
   const [selectedPerson,setSelectedPerson]=useState('')
   const [selectedTitle,setSelectedTitle]=useState('')
   const [eventId,setEventId]=useState('')
@@ -67,7 +72,7 @@ export function ObservationPanel(p:Props){
   const goal=v?.technicalGoal
   const assessments=(goal?.status==='NOT_ACHIEVED'||goal?.status==='ACHIEVED')?goal.assessments:[]
   const yearChange=(y:number)=>{
-    setEventId('');setTraceId('');setSelectedTitle('');setEventLimit(SHOW);setTraceLimit(SHOW)
+    setEventId('');setTraceId('');setSelectedTitle('');setEventType('ALL');setEventLimit(SHOW);setTraceLimit(SHOW)
     p.onLoad(y)
   }
   return <section className="panel obs" aria-labelledby="obs-heading" data-testid="observation-main">
@@ -77,8 +82,23 @@ export function ObservationPanel(p:Props){
         <p className="note">介入前に、実際に計算された歴史を調べます。1250〜1350年、年初WorldStateと確定済みEvent・DecisionTraceを表示します。</p>
         <p className="note">統合法制・世代継続（EXPERIMENTAL / CALIBRATION_ONLY）。正式な勝敗は未成立（goal=null）。</p>
       </div>
-      {!v&&<button type="button" className="cta" data-testid="obs-start" onClick={()=>p.onLoad(1250)}
-        disabled={p.loading}>統合A0を計算して観測</button>}
+      <div className="obs-seed-tools">
+        <label htmlFor="obs-seed-input">統合A0のseed
+          <input id="obs-seed-input" data-testid="obs-seed-input" type="text" inputMode="numeric"
+            value={p.seedText} disabled={p.loading} aria-invalid={!seedValid}
+            onChange={e=>p.onSeedText(e.target.value)}/>
+        </label>
+        <button type="button" className="cta" data-testid="obs-start"
+          onClick={()=>{setEventType('ALL');p.onLoad(v?.year??1250)}} disabled={p.loading||!seedValid}>
+          {!v?'統合A0を計算して観測':seedMatches?'このseedの原史A0を再表示':'このseedで原史A0を計算'}
+        </button>
+        {v&&<button type="button" data-testid="obs-reset" disabled={p.loading} onClick={p.onReset}>旧試験画面へ戻る</button>}
+        {!seedValid&&<span className="missing" role="alert">seedは0以上の安全な整数で指定してください。</span>}
+        {v&&!seedMatches&&<p role="status" data-testid="obs-seed-mismatch">
+          表示中の原史はseed {v.seed}です。入力seedが異なるため、再観測するまでこの結果から介入できません。
+        </p>}
+        {v&&seedMatches&&<p className="note" data-testid="obs-seed-active">観測中の原史seed {v.seed}</p>}
+      </div>}
     </header>
     {p.loading&&<div role="status" data-testid="obs-loading">
       <p>原史A0の確定データを取得中です。計算が完了するまで未来の結果を表示しません。</p>
@@ -90,17 +110,17 @@ export function ObservationPanel(p:Props){
       <div className="obs-year-nav">
         <label htmlFor="obs-year">年表・観測する年（年初）</label>
         <input id="obs-year" type="range" min={1250} max={1350} step={1} value={v.year}
-          disabled={p.loading} aria-valuetext={v.year+'年'} onChange={e=>yearChange(Number(e.target.value))}/>
+          disabled={p.loading||!seedMatches} aria-valuetext={v.year+'年'} onChange={e=>yearChange(Number(e.target.value))}/>
         <output data-testid="obs-year-label">{v.year}年初</output>
         <div className="obs-year-controls">
-          <button type="button" disabled={p.loading||v.year<=1250} onClick={()=>yearChange(v.year-1)}>前年</button>
-          <button type="button" disabled={p.loading||v.year>=1350} onClick={()=>yearChange(v.year+1)}>翌年</button>
+          <button type="button" disabled={p.loading||!seedMatches||v.year<=1250} onClick={()=>yearChange(v.year-1)}>前年</button>
+          <button type="button" disabled={p.loading||!seedMatches||v.year>=1350} onClick={()=>yearChange(v.year+1)}>翌年</button>
           <span data-testid="obs-cache-source">A0：{v.a0Source==='REUSED'?'保存済みの原史を再利用':'この条件で実計算済み'}</span>
         </div>
         <details>
           <summary>年代記の年別件数（実Event・Trace）</summary>
           <div className="obs-year-jumps">
-            {v.counts.map(c=><button type="button" key={c.year} disabled={p.loading}
+            {v.counts.map(c=><button type="button" key={c.year} disabled={p.loading||!seedMatches}
               aria-current={c.year===v.year?'date':undefined}
               onClick={()=>yearChange(c.year)}>{c.year}年・事件{c.events}／判断{c.traces}</button>)}
           </div>
@@ -207,7 +227,7 @@ export function ObservationPanel(p:Props){
             </li>)}</ul>}
           </div>}
           {person&&v.year<1350&&persons.find(x=>x.personId===person)?.interactionRole!=='SUPPORTING'&&
-            <button type="button" className="cta" data-testid="obs-to-intervention" onClick={()=>p.onIntervene(v.year,person)}>
+            <button type="button" className="cta" data-testid="obs-to-intervention" disabled={!seedMatches||p.loading} onClick={()=>p.onIntervene(v.year,person)}>
               この人物と年から介入を検討する
             </button>}
           <p className="note">介入は既存の人物間信頼調整のみです。対象者の適格性・成立・歴史変化は保証しません。</p>
