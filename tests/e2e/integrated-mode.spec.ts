@@ -99,3 +99,40 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
     })
   }
 })
+
+test.describe('統合モード: 後出生KEY人物のGUI選択（Issue #104・オプトイン）', () => {
+  test.skip(!heavy, 'CHRONOFORK_E2E_INTEGRATED=1 のときだけ実行する(A0取得と再計算で各1〜数分)')
+  test.setTimeout(30 * 60_000)
+
+  test('A0の候補を取得し、1278年に1252年生まれの人物と初期人物へ介入できる', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/')
+    await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
+    // 取得前は初期人物のみ。取得中は介入の再計算が始まらず、画面は操作できる。
+    await expect(page.getByTestId('branch-person-two').locator('option', { hasText: '1252年生' })).toHaveCount(0)
+    await page.getByTestId('candidates-fetch').click()
+    await expect(page.getByTestId('candidate-status')).toContainText('取得中')
+    await expect(page.getByTestId('branch-run')).toBeDisabled()
+    await expect(page.getByTestId('candidate-status')).toContainText('A0の', { timeout: 12 * 60_000 })
+    await expect(page.getByTestId('candidate-error')).toHaveCount(0)
+
+    // 1251年には出ず、1278年に選べる。
+    await page.getByTestId('branch-fork-year').fill('1251')
+    await expect(page.getByTestId('branch-person-two').locator('option', { hasText: '1252年生' })).toHaveCount(0)
+    await page.getByTestId('branch-fork-year').fill('1278')
+    const born1252 = page.getByTestId('branch-person-two').locator('option:not([disabled])', { hasText: '1252年生' })
+    expect(await born1252.count()).toBeGreaterThan(0)
+    const childId = await born1252.first().getAttribute('value')
+    expect(childId).toBeTruthy()
+    await page.getByTestId('branch-person-one').selectOption('person-exp-05')
+    await page.getByTestId('branch-person-two').selectOption(childId!)
+    await page.getByTestId('branch-trust-delta').fill('20')
+    await page.getByTestId('branch-run').click()
+    await expect(page.getByTestId('branch-results')).toBeVisible({ timeout: 20 * 60_000 })
+    await expect(page.getByTestId('branch-error')).toHaveCount(0)
+    await expect(page.getByTestId('branch-status')).toContainText('goal=null')
+    await expect(page.getByTestId('branch-headline')).toContainText('1278年')
+    await expect(page.getByTestId('branch-headline')).not.toContainText(childId!) // 長いIDでなく名前で表示される
+    await expect(page.getByTestId('integrated-verdict')).toContainText(/差は確認されませんでした|差が確認されました/)
+  })
+})

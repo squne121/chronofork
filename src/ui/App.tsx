@@ -3,8 +3,10 @@ import { HistoryPanel, involves } from './HistoryPanel.tsx'
 import { InterventionComparePanel } from './InterventionComparePanel.tsx'
 import { runPlayComparison } from './branch-play-source.ts'
 import type { BranchChoice, PlayInput, PlayView } from './branch-play-source.ts'
-import { workerPlayRunner } from './play-runner.ts'
-import type { PlayRunHandle, PlayRunner } from './play-runner.ts'
+import { workerCandidatesRunner, workerPlayRunner } from './play-runner.ts'
+import type { CandidatesRunHandle, CandidatesRunner, PlayRunHandle, PlayRunner } from './play-runner.ts'
+import type { PlayCandidateSet } from './play-candidates.ts'
+import type { PlayMode } from './branch-play-source.ts'
 import type { CalcInfo } from './IntegratedOverview.tsx'
 import { Inspector } from './Inspector.tsx'
 import { RegionMap } from './RegionMap.tsx'
@@ -28,8 +30,8 @@ function Unconnected({ children }: { children: string }) {
 }
 
 /** run は試験用の注入口。未指定なら初期化時に一度だけ試験計算を行う。 */
-export default function App({ run: injected, playRunner = workerPlayRunner }:
-  Readonly<{ run?: TimelineRun; playRunner?: PlayRunner }>) {
+export default function App({ run: injected, playRunner = workerPlayRunner, candidatesRunner = workerCandidatesRunner }:
+  Readonly<{ run?: TimelineRun; playRunner?: PlayRunner; candidatesRunner?: CandidatesRunner }>) {
   const [run, setRun] = useState<TimelineRun>(() => injected ?? runExperimentalTimeline(DEFAULT_SEED))
   const [seedText, setSeedText] = useState(String(run.inputs.seed))
   const [comparison, setComparison] = useState<PlayView | undefined>(undefined)
@@ -40,6 +42,12 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
   // 古い結果で上書きしないための世代番号と、キャンセル用の実行ハンドル。
   const tokenRef = useRef(0)
   const handleRef = useRef<PlayRunHandle | undefined>(undefined)
+  // 人物選択用のA0候補（明示操作で取得）。seed・モードを持ち、条件が変わると使われない。
+  const [candidateSet, setCandidateSet] = useState<PlayCandidateSet | undefined>(undefined)
+  const [fetchingCandidates, setFetchingCandidates] = useState(false)
+  const [candidateError, setCandidateError] = useState<{ code: string; message: string } | undefined>(undefined)
+  const candTokenRef = useRef(0)
+  const candHandleRef = useRef<CandidatesRunHandle | undefined>(undefined)
   const [playError, setPlayError] = useState<{code:string;message:string} | undefined>(undefined)
   const [activeBranch, setActiveBranch] = useState<BranchChoice>('A1')
   const { result } = run
@@ -103,7 +111,40 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
   useEffect(() => () => {
     tokenRef.current++
     handleRef.current?.cancel()
+    candTokenRef.current++
+    candHandleRef.current?.cancel()
   }, [])
+  const stopCandidates = () => {
+    candTokenRef.current++
+    candHandleRef.current?.cancel()
+    candHandleRef.current = undefined
+    setFetchingCandidates(false)
+  }
+  // 重いA0計算はWorkerで行い、人物の選択・年の入力のたびには再計算しない（この明示操作でだけ取得する）。
+  const fetchCandidates = (seed: number, mode: PlayMode) => {
+    if (candHandleRef.current || handleRef.current) return
+    const token = ++candTokenRef.current
+    setCandidateError(undefined)
+    setFetchingCandidates(true)
+    let handle: CandidatesRunHandle
+    try {
+      handle = candidatesRunner(seed, mode)
+    } catch (error) {
+      setFetchingCandidates(false)
+      setCandidateError({ code: 'WORKER_START_FAILED', message: error instanceof Error ? error.message : String(error) })
+      return
+    }
+    candHandleRef.current = handle
+    void handle.promise.then((o) => {
+      if (token !== candTokenRef.current) return
+      candHandleRef.current = undefined
+      setFetchingCandidates(false)
+      if (o.kind === 'CANCELLED') { setNotice('人物候補の取得を中断しました。'); return }
+      if (o.kind === 'FAILED') { setCandidateError({ code: o.code, message: o.message }); return }
+      if (!o.result.ok) { setCandidateError({ code: o.result.code, message: o.result.message }); return }
+      setCandidateSet(o.result.set)
+    })
+  }
   const stopRunning = () => {
     tokenRef.current++
     handleRef.current?.cancel()
@@ -137,6 +178,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
   }
   const runComparison = (input:PlayInput) => {
     setNotice(undefined)
+    if (candHandleRef.current) return // 候補取得中は比較を始めない
     if (input.mode === 'INTEGRATED_EXPERIMENTAL') {
       // 100年のA0/A1はWorkerで再計算する。計算中の二重起動は無視し、古い結果は破棄する。
       if (handleRef.current) return
@@ -261,6 +303,8 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
           <InterventionComparePanel seedText={seedText} year={year} comparison={comparison} error={playError}
             running={running ? { elapsedSec } : undefined} notice={notice} calc={calc} onCancel={cancelRun}
             onSeedText={setSeedText}
+            candidateSet={candidateSet} fetchingCandidates={fetchingCandidates} candidateError={candidateError}
+            onFetchCandidates={fetchCandidates} onCancelCandidates={() => { stopCandidates(); setNotice('人物候補の取得を中断しました。') }}
             activeBranch={activeBranch} onRun={runComparison} onViewBranch={switchBranch}
             onInspectEvent={openComparisonEvent} onInspectTrace={openComparisonTrace} />
         </div>

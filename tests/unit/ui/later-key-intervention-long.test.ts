@@ -5,6 +5,9 @@ import {isDeepStrictEqual} from 'node:util'
 import {describe,expect,it} from 'vitest'
 import {runPlayBaseline,runPlayComparison,compareYear} from '../../../src/ui/branch-play-source.ts'
 import type {PlayInput} from '../../../src/ui/branch-play-source.ts'
+import {candidatesAtYear,runPlayCandidates} from '../../../src/ui/play-candidates.ts'
+import {toDisplayView} from '../../../src/ui/play-view.ts'
+import {interventionTargetIssue} from '../../../src/ui/branch-play-source.ts'
 
 const longTest=process.env.CHRONOFORK_LONG_LATER_KEY==='1'?describe:describe.skip
 const SEED=20260101,YEAR=1278
@@ -49,6 +52,28 @@ longTest('後出生KEY人物への介入（seed 20260101・INTEGRATED_EXPERIMENT
     expect(eq(c.a1.result.eventLog,again.comparison.a1.result.eventLog)).toBe(true)
     expect(eq(c.a1.result.decisionTraces,again.comparison.a1.result.decisionTraces)).toBe(true)
   },1800000)
+  it('GUI候補は実A0のfork年初WorldStateと一致し、1252年出生の人物は1251年に出ず1278年に出る',()=>{
+    const c=runPlayCandidates(SEED,'INTEGRATED_EXPERIMENTAL')
+    if(!c.ok)throw new Error(c.code)
+    expect(candidatesAtYear(c.set,1251).some(x=>x.id===childId)).toBe(false)
+    expect(candidatesAtYear(c.set,YEAR).some(x=>x.id===childId)).toBe(true)
+    for(const y of [1250,1251,1252,YEAR,1349]){
+      const w=a0.snapshots.find(x=>x.year===y)!
+      const eligible=w.persons.filter(p=>interventionTargetIssue(w,[p.personId,p.personId])===null).map(p=>p.personId).sort()
+      expect(candidatesAtYear(c.set,y).map(x=>x.id).sort()).toEqual(eligible)
+    }
+    expect(c.set.candidates.some(x=>a0.snapshots.every(w=>!w.persons.some(p=>p.personId===x.id)))).toBe(false)
+    console.info('LATER_KEY candidates='+c.set.candidates.length+' at'+YEAR+'='+candidatesAtYear(c.set,YEAR).length)
+  },1800000)
+  it('GUIが受け取る転送ビューは、CLIと同じ入口の結果と入力・介入・A1の状態が一致する',()=>{
+    if(!run.ok)throw new Error('run failed')
+    const v=toDisplayView(run.comparison)
+    expect(v.input).toEqual(run.comparison.input);expect(v.modifier).toEqual(run.comparison.modifier)
+    expect(eq(v.a1.result.snapshots,run.comparison.a1.result.snapshots)).toBe(true)
+    expect(eq(v.a0.result.snapshots,run.comparison.a0.result.snapshots)).toBe(true)
+    expect(v.a1.result.technicalGoal).toEqual(run.comparison.a1.result.technicalGoal)
+    expect(v.a1.result.goal).toBeNull()
+  })
   it('Event↔Trace参照が閉じている',()=>{
     if(!run.ok)throw new Error('run failed')
     const r=run.comparison.a1.result

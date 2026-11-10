@@ -3,13 +3,13 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from '../../../src/ui/App.tsx'
-import { INTEGRATED_PLAY_DEFAULTS, playModeLabel, runPlayComparison } from '../../../src/ui/branch-play-source.ts'
+import { INTEGRATED_PLAY_DEFAULTS, interventionTargetIssue, playModeLabel, runPlayComparison } from '../../../src/ui/branch-play-source.ts'
 import type { PlayComparison, PlayInput, PlayView } from '../../../src/ui/branch-play-source.ts'
 import { buildOverview, titleRows } from '../../../src/ui/integrated-overview.ts'
 import type { PlayOutcome, PlayRunner } from '../../../src/ui/play-runner.ts'
 import { IntegratedOverview } from '../../../src/ui/IntegratedOverview.tsx'
 import { toDisplayView } from '../../../src/ui/play-view.ts'
-import { INTEGRATED_PAIR, INTEGRATED_SEED, INTEGRATED_TRUST_REDUCTION } from '../../../src/scenario/experimental/index.ts'
+import { INTEGRATED_PAIR, INTEGRATED_SEED, INTEGRATED_TRUST_REDUCTION, createExperimentalIntegratedTimelineOptions } from '../../../src/scenario/experimental/index.ts'
 import type { DecisionTrace, EventLogEntry } from '../../../src/simulation/contracts/index.ts'
 
 afterEach(cleanup)
@@ -32,8 +32,12 @@ describe('統合モードの初期入力例(CALIBRATION_ONLY)', () => {
     expect(code({ signedDelta: 0 })).toBe('INVALID_DELTA')
     expect(code({ durationYears: 101 })).toBe('INVALID_DURATION')
     expect(code({ secondPersonId: 'person-exp-02' })).toBe('INVALID_PERSON_PAIR')
-    // 対象の存在は fork年初の実WorldState(A0の計算後)で判定する(Issue #104)ため、UNKNOWN_PERSON は
-    // 計算前の拒否ではない。実データでの検証は later-key-intervention-long.test.ts(オプトイン)で行う。
+    // 対象の存在は fork年初の実WorldState(A0の計算後)で判定する(Issue #104)ため、runPlayComparison の
+    // UNKNOWN_PERSON は計算前の拒否ではない。同じ判定を、統合モードの実の初期WorldStateに対し高速に検証する
+    // （A0計算後の実データ検証は later-key-intervention-long.test.ts、GUI候補は later-key-candidates.test.tsx）。
+    const w = createExperimentalIntegratedTimelineOptions('A0-play').world
+    expect(interventionTargetIssue(w, ['person-none', 'person-exp-05'])?.code).toBe('UNKNOWN_PERSON')
+    expect(interventionTargetIssue(w, ['person-exp-02', 'person-exp-05'])).toBeNull()
   })
 })
 

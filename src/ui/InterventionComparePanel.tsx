@@ -1,12 +1,14 @@
 // A0/A1の試験用介入操作。描画用の差分は実WorldState/EventLog/DecisionTraceからのみ取得する。
 // GAME-01〜05と正式勝敗は未成立。CALIBRATION_ONLYの明示法的承認だけを試験で注入する。
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { compareYear, directlyInvolvesPair, playPersonOptions, playModeLabel, INTEGRATED_PLAY_DEFAULTS, PLAY_DEFAULT_MODE, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
 import { observeDynastyContinuity } from './dynasty-continuity.ts'
 import type { ContinuityObservation } from './dynasty-continuity.ts'
 import { NALVEN_DYNASTY_ID } from '../scenario/experimental/index.ts'
 import { childIdsOfPair } from './event-summary.ts'
 import type { BranchChoice, PlayInput, PlayMode, PlayView } from './branch-play-source.ts'
+import { candidateLabel, candidateSetMatches, candidatesAtYear, extractCandidates } from './play-candidates.ts'
+import type { PlayCandidateSet } from './play-candidates.ts'
 import { IntegratedOverview } from './IntegratedOverview.tsx'
 import type { CalcInfo } from './IntegratedOverview.tsx'
 import type { GoalEvaluation, GoalFailureCode } from '../simulation/goal.ts'
@@ -22,6 +24,12 @@ type Props=Readonly<{
   calc?:CalcInfo
   onCancel:()=>void
   onSeedText:(text:string)=>void
+  /** 明示操作で取得したA0の人物候補（seed・モード付き）。条件が合わなければ使わない。 */
+  candidateSet?:PlayCandidateSet
+  fetchingCandidates?:boolean
+  candidateError?:Readonly<{code:string;message:string}>
+  onFetchCandidates:(seed:number,mode:PlayMode)=>void
+  onCancelCandidates:()=>void
   activeBranch:BranchChoice
   onRun:(input:PlayInput)=>void
   onViewBranch:(choice:BranchChoice)=>void
@@ -33,7 +41,7 @@ const persons=playPersonOptions()
 const EVENT_LABEL:Readonly<Record<string,string>>={MARRIAGE_REGISTER:'婚姻の成立',PERSON_BIRTH:'人物の出生',LEGAL_DYNASTY_SET:'法的王朝の確定'}
 const eventLabel=(t:string)=>EVENT_LABEL[t]?`${EVENT_LABEL[t]}（${t}）`:t
 const kindLabel=(k:'A0_ONLY'|'A1_ONLY'|'CHANGED')=>k==='A0_ONLY'?'A0にだけ記録':k==='A1_ONLY'?'A1にだけ記録':'A0/A1で内容が違う'
-const personName=(id:string)=>persons.find(x=>x.id===id)?.label??id
+type PersonOption=Readonly<{id:string;label:string}>
 const GOAL_FAILURE_LABEL:Record<GoalFailureCode,string>={
   NOT_TERRITORIAL:'土地領主権ではない',TITLE_INVALID:'Titleが無効',
   TITLE_NOT_HEREDITARY:'世襲権がない',TITLE_NOT_RECOGNIZED:'承認根拠が不足',
@@ -89,6 +97,27 @@ export function InterventionComparePanel(p:Props){
     /^-?\d+$/.test(deltaText)&&Number.isSafeInteger(delta)&&delta!==0&&Math.abs(delta)<=200 &&
     /^\d+$/.test(durationText)&&Number.isSafeInteger(duration)&&duration>=1&&year+duration<=1350 &&
     firstId!==secondId
+  // 候補: 現在のseed・方式に一致するA0（明示取得、または表示中の比較のA0）だけを使う。介入年の年初に存在するKEY人物のみ。
+  const comparisonSet=useMemo(()=>p.comparison?extractCandidates(p.comparison.input.seed,p.comparison.mode,p.comparison.a0.result.snapshots):undefined,
+    [p.comparison])
+  const activeSet=candidateSetMatches(p.candidateSet,seed,mode)?p.candidateSet
+    :candidateSetMatches(comparisonSet,seed,mode)?comparisonSet:undefined
+  const yearOk=/^\d+$/.test(yearText)&&Number.isSafeInteger(year)&&year>=1250&&year<1350
+  const options:readonly PersonOption[]=activeSet&&yearOk
+    ?candidatesAtYear(activeSet,year).map(c=>({id:c.id,label:candidateLabel(c)})):persons
+  const inOptions=(id:string)=>options.some(o=>o.id===id)
+  const personsOk=inOptions(firstId)&&inOptions(secondId)
+  const canRun=valid&&personsOk
+  // 表示名: 現在の候補→表示中の比較のA0→初期人物。どれにも無いときだけIDを出す。
+  const personName=(id:string)=>{
+    const c=activeSet?.candidates.find(x=>x.id===id)??comparisonSet?.candidates.find(x=>x.id===id)
+    return c?candidateLabel(c):persons.find(x=>x.id===id)?.label??id
+  }
+  const personOptions=(selected:string)=>{
+    const list=options.map(x=><option key={x.id} value={x.id}>{x.label}</option>)
+    // 現在の年に存在しない人物が選択中のままなら、選択が無効であることを選択欄にも出す（黙って別の人物にしない）。
+    return inOptions(selected)?list:[<option key="__missing" value={selected} disabled>{personName(selected)}（{yearOk?`${year}年初には存在しません`:'年を確認してください'}）</option>,...list]
+  }
   const data=p.comparison?compareYear(p.comparison,p.year):undefined
   const before=data?.a0World,after=data?.a1World
   const input=p.comparison?.input
@@ -195,18 +224,28 @@ export function InterventionComparePanel(p:Props){
     </p>}
     <form className="compare-form" onSubmit={e=>{
       e.preventDefault()
-      if(valid&&!p.running)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
+      if(canRun&&!p.running&&!p.fetchingCandidates)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
         signedDelta:delta,durationYears:duration,mode})
     }}>
+      <div className="candidate-source" data-testid="candidate-source">
+        <button type="button" data-testid="candidates-fetch" disabled={!/^\d+$/.test(p.seedText.trim())||!Number.isSafeInteger(seed)||!!p.running||!!p.fetchingCandidates}
+          onClick={()=>p.onFetchCandidates(seed,mode)}>この条件のA0から人物候補を取得（後から生まれた人物を選ぶ場合）</button>
+        {p.fetchingCandidates&&<button type="button" data-testid="candidates-cancel" onClick={p.onCancelCandidates}>取得をキャンセル</button>}
+        <span className="note" role="status" data-testid="candidate-status"> {p.fetchingCandidates
+          ?'A0を計算して人物候補を取得中です（介入の再計算はしません。この間も他の操作ができます）。'
+          :activeSet?`候補はseed ${activeSet.seed}・${playModeLabel(activeSet.mode)}のA0の${yearOk?`${year}年初`:'年初'}の実際のWorldStateから取得しています（KEY人物${yearOk?candidatesAtYear(activeSet,year).length:activeSet.candidates.length}人）。`
+          :'現在は初期人物のみ表示しています。1251年以降に生まれた人物を選ぶには、上のボタンでA0の候補を取得してください。'}</span>
+        {p.candidateError&&<p role="alert" className="halt" data-testid="candidate-error">人物候補を取得できませんでした: {p.candidateError.code} / {p.candidateError.message}</p>}
+      </div>
       <div className="form-grid">
         <label>対象の人物1
           <select value={firstId} onChange={e=>setFirstId(e.target.value)} data-testid="branch-person-one">
-            {persons.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
+            {personOptions(firstId)}
           </select>
         </label>
         <label>対象の人物2
           <select value={secondId} onChange={e=>setSecondId(e.target.value)} data-testid="branch-person-two">
-            {persons.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
+            {personOptions(secondId)}
           </select>
         </label>
         <label>2人の信頼の補正（試験値）
@@ -220,12 +259,13 @@ export function InterventionComparePanel(p:Props){
         </label>
       </div>
       <h3 className="step-title"><span className="step-no">2</span>再計算する</h3>
-      <button type="submit" disabled={!valid||!!p.running} data-testid="branch-run" className="cta">介入して再計算</button>
+      <button type="submit" disabled={!canRun||!!p.running||!!p.fetchingCandidates} data-testid="branch-run" className="cta">介入して再計算</button>
       {p.running&&<button type="button" onClick={p.onCancel} data-testid="branch-cancel">計算をキャンセル</button>}
       <span className="note"> {mode==='INTEGRATED_EXPERIMENTAL'
         ?`初期入力例：${personName(INTEGRATED_PLAY_DEFAULTS.pair[0])}と${personName(INTEGRATED_PLAY_DEFAULTS.pair[1])}、${INTEGRATED_PLAY_DEFAULTS.year}年、${INTEGRATED_PLAY_DEFAULTS.signedDelta}、${INTEGRATED_PLAY_DEFAULTS.durationYears}年間（seed ${INTEGRATED_PLAY_DEFAULTS.seed}）。`
         :`例：${personName(PLAY_DEMO_PAIR[0])}と${personName(PLAY_DEMO_PAIR[1])}、${mode==='ORDINARY_LAW'?'1250':'1260'}年、+20、5年。`}出生・相続・委任は実計算の結果次第です。</span>
     </form>
+    {activeSet&&yearOk&&!personsOk&&<p role="status" className="missing" data-testid="branch-person-invalid">選択中の人物は{year}年初のA0に存在しない（または直接介入できない）ため、再計算できません。表示された候補から選び直してください。</p>}
     {!valid&&<p role="status" className="missing" data-testid="branch-invalid">seed、介入年、相異なる2人、0以外の補正値、1350年を超えない期間を指定してください。</p>}
     {p.running&&<p role="status" className="note" data-testid="branch-running">
       計算中です（経過 {p.running.elapsedSec}秒）。完了までの目安は測れないため表示しません。この間も年表・地図の閲覧など他の操作ができます。
