@@ -4,7 +4,7 @@ export type { EvaluationContext, EvaluatorDiagnostic, EvaluatorMap, RuleEvaluato
 export { eventIdOf, semanticEventKeyOf, traceIdOf } from './ids.ts'
 export { RULE_SCHEDULE } from './schedule.ts'
 export { runTimeline } from './timeline.ts'
-export type { TimelineOptions } from './timeline.ts'
+export type { TimelineOptions, YearProgress } from './timeline.ts'
 export { runYear } from './year.ts'
 export type {
   AutonomousHistory,

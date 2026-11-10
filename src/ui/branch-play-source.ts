@@ -17,11 +17,13 @@ import type { Branch } from '../simulation/branching/index.ts'
 import type { EventLogEntry, Id, StatModifier, WorldState } from '../simulation/contracts/index.ts'
 import { GOAL_YEAR, PAIR_TRUST_STAT_KEY, START_YEAR, STAT_MODIFIER_RULE_VERSION } from '../simulation/contracts/index.ts'
 import { runTimeline } from '../simulation/engine/index.ts'
-import type { EvaluatorMap, TimelineResult } from '../simulation/engine/index.ts'
+import type { EvaluatorMap, TimelineResult, YearProgress } from '../simulation/engine/index.ts'
 import { normalizePersonPair } from '../simulation/intervention/index.ts'
 import type { MarriageApprovalEvidence } from '../simulation/rules/a/index.ts'
 import { EXPERIMENTAL_TUNING } from '../simulation/tuning.ts'
 import type { TimelineRun } from './timeline-source.ts'
+import type { ProgressBranch, ProgressObserver } from './play-progress.ts'
+export type { PlayProgress, ProgressObserver } from './play-progress.ts'
 import { compareTraces } from './trace-correspondence.ts'
 import type { TraceDelta, TraceSummary } from './trace-correspondence.ts'
 export type { TraceDelta, TraceSummary } from './trace-correspondence.ts'
@@ -166,6 +168,12 @@ function asTimelineRun(branch:Branch,parent:TimelineRun,mode:PlayMode):TimelineR
     initialWorld:parent.initialWorld,result,
   }
 }
+/** エンジンの確定済み年次通知を、枝を明示した小さなDTOへ変換する（観測専用）。 */
+const progressHook=(branch:ProgressBranch,observer:ProgressObserver|undefined)=>observer
+  ?{onYearCommitted:(p:YearProgress)=>observer({
+    branch,startYear:p.startYear,goalYear:p.goalYear,confirmedYear:p.confirmedYear,
+    transitionsDone:p.transitionsDone,transitionsTotal:p.transitionsTotal,eventCount:p.eventCount,
+  })}:{}
 type IntegratedSetup=ReturnType<typeof createExperimentalIntegratedTimelineOptions>
 type RootContext=Readonly<{
   seed:number;mode:PlayMode;initial:WorldState
@@ -199,14 +207,14 @@ function prepareRoot(seed:number,mode:PlayMode):Readonly<{ok:true;context:RootCo
   return {ok:true,context:{seed,mode,initial,legal,ordinaryTrial}}
 }
 /** A0の評価器生成と年次実行。例外は呼び出し側のtry/catchで扱う。 */
-function runRootTimeline(c:RootContext):
+function runRootTimeline(c:RootContext,observer?:ProgressObserver):
   Readonly<{ok:true;timeline:TimelineResult;evaluators:EvaluatorMap;a0:TimelineRun}>|Failure{
   const evaluators=c.integrated?c.integrated.options.evaluators
     :createEvaluators(c.initial,[],c.legal!.book,c.mode,c.ordinaryTrial)
   const timeline=c.integrated
-    ? runTimeline(c.initial,{...c.integrated.options,seed:c.seed})
+    ? runTimeline(c.initial,{...c.integrated.options,seed:c.seed,...progressHook('A0',observer)})
     : runTimeline(c.initial,{seed:c.seed,branchId:'A0-play',evaluators,
-      goal:c.legal!.goal,technicalGoalEvaluation:true})
+      goal:c.legal!.goal,technicalGoalEvaluation:true,...progressHook('A0',observer)})
   if(timeline.status!=='COMPLETED')
     return {ok:false,code:'A0_HALTED',message:JSON.stringify(timeline.halt)}
   return {ok:true,timeline,evaluators,a0:{
@@ -220,7 +228,7 @@ function forkEvaluators(c:RootContext,state:WorldState,ledger:readonly StatModif
     :createEvaluators(state,ledger,c.legal!.book,c.mode,c.ordinaryTrial)
 }
 /** 決定的再計算の本物の結果だけ返す。停止時は部分結果を表示用「成功」と扱わない。 */
-export function runPlayComparison(input:PlayInput):PlayResult{
+export function runPlayComparison(input:PlayInput,observer?:ProgressObserver):PlayResult{
   const mode=input.mode??PLAY_DEFAULT_MODE
   if(mode!=='FIXED_APPROVAL'&&mode!=='ORDINARY_LAW'&&mode!=='INTEGRATED_EXPERIMENTAL')return reject('INVALID_MODE','試験用法制モードが不正です')
   if(!Number.isSafeInteger(input.seed)||input.seed<0)return reject('INVALID_SEED','seedは0以上の安全整数が必要です')
@@ -243,7 +251,7 @@ export function runPlayComparison(input:PlayInput):PlayResult{
     decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
   }
   try{
-    const rootRun=runRootTimeline(prep.context)
+    const rootRun=runRootTimeline(prep.context,observer)
     if(!rootRun.ok)return reject(rootRun.code,rootRun.message)
     const {timeline,evaluators:rootEvaluators,a0}=rootRun
     const root=createRootBranch(timeline,[],rootEvaluators)
@@ -256,6 +264,7 @@ export function runPlayComparison(input:PlayInput):PlayResult{
     const rerun=forkHistory({
       parent:root.branch,branchId:'A1-play',forkYear:input.year,
       modifiers:[modifier],
+      ...progressHook('A1',observer),
       evaluatorsFor:({ledger})=>forkEvaluators(prep.context,forkState,ledger),
     })
     if(!rerun.ok)return reject('FORK_REJECTED',rerun.code+':'+rerun.message)

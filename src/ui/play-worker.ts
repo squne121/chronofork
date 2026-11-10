@@ -6,10 +6,12 @@ import { toDisplayView } from './play-view.ts'
 import { runPlayCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
 import type { PlayMode } from './branch-play-source.ts'
+import type { PlayProgress } from './play-progress.ts'
 
 /** 比較の再計算(input)か、人物選択用のA0候補の取得(candidates)。候補は必要な人物情報だけを返す。 */
 export type WorkerRequest=Readonly<{input:PlayInput}>|Readonly<{candidates:Readonly<{seed:number;mode:PlayMode}>}>
 export type WorkerResponse=
+  | Readonly<{kind:'PROGRESS';progress:PlayProgress}>
   | Readonly<{ok:true;candidates:PlayCandidateSet;computeMs:number}>
   | Readonly<{ok:true;view:PlayView;computeMs:number;viewMs:number}>
   | Readonly<{ok:false;code:string;message:string;computeMs:number}>
@@ -28,7 +30,8 @@ ctx.onmessage=e=>{
       ctx.postMessage(c.ok?{ok:true,candidates:c.set,computeMs}:{ok:false,code:c.code,message:c.message,computeMs})
       return
     }
-    const r=runPlayComparison(e.data.input)
+    // 進捗は小さなDTOだけを送る。WorldState・ログは最終結果まで送らない。
+    const r=runPlayComparison(e.data.input,progress=>ctx.postMessage({kind:'PROGRESS',progress}))
     const computeMs=performance.now()-t0
     if(!r.ok)response={ok:false,code:r.code,message:r.message,computeMs}
     else{

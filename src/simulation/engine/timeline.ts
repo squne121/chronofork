@@ -11,7 +11,33 @@ import { cloneData } from './reducer/canonical.ts'
 import type { AutonomousHistory, RuleCoverage, RunHalt, RunOptions, TimelineResult } from './types.ts'
 import { deepFreeze, runYear } from './year.ts'
 
+/**
+ * 確定済みの年次進捗（観測専用）。runYear が成功し、年を跨ぐ ID 重複検査を通過して
+ * snapshot に積まれた「後」にだけ通知される。未確定の未来・残り時間は含まない。
+ */
+export type YearProgress = Readonly<{
+  branchId: string
+  /** 区間の開始年（初期 WorldState の年）。 */
+  startYear: number
+  /** 区間の終了年（常に GOAL_YEAR）。 */
+  goalYear: number
+  /** 今回確定した遷移の年（この年の処理が完了した）。 */
+  committedYear: number
+  /** 確定した年初 snapshot の年（committedYear + 1）。ここまでが確定済み。 */
+  confirmedYear: number
+  /** 確定済みの遷移数 / この区間の遷移総数。 */
+  transitionsDone: number
+  transitionsTotal: number
+  /** 確定済み区間で実際に記録された EventLog 件数の累計。 */
+  eventCount: number
+}>
+
 export type TimelineOptions = RunOptions & Readonly<{
+  /**
+   * 観測用の任意 hook。結果・乱数・戻り値に影響しない（例外は握りつぶし、計算を止めない）。
+   * 未指定時の挙動は従来と完全に同一。
+   */
+  onYearCommitted?: (progress: YearProgress) => void
   /** 1350 年の勝利判定に必要なシナリオ側設定。無ければ判定しない。 */
   goal?: GoalOptions
   /**
@@ -95,6 +121,16 @@ export function runTimeline(initial: WorldState, options: TimelineOptions): Time
     decisionTraces.push(...r.traces)
     world = r.world
     snapshots.push(world)
+    if (options.onYearCommitted) {
+      try {
+        options.onYearCommitted({
+          branchId: base.branchId, startYear: initial.year, goalYear: GOAL_YEAR,
+          committedYear: r.year, confirmedYear: world.year,
+          transitionsDone: snapshots.length - 1, transitionsTotal: GOAL_YEAR - initial.year,
+          eventCount: eventLog.length,
+        })
+      } catch { /* 観測者の失敗で歴史計算を変えない */ }
+    }
   }
 
   // 1350 年は評価専用: フェーズ①〜⑦を実行せず、勝敗だけを既存の evaluateGoal で判定する。
