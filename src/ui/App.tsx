@@ -60,7 +60,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const [obsError,setObsError]=useState<{code:string;message:string}>()
   const [obsProgress,setObsProgress]=useState<PlayProgress>()
   const [obsTarget,setObsTarget]=useState<{year:number;personId:string;seed:number;token:number}>()
-  const obsRef=useRef<ObservationHandle>()
+  const obsRef=useRef<ObservationHandle|undefined>(undefined)
   const obsToken=useRef(0)
   // 人物選択用のA0候補（明示操作で取得）。seed・モードを持ち、条件が変わると使われない。
   const [candidateSet, setCandidateSet] = useState<PlayCandidateSet | undefined>(undefined)
