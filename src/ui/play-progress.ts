@@ -1,7 +1,7 @@
 // 再計算の確定済み年次進捗。Workerから送る小さなDTOだけを定義する（WorldState・全ログは含めない）。
 // 未確定の未来・推測した残り時間・架空のEventは持たない。
 
-export type ProgressBranch = 'A0' | 'A1'
+export type ProgressBranch = 'A0' | 'A1' | 'A2'
 
 /** 確定済みの年次進捗。A0とA1は branch で区別する。 */
 export type PlayProgress = Readonly<{
@@ -31,9 +31,9 @@ export function acceptProgress(prev: PlayProgress | undefined, next: PlayProgres
 }
 
 /** A0→A1 の順に実行される。最新の通知を枝ごとに保持する。 */
-export type ProgressState = Readonly<{ a0?: PlayProgress; a1?: PlayProgress }>
+export type ProgressState = Readonly<{ a0?: PlayProgress; a1?: PlayProgress; a2?: PlayProgress }>
 export function reduceProgress(s: ProgressState, p: PlayProgress): ProgressState {
-  const prev = p.branch === 'A0' ? s.a0 : s.a1
+  const prev = p.branch === 'A0' ? s.a0 : p.branch === 'A1' ? s.a1 : s.a2
   if (!acceptProgress(prev, p)) return s
-  return p.branch === 'A0' ? { ...s, a0: p } : { ...s, a1: p }
+  return p.branch === 'A0' ? { ...s, a0: p } : p.branch === 'A1' ? { ...s, a1: p } : { ...s, a2: p }
 }
