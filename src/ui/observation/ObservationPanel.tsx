@@ -53,6 +53,17 @@ export function ObservationPanel(p:Props){
   const chosenEvent=v?.events.find(x=>x.eventId===eventId)
   const chosenTrace=v?.traces.find(x=>x.traceId===traceId)
   const title=v?.world.titles.find(x=>x.titleId===selectedTitle)
+  // 実stateChangeにTitle IDがあるEvent、または根拠付きAssociationだけを関連として表示する。
+  const titleEvidenceIds=new Set((associations?.confirmed??[])
+    .filter(a=>a.titleId===selectedTitle&&a.source.type==='EVENT')
+    .map(a=>a.source.type==='EVENT'?a.source.eventId:''))
+  const titlePrefix=title?'$.titles['+title.titleId+']':''
+  const titleEvents=title?(v?.events??[]).filter(e=>titleEvidenceIds.has(e.eventId)||
+    e.stateChanges.some(c=>c.path===titlePrefix||c.path.startsWith(titlePrefix+'.'))):[]
+  const titleTraces=title?(v?.traces??[]).filter(t=>
+    titleEvents.some(e=>e.sourceTraceIds.includes(t.traceId)&&t.eventIds.includes(e.eventId))):[]
+  const openTitleEvent=(id:string)=>{setEventId(id);setTraceId('');setEventType('ALL');setRelatedOnly(false)}
+  const openTitleTrace=(id:string)=>{setTraceId(id);setEventId('');setTraceFilter('ALL');setRelatedOnly(false)}
   const goal=v?.technicalGoal
   const assessments=(goal?.status==='NOT_ACHIEVED'||goal?.status==='ACHIEVED')?goal.assessments:[]
   const yearChange=(y:number)=>{
@@ -172,10 +183,28 @@ export function ObservationPanel(p:Props){
             </select>
           </label>
           {person&&<FamilyTree world={v.world} personId={person} onSelectPerson={setSelectedPerson} onSelectTitle={setSelectedTitle}/>}
+          <label>調べるTitle（選択年初の記録）
+            <select data-testid="obs-title-select" value={title?.titleId??''} onChange={e=>setSelectedTitle(e.target.value)}>
+              <option value="">選択してください</option>
+              {v.world.titles.map(t=><option key={t.titleId} value={t.titleId}>{t.titleId}</option>)}
+            </select>
+          </label>
           {title&&<div data-testid="obs-title-detail">
             <h4>選択したTitle：{title.titleId}</h4>
             <p>種類：{title.kind}／有効：{title.valid?'はい':'いいえ'}／承認：{title.recognition.status}</p>
-            <p>保持と合法的な王朝存続判定は別の条件です。1350年のTitle別技術判定を参照してください。</p>
+            <p>保持と合法的な王朝存続判定は別の条件です。上段の1350年技術判定と、以下の選択年の実記録を区別してください。</p>
+            <p className="note">Title IDへの直接の根拠があるEvent {titleEvents.length}件、双方向参照が一致するTrace {titleTraces.length}件。</p>
+            {titleEvents.length===0&&<p className="note">この年の記録では直接の変化・関連を確認できません。何も起きなかったとは断定しません。</p>}
+            {titleEvents.length>0&&<ul>{titleEvents.map(e=><li key={e.eventId}>
+              <button type="button" data-testid="obs-title-event-link" onClick={()=>openTitleEvent(e.eventId)}>
+                {e.year}年 {labelOf(e.eventType)}（Event）
+              </button>
+            </li>)}</ul>}
+            {titleTraces.length>0&&<ul>{titleTraces.map(t=><li key={t.traceId}>
+              <button type="button" data-testid="obs-title-trace-link" onClick={()=>openTitleTrace(t.traceId)}>
+                {t.ruleId}・{t.status}（DecisionTrace）
+              </button>
+            </li>)}</ul>}
           </div>}
           {person&&v.year<1350&&persons.find(x=>x.personId===person)?.interactionRole!=='SUPPORTING'&&
             <button type="button" className="cta" data-testid="obs-to-intervention" onClick={()=>p.onIntervene(v.year,person)}>
