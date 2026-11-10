@@ -17,6 +17,8 @@ export type WorkerResponse=
   | Readonly<{kind:'A0_REUSED'}>
   | Readonly<{ok:true;candidates:PlayCandidateSet;computeMs:number}>
   | Readonly<{ok:true;view:PlayView;computeMs:number;viewMs:number}>
+  /** 既存A0/A1はブラウザに表示済み。第2介入時にはA1/A2差分だけを返し、重複した履歴の巨大転送を避ける。 */
+  | Readonly<{ok:true;secondView:PlayView;a0Source:'COMPUTED'|'REUSED';computeMs:number;viewMs:number}>
   | Readonly<{ok:false;code:string;message:string;computeMs:number}>
 
 const ctx=self as unknown as {
@@ -42,8 +44,14 @@ ctx.onmessage=e=>{
     if(!r.ok)response={ok:false,code:r.code,message:r.message,computeMs}
     else{
       const t1=performance.now()
-      const view=toDisplayView(r.comparison)
-      response={ok:true,view,computeMs,viewMs:performance.now()-t1}
+      if(e.data.input.second){
+        const second=r.comparison.second
+        if(!second) response={ok:false,code:'A2_MISSING',message:'第2介入の計算結果がありません',computeMs}
+        else response={ok:true,secondView:toDisplayView(second),a0Source:r.comparison.a0Source??'COMPUTED',
+          computeMs,viewMs:performance.now()-t1}
+      }else{
+        response={ok:true,view:toDisplayView(r.comparison),computeMs,viewMs:performance.now()-t1}
+      }
     }
   }catch(error){
     a0Cache.clear() // 失敗の原因が保持物に由来しないと言えないので捨てて再計算に倒す

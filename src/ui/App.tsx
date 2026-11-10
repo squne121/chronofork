@@ -28,6 +28,13 @@ import {
 } from './timeline-source.ts'
 import type { TimelineRun } from './timeline-source.ts'
 
+/** A2のWorker結果を表示中のA0/A1へ接続してよいのは、全て同じ第1介入に基づくときだけ。 */
+function sameFirstIntervention(a:PlayInput,b:PlayInput):boolean{
+  return a.seed===b.seed&&(a.mode??'FIXED_APPROVAL')===(b.mode??'FIXED_APPROVAL')&&
+    a.year===b.year&&a.firstPersonId===b.firstPersonId&&a.secondPersonId===b.secondPersonId&&
+    a.signedDelta===b.signedDelta&&a.durationYears===b.durationYears
+}
+
 function Unconnected({ children }: { children: string }) {
   return <span className="badge badge-off">未接続: {children}</span>
 }
@@ -56,7 +63,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const candTokenRef = useRef(0)
   const candHandleRef = useRef<CandidatesRunHandle | undefined>(undefined)
   const [playError, setPlayError] = useState<{code:string;message:string} | undefined>(undefined)
-  const [activeBranch, setActiveBranch] = useState<BranchChoice>('A1')
+  const [activeBranch, setActiveBranch] = useState<BranchChoice|'A2'>('A1')
   const { result } = run
   const history = useMemo(() => indexHistory(result), [result])
 
@@ -178,8 +185,8 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const applyView = (c:PlayView, input:PlayInput) => {
     setPlayError(undefined)
     setComparison(c)
-    setActiveBranch('A1')
-    setRun(c.a1)
+    setActiveBranch(c.second?'A2':'A1')
+    setRun(c.second?c.second.a1:c.a1)
     setYear(input.year)
     setScope('year')
     setTargetKey('')
@@ -218,13 +225,23 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
         if (o.kind === 'CANCELLED') { setProgressEnd('CANCELLED'); setNotice('計算を中断しました。表示中の結果は変わっていません。'); return }
         if (o.kind === 'FAILED') { setProgressEnd('FAILED'); setPlayError({ code: o.code, message: o.message }); return }
         if (!o.result.ok) {
-          setProgressEnd(/^A[01]_HALTED$/.test(o.result.code) ? 'HALTED' : 'FAILED')
+          setProgressEnd(/^A[012]_HALTED$/.test(o.result.code) ? 'HALTED' : 'FAILED')
           setPlayError({ code: o.result.code, message: o.result.message })
+          return
+        }
+        const view='secondView' in o.result
+          ?comparison&&sameFirstIntervention(comparison.input,input)
+            ?{...comparison,second:o.result.secondView,a0Source:o.result.a0Source}
+            :undefined
+          :o.result.view
+        if(!view){
+          setProgressEnd('FAILED')
+          setPlayError({code:'A2_PARENT_MISMATCH',message:'前回のA1と第2介入の条件が一致しません'})
           return
         }
         clearProgress()
         setCalc({ computeMs: o.computeMs, wallMs: Date.now() - started })
-        applyView(o.result.view, input)
+        applyView(view,input)
       })
       return
     }
@@ -240,10 +257,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     setProgressEnd('CANCELLED')
     setNotice('計算をキャンセルしました。表示中の結果は変わっていません。')
   }
-  const switchBranch = (choice:BranchChoice) => {
-    if (!comparison) return
+  const switchBranch = (choice:BranchChoice|'A2') => {
+    if (!comparison || (choice==='A2'&&!comparison.second)) return
     setActiveBranch(choice)
-    setRun(choice==='A0'?comparison.a0:comparison.a1)
+    setRun(choice==='A0'?comparison.a0:choice==='A1'?comparison.a1:comparison.second!.a1)
     setTargetKey('')
     setEventId(undefined)
     setTraceId(undefined)
@@ -295,7 +312,9 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const allEvents = scope === 'all' ? result.eventLog : eventsOfYear(result, year)
   const shown = targetKey ? allEvents.filter((e) => involves(e, targetKey)) : allEvents
 
-  const branchLabel = comparison ? (activeBranch === 'A0' ? 'A0（介入なしの歴史）' : 'A1（介入ありの歴史）') : '原史（試験計算）'
+  const branchLabel = comparison
+    ?activeBranch==='A0'?'A0（介入なしの歴史）':activeBranch==='A1'?'A1（第1介入の歴史）':'A2（第2介入までの歴史）'
+    :'原史（試験計算）'
   return (
     <div className="app">
       <header className="topbar">
@@ -318,7 +337,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           </div>
         </dl>
         <p className="lead" data-testid="trial-guide">
-          この試験版でできること: 2人の人物の信頼に介入して再計算し、同じ年の「介入なし(A0)」と「介入あり(A1)」を比べ、婚姻や出生がなぜ変わったかをEventと判断根拠で確認できます。正式な歴史・勝敗はまだ評価できません。
+          この試験版でできること: 人物間信頼へ介入してA1を作り、同年の別ペアへ追加介入してA2まで再計算できます。A0/A1/A2の実Eventと判断根拠を観測します。正式な歴史・勝敗はまだ評価できません。
         </p>
       </header>
 
@@ -400,8 +419,8 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           <section aria-labelledby="reserved-heading" className="panel">
             <h2 id="reserved-heading">未実装の機能</h2>
             <ul className="reserved" data-testid="reserved-areas">
-              <li>介入・2枝比較: <span className="badge badge-off">試験版で接続済み（CALIBRATION_ONLY）</span></li>
-              <li>保存・3枝以上の比較: <Unconnected>未実装</Unconnected></li>
+              <li>介入・A0/A1/A2の3枝比較: <span className="badge badge-off">試験版で接続済み（CALIBRATION_ONLY）</span></li>
+              <li>保存・A3以降の介入: <Unconnected>未実装</Unconnected></li>
               <li>人物・法制の正式自律判断: <Unconnected>未承認</Unconnected></li>
             </ul>
           </section>

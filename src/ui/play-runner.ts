@@ -9,7 +9,7 @@ import type { PlayMode } from './branch-play-source.ts'
 import type { ProgressObserver } from './play-progress.ts'
 
 export type PlayOutcome=
-  | Readonly<{kind:'DONE';result:Readonly<{ok:true;view:PlayView}>|Extract<PlayResult,{ok:false}>;computeMs:number}>
+  | Readonly<{kind:'DONE';result:Readonly<{ok:true;view:PlayView}>|Readonly<{ok:true;secondView:PlayView;a0Source:'COMPUTED'|'REUSED'}>|Extract<PlayResult,{ok:false}>;computeMs:number}>
   | Readonly<{kind:'CANCELLED'}>
   | Readonly<{kind:'FAILED';code:string;message:string}>
 export type PlayRunHandle=Readonly<{promise:Promise<PlayOutcome>;cancel:()=>void}>
@@ -85,9 +85,10 @@ export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
           if(m.kind==='PROGRESS')onProgress?.(m.progress);else hooks?.onA0Reused?.()
           return
         }
-        if(m.ok&&!('view' in m)){settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'想定外の応答です'});return}
+        if(m.ok&&!('view' in m)&&!('secondView' in m)){settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'想定外の応答です'});return}
         settle({kind:'DONE',computeMs:m.computeMs,
-          result:m.ok?{ok:true,view:m.view}:{ok:false,code:m.code,message:m.message}})
+          result:m.ok?'view' in m?{ok:true,view:m.view}:{ok:true,secondView:m.secondView,a0Source:m.a0Source}
+            :{ok:false,code:m.code,message:m.message}})
       }
       w.onerror=e=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_ERROR',message:e.message||'Workerで未捕捉のエラーが発生しました'})
       w.onmessageerror=()=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'計算結果をWorkerから受け取れませんでした'})

@@ -76,8 +76,17 @@ export type PlayInput=Readonly<{
   secondPersonId:Id
   signedDelta:number
   durationYears:number
+  /** 2回目は第1介入と同じ年に限る（別のペア）。A2をforkHistoryで作る。 */
+  second?:SecondPlayInput
 }>
 export type BranchChoice='A0'|'A1'
+/** A1の同年・別ペアへ追加する第2介入。既存MVPのpair.trustだけを対象とする。 */
+export type SecondPlayInput=Readonly<{
+  firstPersonId:Id
+  secondPersonId:Id
+  signedDelta:number
+  durationYears:number
+}>
 /**
  * ブラウザへ転送する表示用ビューが、完全な結果から省略した件数。
  * 省略はA0/A1で完全に同一かつ相互参照が閉じている高頻度の信頼更新(PERSON_PAIR_TRUST_SET / B-009)に限る。
@@ -97,10 +106,12 @@ export type PlayView=Readonly<{
   a1:TimelineRun
   /** 転送用ビューのときだけ付く。無ければ完全な結果。 */
   displayOmission?:DisplayOmission
-  /** A0を今回計算したか、保存済みを再利用したか。キャッシュ非対応の経路では常にCOMPUTED。 */
+  /** 存在時はa0=A1、a1=A2の差分ビュー。UI上の出典を混同しない。 */
+  second?:PlayView
+  /** A0を今回計算したか、保存済みを再利用したか。 */
   a0Source?:A0Source
 }>
-export type PlayComparison=PlayView&Readonly<{root:Branch;branch:Branch}>
+export type PlayComparison=PlayView&Readonly<{root:Branch;branch:Branch;second?:PlayComparison}>
 export type PlayResult=
   | Readonly<{ok:true;comparison:PlayComparison}>
   | Readonly<{ok:false;code:string;message:string}>
@@ -263,6 +274,18 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,opt
     return reject('INVALID_DURATION','期間は1年以上、1350年を超えない整数が必要です')
   const pair=normalizePersonPair(input.firstPersonId,input.secondPersonId)
   if(pair===null)return reject('INVALID_PERSON_PAIR','異なる2人の人物を選択してください')
+  const followup=input.second
+  const secondPair=followup?normalizePersonPair(followup.firstPersonId,followup.secondPersonId):null
+  if(followup&&secondPair===null)return reject('INVALID_PERSON_PAIR','第2介入も異なる2人の人物を選択してください')
+  if(followup&&(
+    !Number.isSafeInteger(followup.signedDelta)||followup.signedDelta===0||Math.abs(followup.signedDelta)>200))
+    return reject('INVALID_DELTA','第2介入の信頼補正は0以外・絶対値200以下の整数が必要です')
+  if(followup&&(
+    !Number.isSafeInteger(followup.durationYears)||followup.durationYears<1||
+    input.year+followup.durationYears>GOAL_YEAR))
+    return reject('INVALID_DURATION','第2介入の期間は1年以上、1350年を超えない整数が必要です')
+  if(secondPair&&pair[0]===secondPair[0]&&pair[1]===secondPair[1])
+    return reject('DUPLICATE_INTERVENTION','同年・同対象・同一statKeyへの重複介入は禁止されています')
   const prep=prepareRoot(input.seed,mode)
   if(!prep.ok)return reject(prep.code,prep.message)
   const modifier:StatModifier={
@@ -305,7 +328,40 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,opt
     if(!rerun.ok)return reject('FORK_REJECTED',rerun.code+':'+rerun.message)
     if(rerun.branch.status!=='COMPLETED')return reject('A1_HALTED',JSON.stringify(rerun.branch.halt))
     const a1=asTimelineRun(rerun.branch,a0,mode)
-    return {ok:true,comparison:{mode,input,modifier,root,branch:rerun.branch,a0,a1,a0Source}}
+    if(!followup||!secondPair)
+      return {ok:true,comparison:{mode,input,modifier,root,branch:rerun.branch,a0,a1,a0Source}}
+    const secondForkWorld=rerun.branch.snapshots[input.year-rerun.branch.startYear]
+    if(!secondForkWorld)return reject('INVALID_YEAR','A1の再介入年WorldStateが計算されていません')
+    const secondIssue=interventionTargetIssue(secondForkWorld,secondPair)
+    if(secondIssue)return reject(secondIssue.code,secondIssue.message)
+    const secondModifier:StatModifier={
+      modifierId:'ui:modifier:'+JSON.stringify([input.year,secondPair,followup.signedDelta,followup.durationYears]),
+      interventionId:'ui:intervention:'+JSON.stringify([input.year,secondPair]),
+      targetRef:{kind:'PERSON_PAIR',ids:secondPair},statKey:PAIR_TRUST_STAT_KEY,
+      signedDelta:followup.signedDelta,startYear:input.year,
+      endExclusiveYear:input.year+followup.durationYears,
+      decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
+    }
+    // 2回目の介入は必ずA1を親にし、同年の別対象modifierを保持する。
+    const secondFork=forkHistory({
+      parent:rerun.branch,branchId:'A2-play',forkYear:input.year,
+      modifiers:[secondModifier],
+      ...progressHook('A2',observer),
+      evaluatorsFor:({ledger})=>forkEvaluators(prep.context,secondForkWorld,ledger),
+    })
+    if(!secondFork.ok)return reject('A2_FORK_REJECTED',secondFork.code+':'+secondFork.message)
+    if(secondFork.branch.status!=='COMPLETED')return reject('A2_HALTED',JSON.stringify(secondFork.branch.halt))
+    const a2=asTimelineRun(secondFork.branch,a1,mode)
+    const secondInput:PlayInput={
+      seed:input.seed,mode,year:input.year,firstPersonId:followup.firstPersonId,
+      secondPersonId:followup.secondPersonId,signedDelta:followup.signedDelta,
+      durationYears:followup.durationYears,
+    }
+    const second:PlayComparison={
+      mode,input:secondInput,modifier:secondModifier,root:rerun.branch,branch:secondFork.branch,
+      a0:a1,a1:a2,
+    }
+    return {ok:true,comparison:{mode,input,modifier,root,branch:rerun.branch,a0,a1,a0Source,second}}
   }catch(error){
     return reject('CALCULATION_EXCEPTION',error instanceof Error?error.message:String(error))
   }
