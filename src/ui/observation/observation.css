@@ -1,0 +1,26 @@
+/* UX114 A中心：既存の開発用UIとは独立して原史A0を主導線に置く。 */
+.obs-main { grid-column: 1 / -1; min-width: 0; }
+.obs { display:flex; flex-direction:column; gap:0.75rem; }
+.obs-head {display:flex; justify-content:space-between; align-items:start; flex-wrap:wrap; gap:0.6rem;}
+.obs-head .cta, .obs-person .cta { background:#e7f1ff; border:1px solid var(--accent); border-radius:4px; padding:0.5rem; }
+.obs-year-nav {display:grid; gap:0.35rem; padding:0.5rem; border:1px solid var(--line); border-radius:5px;}
+.obs-year-nav input {width:100%;}
+.obs-year-controls {display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;}
+.obs-year-controls button, .obs-year-jumps button, .obs-related-links button {padding:0.2rem 0.4rem; border:1px solid var(--line); background:white; border-radius:4px;}
+.obs-year-jumps {display:grid; grid-template-columns:repeat(auto-fill,minmax(9rem,1fr));gap:0.2rem;max-height:13rem;overflow:auto;}
+.obs-year-jumps button[aria-current] {border-color:var(--accent);font-weight:700;}
+.obs-goal {padding:0.5rem; background:#f1f8ff; border:1px solid #b6d4f0; border-radius:5px;}
+.obs-goal h3 {margin-top:0;}
+.obs-two-col {display:grid; grid-template-columns:minmax(0, 7fr) minmax(17rem, 4fr); gap:1rem;}
+.obs-timeline,.obs-person {min-width:0;}
+.obs-timeline label,.obs-person label {display:flex; flex-direction:column;gap:0.2rem; margin:0.35rem 0;}
+.obs-timeline select,.obs-person select {min-width:0;max-width:100%;padding:0.25rem;}
+.obs-timeline .obs-check {flex-direction:row; align-items:center;}
+.obs-record-list {display:grid; gap:0.2rem;max-height:18rem; overflow:auto; padding-left:1.3rem;}
+.obs-record-list button {border:1px solid transparent; background:transparent;color:var(--accent);text-align:left;cursor:pointer;overflow-wrap:anywhere;}
+.obs-record-list button[aria-pressed="true"]{border-color:var(--accent);background:#e7f1ff;}
+.obs-record-detail {min-width:0;border:1px solid var(--line);padding:0.5rem;overflow-wrap:anywhere;}
+.obs-record-detail pre {max-height:18rem;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:0.8rem;}
+.obs-related-links {display:flex;flex-wrap:wrap;gap:0.25rem;}
+.obs-person {border-left:1px solid var(--line);padding-left:0.8rem;}
+@media(max-width:1050px){.obs-two-col{grid-template-columns:1fr}.obs-person{border-left:0;border-top:1px solid var(--line);padding:0.5rem 0 0}}

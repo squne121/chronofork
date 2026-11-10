@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ObservationPanel } from './observation/ObservationPanel.tsx'
+import { extractCandidates } from './play-candidates.ts'
+import { INTEGRATED_PLAY_DEFAULTS } from './branch-play-source.ts'
+import type { ObservationSlice } from './branch-play-source.ts'
+import type { ObservationHandle } from './play-runner.ts'
+import type { PlayProgress } from './play-progress.ts'
 import { HistoryPanel, involves } from './HistoryPanel.tsx'
 import { InterventionComparePanel } from './InterventionComparePanel.tsx'
 import { runPlayComparison } from './branch-play-source.ts'
@@ -49,6 +55,13 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const tokenRef = useRef(0)
   const handleRef = useRef<PlayRunHandle | undefined>(undefined)
   const [a0Reused, setA0Reused] = useState(false)
+  const [observation,setObservation]=useState<ObservationSlice>()
+  const [obsLoading,setObsLoading]=useState(false)
+  const [obsError,setObsError]=useState<{code:string;message:string}>()
+  const [obsProgress,setObsProgress]=useState<PlayProgress>()
+  const [obsTarget,setObsTarget]=useState<{year:number;personId:string;seed:number;token:number}>()
+  const obsRef=useRef<ObservationHandle>()
+  const obsToken=useRef(0)
   // 人物選択用のA0候補（明示操作で取得）。seed・モードを持ち、条件が変わると使われない。
   const [candidateSet, setCandidateSet] = useState<PlayCandidateSet | undefined>(undefined)
   const [fetchingCandidates, setFetchingCandidates] = useState(false)
@@ -118,10 +131,58 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   useEffect(() => () => {
     tokenRef.current++
     handleRef.current?.cancel()
+    obsToken.current++
+    obsRef.current?.cancel()
     playRunner.reset?.() // 保持中のA0とWorkerを破棄する
     candTokenRef.current++
     candHandleRef.current?.cancel()
   }, [playRunner])
+  const cancelObservation=()=>{
+    obsToken.current++
+    obsRef.current?.cancel()
+    obsRef.current=undefined
+    setObsLoading(false)
+    setObsProgress(undefined)
+  }
+  const loadObservation=(year:number)=>{
+    if(obsRef.current||handleRef.current||candHandleRef.current){
+      setObsError({code:'RUN_IN_PROGRESS',message:'進行中の計算が終了してから観測してください'})
+      return
+    }
+    if(!playRunner.observe){
+      setObsError({code:'WORKER_UNAVAILABLE',message:'この実行経路には原史の非同期観測がありません'})
+      return
+    }
+    const seed=INTEGRATED_PLAY_DEFAULTS.seed
+    const token=++obsToken.current
+    setObsLoading(true)
+    setObsProgress(undefined)
+    setObsError(undefined)
+    const handle=playRunner.observe({seed,mode:'INTEGRATED_EXPERIMENTAL',year},
+      progress=>{if(token===obsToken.current&&progress.branch==='A0')setObsProgress(progress)})
+    obsRef.current=handle
+    void handle.promise.then(o=>{
+      if(token!==obsToken.current)return
+      obsRef.current=undefined
+      setObsLoading(false)
+      setObsProgress(undefined)
+      if(o.kind==='CANCELLED'){setObsError({code:'CANCELLED',message:'計算を中断しました'});return}
+      if(o.kind==='FAILED'){setObsError({code:o.code,message:o.message});return}
+      if(!o.result.ok){setObsError({code:o.result.code,message:o.result.message});return}
+      const view=o.result.observation
+      setObservation(view)
+      setSeedText(String(view.seed))
+      // 選択年の実A0年初から、既存のCLI/GUI共通の適格性判定で候補を抽出。A0を再実行しない。
+      setCandidateSet(extractCandidates(view.seed,view.mode,[view.world]))
+    })
+  }
+  const observationToIntervene=(year:number,personId:string)=>{
+    if(!observation)return
+    setSeedText(String(observation.seed))
+    setObsTarget(old=>({year,personId,seed:observation.seed,token:(old?.token??0)+1}))
+    setNotice('観測年・人物を介入フォームへ反映しました。2人目と補正値を確認してください。')
+    setTimeout(()=>document.getElementById('branch-heading')?.scrollIntoView?.({block:'start'}),0)
+  }
   const stopCandidates = () => {
     candTokenRef.current++
     candHandleRef.current?.cancel()
@@ -163,6 +224,9 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const clearProgress = () => { setProgress({}); setProgressEnd(undefined); setA0Reused(false) }
   const rerun = () => {
     stopRunning()
+    cancelObservation()
+    setObservation(undefined)
+    setObsTarget(undefined)
     playRunner.reset?.() // 新規ゲーム/seed変更では前の世界線のA0を引き継がない
     clearProgress()
     setNotice(undefined)
@@ -189,7 +253,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   }
   const runComparison = (input:PlayInput) => {
     setNotice(undefined)
-    if (candHandleRef.current) return // 候補取得中は比較を始めない
+    if (candHandleRef.current || obsRef.current) {setPlayError({code:'RUN_IN_PROGRESS',message:'原史の観測・候補取得が終了してから介入してください'});return}
     if (input.mode !== 'INTEGRATED_EXPERIMENTAL') clearProgress()
     if (input.mode === 'INTEGRATED_EXPERIMENTAL') {
       // 100年のA0/A1はWorkerで再計算する。計算中の二重起動は無視し、古い結果は破棄する。
@@ -295,7 +359,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const allEvents = scope === 'all' ? result.eventLog : eventsOfYear(result, year)
   const shown = targetKey ? allEvents.filter((e) => involves(e, targetKey)) : allEvents
 
-  const branchLabel = comparison ? (activeBranch === 'A0' ? 'A0（介入なしの歴史）' : 'A1（介入ありの歴史）') : '原史（試験計算）'
+  const branchLabel = comparison ? (activeBranch === 'A0' ? 'A0（介入なしの歴史）' : 'A1（介入ありの歴史）') : observation ? 'A0（統合試験の原史を観測）' : '旧・試験計算'
   return (
     <div className="app">
       <header className="topbar">
@@ -306,7 +370,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
         <dl className="status-list">
           <div>
             <dt>観測中の年</dt>
-            <dd data-testid="current-year">{world.year}年（年初の状態）</dd>
+            <dd data-testid="current-year">{comparison?world.year:observation?.year??world.year}年（年初の状態）</dd>
           </div>
           <div>
             <dt>観測中の歴史</dt>
@@ -314,7 +378,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           </div>
           <div>
             <dt>1350年の正式勝敗</dt>
-            <dd data-testid="goal-status">{goalStatusLabel(result)}</dd>
+            <dd data-testid="goal-status">{observation&&!comparison?'正式な勝敗は未成立（goal=null、技術判定は原史欄に表示）':goalStatusLabel(result)}</dd>
           </div>
         </dl>
         <p className="lead" data-testid="trial-guide">
@@ -323,12 +387,17 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       </header>
 
       <main className="layout">
+        <div className="obs-main">
+          <ObservationPanel observation={observation} loading={obsLoading} progress={obsProgress} error={obsError}
+            onLoad={loadObservation} onCancel={cancelObservation} onIntervene={observationToIntervene}/>
+        </div>
         <div className="flow-col">
           <InterventionComparePanel seedText={seedText} year={year} comparison={comparison} error={playError}
             running={running ? { elapsedSec } : undefined} progress={progress} a0Reused={a0Reused} progressEnd={progressEnd} notice={notice} calc={calc} onCancel={cancelRun}
             onSeedText={setSeedText}
             candidateSet={candidateSet} fetchingCandidates={fetchingCandidates} candidateError={candidateError}
             onFetchCandidates={fetchCandidates} onCancelCandidates={() => { stopCandidates(); setNotice('人物候補の取得を中断しました。') }}
+            observationTarget={obsTarget}
             activeBranch={activeBranch} onRun={runComparison} onViewBranch={switchBranch}
             onInspectEvent={openComparisonEvent} onInspectTrace={openComparisonTrace} />
         </div>
