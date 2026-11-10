@@ -156,3 +156,57 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
     await expect(page.getByTestId('trace-detail')).toBeInViewport({ratio:0.01})
   })
 })
+
+test.describe('統合モード: 後出生KEY人物のGUI選択（Issue #104・オプトイン）', () => {
+  test.skip(!heavy, 'CHRONOFORK_E2E_INTEGRATED=1 のときだけ実行する(A0取得と再計算で各1〜数分)')
+  test.setTimeout(30 * 60_000)
+
+  test('A0の候補を取得し、1278年に1252年生まれの人物と初期人物へ介入できる', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.goto('/')
+    await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
+    // 取得前は初期人物のみ。取得中は介入の再計算が始まらず、画面は操作できる。
+    await expect(page.getByTestId('branch-person-two').locator('option', { hasText: '1252年生' })).toHaveCount(0)
+    await page.getByTestId('candidates-fetch').click()
+    await expect(page.getByTestId('candidate-status')).toContainText('取得中')
+    await expect(page.getByTestId('branch-run')).toBeDisabled()
+    await expect(page.getByTestId('candidate-status')).toContainText('A0の', { timeout: 12 * 60_000 })
+    await expect(page.getByTestId('candidate-error')).toHaveCount(0)
+
+    // 1251年には出ず、1278年に選べる。
+    await page.getByTestId('branch-fork-year').fill('1251')
+    await expect(page.getByTestId('branch-person-two').locator('option', { hasText: '1252年生' })).toHaveCount(0)
+    await page.getByTestId('branch-fork-year').fill('1278')
+    const born1252 = page.getByTestId('branch-person-two').locator('option:not([disabled])', { hasText: '1252年生' })
+    expect(await born1252.count()).toBeGreaterThan(0)
+    const childId = await born1252.first().getAttribute('value')
+    expect(childId).toBeTruthy()
+    await page.getByTestId('branch-person-one').selectOption('person-exp-05')
+    await page.getByTestId('branch-person-two').selectOption(childId!)
+    await page.getByTestId('branch-trust-delta').fill('20')
+    await page.getByTestId('branch-run').click()
+    // 候補取得後の再計算でも、PR #105の年次進捗（A0→A1）が出る。
+    await expect(page.getByTestId('progress-A0')).toContainText(/\d{4}年初まで計算済み/, { timeout: 5 * 60_000 })
+    await expect(page.getByTestId('progress-A1')).toContainText(/\d{4}年初まで計算済み/, { timeout: 15 * 60_000 })
+    await expect(page.getByTestId('branch-results')).toBeVisible({ timeout: 20 * 60_000 })
+    await expect(page.getByTestId('branch-error')).toHaveCount(0)
+    await expect(page.getByTestId('branch-status')).toContainText('goal=null')
+    // 指定した条件（seed・1278年・+20・5年）で計算が完了している。
+    await expect(page.getByTestId('branch-status')).toContainText('seed 20260101')
+    await expect(page.getByTestId('branch-status')).toContainText('介入 1278年〜1282年')
+    await expect(page.getByTestId('branch-status')).toContainText('補正 +20')
+    await expect(page.getByTestId('integrated-source')).toContainText('1278年から5年間、信頼 +20')
+    await expect(page.getByTestId('branch-headline')).toContainText('1278年')
+    // 表示名は読める名前で、内部の構造化ID（marriageId等）を出さない。
+    await expect(page.getByTestId('branch-headline')).not.toContainText(childId!)
+    await expect(page.getByTestId('branch-headline')).not.toContainText('marriage')
+    await expect(page.getByTestId('branch-headline')).toContainText('1252年生')
+    // 介入対象の2人（初期人物と後出生人物）が比較の対象選択に実在する。
+    const values = await page.getByTestId('change-target').locator('option').evaluateAll(os => os.map(o => (o as HTMLOptionElement).value))
+    expect(values).toContain('PERSON:person-exp-05')
+    expect(values).toContain('PERSON:' + childId)
+    // 正式Goalは捏造しない。
+    await expect(page.getByTestId('goal-status')).toContainText('正式な勝敗は未成立')
+    await expect(page.getByTestId('integrated-verdict')).toContainText(/差は確認されませんでした|差が確認されました/)
+  })
+})

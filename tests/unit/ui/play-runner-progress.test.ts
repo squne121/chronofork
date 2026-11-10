@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { runPlayComparison } from '../../../src/ui/branch-play-source.ts'
 import type { PlayInput } from '../../../src/ui/branch-play-source.ts'
 import type { PlayProgress } from '../../../src/ui/play-progress.ts'
-import { workerPlayRunner } from '../../../src/ui/play-runner.ts'
+import { workerCandidatesRunner, workerPlayRunner } from '../../../src/ui/play-runner.ts'
 
 const prog = (n: number): PlayProgress => ({ branch: 'A0', startYear: 1250, goalYear: 1350, confirmedYear: 1250 + n, transitionsDone: n, transitionsTotal: 100, eventCount: 0 })
 class FakeWorker {
@@ -41,6 +41,41 @@ describe('workerPlayRunner の進捗中継', () => {
     w2.emit({ kind: 'PROGRESS', progress: prog(2) })
     expect((await h2.promise).kind).toBe('CANCELLED')
     expect(seen).toEqual([1, 2, 11])
+  })
+})
+
+describe('統合: 進捗・候補・比較結果の混同防止(偽Worker)', () => {
+  it('候補取得中のPROGRESSは完了扱いにせず、候補応答で初めてDONEになる', async () => {
+    vi.stubGlobal('Worker', FakeWorker)
+    const h = workerCandidatesRunner(1, 'INTEGRATED_EXPERIMENTAL')
+    const w = FakeWorker.last
+    w.emit({ kind: 'PROGRESS', progress: prog(1) })
+    expect(w.terminated).toBe(false)
+    w.emit({ ok: true, candidates: { fake: true }, computeMs: 3 })
+    const o = await h.promise
+    expect(o.kind).toBe('DONE')
+    expect(w.terminated).toBe(true)
+  })
+  it('比較runnerは候補応答を比較結果として扱わずFAILEDにする', async () => {
+    vi.stubGlobal('Worker', FakeWorker)
+    const h = workerPlayRunner(INPUT)
+    FakeWorker.last.emit({ ok: true, candidates: { fake: true }, computeMs: 3 })
+    expect((await h.promise).kind).toBe('FAILED')
+  })
+  it('候補runnerは比較結果(view)を候補として扱わずFAILEDにする', async () => {
+    vi.stubGlobal('Worker', FakeWorker)
+    const h = workerCandidatesRunner(1, 'INTEGRATED_EXPERIMENTAL')
+    FakeWorker.last.emit({ ok: true, view: {}, computeMs: 3, viewMs: 1 })
+    expect((await h.promise).kind).toBe('FAILED')
+  })
+  it('候補取得のキャンセル後のPROGRESS・応答は無視される', async () => {
+    vi.stubGlobal('Worker', FakeWorker)
+    const h = workerCandidatesRunner(1, 'INTEGRATED_EXPERIMENTAL')
+    const w = FakeWorker.last
+    h.cancel()
+    w.emit({ ok: true, candidates: { fake: true }, computeMs: 3 })
+    expect((await h.promise).kind).toBe('CANCELLED')
+    expect(w.terminated).toBe(true)
   })
 })
 

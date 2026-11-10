@@ -107,6 +107,19 @@ export const playPersonOptions=()=>playInitialWorld().persons
   .filter(p=>p.interactionRole!=='SUPPORTING').map(p=>({
   id:p.personId,label:p.name+(p.sex==='MALE'?'（男）':'（女）'),
 }))
+/**
+ * 人物ペア信頼介入の対象適格性（GUI/CLI共通）。fork年初のWorldStateだけを見る（生存・年齢の新規則は設けない）。
+ * 未出生・未登録・存在しないIDはUNKNOWN_PERSON、SUPPORTINGは直接介入不可。interactionRole省略はKEY。
+ */
+export function interventionTargetIssue(world:WorldState,pair:readonly [Id,Id]):Readonly<{code:string;message:string}>|null{
+  for(const id of pair){
+    const p=world.persons.find(x=>x.personId===id)
+    if(!p)return {code:'UNKNOWN_PERSON',message:`対象人物が${world.year}年初のWorldStateに存在しません: ${id}`}
+    if(p.interactionRole==='SUPPORTING')
+      return {code:'SUPPORTING_PERSON_NOT_DIRECTLY_INTERACTABLE',message:`SUPPORTING人物は直接介入できません: ${id}`}
+  }
+  return null
+}
 const reject=(code:string,message:string):PlayResult=>({ok:false,code,message})
 type OrdinaryTrial=Readonly<{book:LegalEvidenceBook;laws:readonly OrdinaryLaw[];marriageReviews:readonly OrdinaryMarriageReview[]}>
 function createEvaluators(w:WorldState,ledger:readonly StatModifier[],book:LegalEvidenceBook,mode:PlayMode,
@@ -229,9 +242,6 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver):Pl
   if(pair===null)return reject('INVALID_PERSON_PAIR','異なる2人の人物を選択してください')
   const prep=prepareRoot(input.seed,mode)
   if(!prep.ok)return reject(prep.code,prep.message)
-  const {initial}=prep.context
-  if(pair.some(id=>!initial.persons.some(p=>p.personId===id)))
-    return reject('UNKNOWN_PERSON','対象人物が1250年の試験世界に存在しません')
   const modifier:StatModifier={
     modifierId:'ui:modifier:'+JSON.stringify([input.year,pair,input.signedDelta,input.durationYears]),
     interventionId:'ui:intervention:'+JSON.stringify([input.year,pair]),
@@ -246,12 +256,16 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver):Pl
     const {timeline,evaluators:rootEvaluators,a0}=rootRun
     const root=createRootBranch(timeline,[],rootEvaluators)
     if(!root.ok)return reject('A0_ROOT_REJECTED',root.code+':'+root.message)
+    // 対象はfork年初の実WorldState（A0の同一snapshot）で検査する。1250年に未登場の後世KEY人物も対象にできる。
+    const forkState=root.branch.snapshots[input.year-root.branch.startYear]
+    if(!forkState)return reject('INVALID_YEAR','介入年のWorldStateが計算されていません')
+    const issue=interventionTargetIssue(forkState,pair)
+    if(issue)return reject(issue.code,issue.message)
     const rerun=forkHistory({
       parent:root.branch,branchId:'A1-play',forkYear:input.year,
       modifiers:[modifier],
       ...progressHook('A1',observer),
-      evaluatorsFor:({ledger})=>forkEvaluators(prep.context,
-        root.branch.snapshots[input.year-root.branch.startYear]!,ledger),
+      evaluatorsFor:({ledger})=>forkEvaluators(prep.context,forkState,ledger),
     })
     if(!rerun.ok)return reject('FORK_REJECTED',rerun.code+':'+rerun.message)
     if(rerun.branch.status!=='COMPLETED')return reject('A1_HALTED',JSON.stringify(rerun.branch.halt))
