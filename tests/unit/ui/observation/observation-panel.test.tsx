@@ -19,9 +19,20 @@ const trace={
   actorRef:{kind:'PERSON',id:person.personId},eventIds:[],reasonCodes:['SYNTHETIC_NOT_READY'],
   candidates:[],modifierIds:[],ruleVersion:'synthetic',
 } as unknown as DecisionTrace
+const titleId=world.titles[0]!.titleId
+const titleEvent={
+  eventId:'synthetic-title-transfer',semanticEventKey:'synthetic:title',year:1250,phase:5,eventType:'LEGAL_TITLE_TRANSFER',
+  involvedRefs:[],sourceTraceIds:['synthetic-title-trace'],
+  stateChanges:[{path:'$.titles['+titleId+'].holder.personId',before:'synthetic-old',after:person.personId}],
+} as unknown as EventLogEntry
+const titleTrace={
+  traceId:'synthetic-title-trace',year:1250,phase:5,ruleId:'A-TIT-07',status:'ACCEPT',
+  actorRef:{kind:'PERSON',id:person.personId},eventIds:['synthetic-title-transfer'],
+  reasonCodes:[],candidates:[],modifierIds:[],
+} as unknown as DecisionTrace
 const view:ObservationSlice={
-  seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',year:1250,world,events:[event],traces:[trace],
-  counts:Array.from({length:101},(_,i)=>({year:1250+i,events:i===0?1:0,traces:i===0?1:0})),
+  seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',year:1250,world,events:[event,titleEvent],traces:[trace,titleTrace],
+  counts:Array.from({length:101},(_,i)=>({year:1250+i,events:i===0?2:0,traces:i===0?2:0})),
   technicalGoal:{status:'NOT_ACHIEVED',assessments:[{
     titleId:'synthetic-title',holderPersonId:null,qualifies:false,
     failures:['TITLE_NOT_RECOGNIZED'],basis:null,
@@ -41,6 +52,17 @@ describe('介入前の原史A0観測画面',()=>{
     expect(screen.getByTestId('family-tree')).toBeTruthy()
     fireEvent.click(screen.getByTestId('obs-to-intervention'))
     expect(onIntervene).toHaveBeenCalledWith(1250,person.personId)
+  })
+  it('Titleから直接根拠のあるEventと双方向リンク済みTraceを開ける',()=>{
+    render(<ObservationPanel observation={view} loading={false} onLoad={vi.fn()}
+      onCancel={vi.fn()} onIntervene={vi.fn()}/>)
+    fireEvent.change(screen.getByTestId('obs-title-select'),{target:{value:titleId}})
+    expect(screen.getByTestId('obs-title-detail').textContent).toContain(titleId)
+    expect(screen.getAllByTestId('obs-title-event-link')).toHaveLength(1)
+    fireEvent.click(screen.getByTestId('obs-title-event-link'))
+    expect(screen.getByTestId('obs-event-detail').textContent).toContain('LEGAL_TITLE_TRANSFER')
+    fireEvent.click(screen.getByTestId('obs-title-trace-link'))
+    expect(screen.getByTestId('obs-trace-detail').textContent).toContain('A-TIT-07')
   })
   it('選択年を変更すると正しい年を要求し、未計算の年を予測表示しない',()=>{
     const onLoad=vi.fn()
