@@ -28,6 +28,13 @@ import {
 } from './timeline-source.ts'
 import type { TimelineRun } from './timeline-source.ts'
 
+/** A2のWorker結果を表示中のA0/A1へ接続してよいのは、全て同じ第1介入に基づくときだけ。 */
+function sameFirstIntervention(a:PlayInput,b:PlayInput):boolean{
+  return a.seed===b.seed&&(a.mode??'FIXED_APPROVAL')===(b.mode??'FIXED_APPROVAL')&&
+    a.year===b.year&&a.firstPersonId===b.firstPersonId&&a.secondPersonId===b.secondPersonId&&
+    a.signedDelta===b.signedDelta&&a.durationYears===b.durationYears
+}
+
 function Unconnected({ children }: { children: string }) {
   return <span className="badge badge-off">未接続: {children}</span>
 }
@@ -222,9 +229,19 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           setPlayError({ code: o.result.code, message: o.result.message })
           return
         }
+        const view='secondView' in o.result
+          ?comparison&&sameFirstIntervention(comparison.input,input)
+            ?{...comparison,second:o.result.secondView}
+            :undefined
+          :o.result.view
+        if(!view){
+          setProgressEnd('FAILED')
+          setPlayError({code:'A2_PARENT_MISMATCH',message:'前回のA1と第2介入の条件が一致しません'})
+          return
+        }
         clearProgress()
         setCalc({ computeMs: o.computeMs, wallMs: Date.now() - started })
-        applyView(o.result.view, input)
+        applyView(view,input)
       })
       return
     }
