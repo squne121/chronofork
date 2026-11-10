@@ -359,7 +359,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const allEvents = scope === 'all' ? result.eventLog : eventsOfYear(result, year)
   const shown = targetKey ? allEvents.filter((e) => involves(e, targetKey)) : allEvents
 
-  const branchLabel = comparison ? (activeBranch === 'A0' ? 'A0（介入なしの歴史）' : 'A1（介入ありの歴史）') : observation ? 'A0（統合試験の原史を観測）' : '旧・試験計算'
+  const branchLabel = comparison ? (activeBranch === 'A0' ? 'A0（介入なしの歴史）' : 'A1（介入ありの歴史）') : observation ? 'A0（統合試験の原史を観測）' : '原史（旧・C004試験計算）'
   return (
     <div className="app">
       <header className="topbar">
