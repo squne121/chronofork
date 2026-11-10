@@ -33,7 +33,7 @@ describe('統合原史A0の年次観測',()=>{
       onerror:WorkerLike['onerror']=null
       onmessageerror:WorkerLike['onmessageerror']=null
       terminated=false
-      postMessage(_m:unknown){}
+      postMessage(m:unknown){void m}
       terminate(){this.terminated=true}
       emit(data:unknown){this.onmessage?.({data} as MessageEvent<never>)}
     }

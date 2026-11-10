@@ -392,7 +392,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
             onLoad={loadObservation} onCancel={cancelObservation} onIntervene={observationToIntervene}/>
         </div>
         <div className="flow-col">
-          <InterventionComparePanel seedText={seedText} year={year} comparison={comparison} error={playError}
+          <InterventionComparePanel key={obsTarget?.token??"default"} seedText={seedText} year={year} comparison={comparison} error={playError}
             running={running ? { elapsedSec } : undefined} progress={progress} a0Reused={a0Reused} progressEnd={progressEnd} notice={notice} calc={calc} onCancel={cancelRun}
             onSeedText={setSeedText}
             candidateSet={candidateSet} fetchingCandidates={fetchingCandidates} candidateError={candidateError}

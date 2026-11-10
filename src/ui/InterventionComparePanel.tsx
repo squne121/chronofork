@@ -1,6 +1,6 @@
 // A0/A1の試験用介入操作。描画用の差分は実WorldState/EventLog/DecisionTraceからのみ取得する。
 // GAME-01〜05と正式勝敗は未成立。CALIBRATION_ONLYの明示法的承認だけを試験で注入する。
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { compareYear, directlyInvolvesPair, playPersonOptions, playModeLabel, INTEGRATED_PLAY_DEFAULTS, PLAY_DEFAULT_MODE, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
 import { observeDynastyContinuity } from './dynasty-continuity.ts'
 import type { ContinuityObservation } from './dynasty-continuity.ts'
@@ -107,24 +107,17 @@ const countMarried=(w:{legal:{marriages:readonly {status:string}[]}})=>w.legal.m
 const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filter(t=>t.holder.status==='HELD').length
 
 export function InterventionComparePanel(p:Props){
-  const [mode,setMode]=useState<PlayMode>(PLAY_DEFAULT_MODE)
-  const [yearText,setYearText]=useState(String(PLAY_DEMO_YEAR))
-  const [firstId,setFirstId]=useState<string>(PLAY_DEMO_PAIR[0])
-  const [secondId,setSecondId]=useState<string>(PLAY_DEMO_PAIR[1])
-  const [deltaText,setDeltaText]=useState(String(PLAY_DEMO_DELTA))
-  const [durationText,setDurationText]=useState(String(PLAY_DEMO_DURATION))
-  useEffect(()=>{
-    const target=p.observationTarget
-    if(!target)return
-    setMode('INTEGRATED_EXPERIMENTAL')
-    setYearText(String(target.year))
-    setFirstId(target.personId)
-    setSecondId(target.personId===INTEGRATED_PLAY_DEFAULTS.pair[1]
-      ? INTEGRATED_PLAY_DEFAULTS.pair[0] : INTEGRATED_PLAY_DEFAULTS.pair[1])
-    setDeltaText(String(INTEGRATED_PLAY_DEFAULTS.signedDelta))
-    setDurationText(String(Math.min(INTEGRATED_PLAY_DEFAULTS.durationYears,1350-target.year)))
-    p.onSeedText(String(target.seed))
-  },[p.observationTarget])
+  // 観測画面から渡された初期値は、親のkey変更による安全な再マウント時だけ適用する。
+  const observed=p.observationTarget
+  const [mode,setMode]=useState<PlayMode>(observed?'INTEGRATED_EXPERIMENTAL':PLAY_DEFAULT_MODE)
+  const [yearText,setYearText]=useState(String(observed?.year??PLAY_DEMO_YEAR))
+  const [firstId,setFirstId]=useState<string>(observed?.personId??PLAY_DEMO_PAIR[0])
+  const [secondId,setSecondId]=useState<string>(observed
+    ? observed.personId===INTEGRATED_PLAY_DEFAULTS.pair[1]?INTEGRATED_PLAY_DEFAULTS.pair[0]:INTEGRATED_PLAY_DEFAULTS.pair[1]
+    : PLAY_DEMO_PAIR[1])
+  const [deltaText,setDeltaText]=useState(String(observed?INTEGRATED_PLAY_DEFAULTS.signedDelta:PLAY_DEMO_DELTA))
+  const [durationText,setDurationText]=useState(String(observed
+    ? Math.min(INTEGRATED_PLAY_DEFAULTS.durationYears,1350-observed.year):PLAY_DEMO_DURATION))
   const seed=Number(p.seedText.trim())
   const year=Number(yearText),delta=Number(deltaText),duration=Number(durationText)
   const valid=/^\d+$/.test(p.seedText.trim())&&Number.isSafeInteger(seed)&&seed>=0 &&
