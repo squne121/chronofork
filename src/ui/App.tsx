@@ -5,6 +5,9 @@ import { runPlayComparison } from './branch-play-source.ts'
 import type { BranchChoice, PlayInput, PlayView } from './branch-play-source.ts'
 import { workerPlayRunner } from './play-runner.ts'
 import type { PlayRunHandle, PlayRunner } from './play-runner.ts'
+import { reduceProgress } from './play-progress.ts'
+import type { ProgressEnd } from './InterventionComparePanel.tsx'
+import type { ProgressState } from './play-progress.ts'
 import type { CalcInfo } from './IntegratedOverview.tsx'
 import { Inspector } from './Inspector.tsx'
 import { RegionMap } from './RegionMap.tsx'
@@ -35,6 +38,9 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
   const [comparison, setComparison] = useState<PlayView | undefined>(undefined)
   const [running, setRunning] = useState<{ startedAt: number } | undefined>(undefined)
   const [elapsedSec, setElapsedSec] = useState(0)
+  // 確定済みの年次進捗（A0/A1別）と、最後に止まった理由。結果ではなく途中経過。
+  const [progress, setProgress] = useState<ProgressState>({})
+  const [progressEnd, setProgressEnd] = useState<ProgressEnd | undefined>(undefined)
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [calc, setCalc] = useState<CalcInfo | undefined>(undefined)
   // 古い結果で上書きしないための世代番号と、キャンセル用の実行ハンドル。
@@ -111,8 +117,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
     setRunning(undefined)
     setElapsedSec(0)
   }
+  const clearProgress = () => { setProgress({}); setProgressEnd(undefined) }
   const rerun = () => {
     stopRunning()
+    clearProgress()
     setNotice(undefined)
     setCalc(undefined)
     const seed = Number(seedText.trim())
@@ -137,19 +145,22 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
   }
   const runComparison = (input:PlayInput) => {
     setNotice(undefined)
+    if (input.mode !== 'INTEGRATED_EXPERIMENTAL') clearProgress()
     if (input.mode === 'INTEGRATED_EXPERIMENTAL') {
       // 100年のA0/A1はWorkerで再計算する。計算中の二重起動は無視し、古い結果は破棄する。
       if (handleRef.current) return
       const token = ++tokenRef.current
       const started = Date.now()
       setPlayError(undefined)
+      clearProgress()
       setElapsedSec(0)
       setRunning({ startedAt: started })
       let handle: PlayRunHandle
       try {
-        handle = playRunner(input)
+        handle = playRunner(input, (p) => { if (token === tokenRef.current) setProgress((s) => reduceProgress(s, p)) })
       } catch (error) {
         setRunning(undefined)
+        setProgressEnd('FAILED')
         setPlayError({ code: 'WORKER_START_FAILED', message: error instanceof Error ? error.message : String(error) })
         return
       }
@@ -158,9 +169,14 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
         if (token !== tokenRef.current) return
         handleRef.current = undefined
         setRunning(undefined)
-        if (o.kind === 'CANCELLED') { setNotice('計算を中断しました。表示中の結果は変わっていません。'); return }
-        if (o.kind === 'FAILED') { setPlayError({ code: o.code, message: o.message }); return }
-        if (!o.result.ok) { setPlayError({ code: o.result.code, message: o.result.message }); return }
+        if (o.kind === 'CANCELLED') { setProgressEnd('CANCELLED'); setNotice('計算を中断しました。表示中の結果は変わっていません。'); return }
+        if (o.kind === 'FAILED') { setProgressEnd('FAILED'); setPlayError({ code: o.code, message: o.message }); return }
+        if (!o.result.ok) {
+          setProgressEnd(/^A[01]_HALTED$/.test(o.result.code) ? 'HALTED' : 'FAILED')
+          setPlayError({ code: o.result.code, message: o.result.message })
+          return
+        }
+        clearProgress()
         setCalc({ computeMs: o.computeMs, wallMs: Date.now() - started })
         applyView(o.result.view, input)
       })
@@ -175,6 +191,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
   }
   const cancelRun = () => {
     stopRunning()
+    setProgressEnd('CANCELLED')
     setNotice('計算をキャンセルしました。表示中の結果は変わっていません。')
   }
   const switchBranch = (choice:BranchChoice) => {
@@ -262,7 +279,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner }:
       <main className="layout">
         <div className="flow-col">
           <InterventionComparePanel seedText={seedText} year={year} comparison={comparison} error={playError}
-            running={running ? { elapsedSec } : undefined} notice={notice} calc={calc} onCancel={cancelRun}
+            running={running ? { elapsedSec } : undefined} progress={progress} progressEnd={progressEnd} notice={notice} calc={calc} onCancel={cancelRun}
             onSeedText={setSeedText}
             activeBranch={activeBranch} onRun={runComparison} onViewBranch={switchBranch}
             onInspectEvent={openComparisonEvent} onInspectTrace={openComparisonTrace} />

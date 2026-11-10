@@ -3,9 +3,11 @@
 import { runPlayComparison } from './branch-play-source.ts'
 import type { PlayInput, PlayView } from './branch-play-source.ts'
 import { toDisplayView } from './play-view.ts'
+import type { PlayProgress } from './play-progress.ts'
 
 export type WorkerRequest=Readonly<{input:PlayInput}>
 export type WorkerResponse=
+  | Readonly<{kind:'PROGRESS';progress:PlayProgress}>
   | Readonly<{ok:true;view:PlayView;computeMs:number;viewMs:number}>
   | Readonly<{ok:false;code:string;message:string;computeMs:number}>
 
@@ -17,7 +19,8 @@ ctx.onmessage=e=>{
   const t0=performance.now()
   let response:WorkerResponse
   try{
-    const r=runPlayComparison(e.data.input)
+    // 進捗は小さなDTOだけを送る。WorldState・ログは最終結果まで送らない。
+    const r=runPlayComparison(e.data.input,progress=>ctx.postMessage({kind:'PROGRESS',progress}))
     const computeMs=performance.now()-t0
     if(!r.ok)response={ok:false,code:r.code,message:r.message,computeMs}
     else{
