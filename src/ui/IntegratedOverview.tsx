@@ -94,7 +94,7 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent,onInspe
       <p className="note">単独原因の断定ではなく、正式勝敗でもありません。差の理由は下のEventから「④ 理由を確認する」のDecisionTraceで辿れます。</p>
     </div>
 
-    <HistoricalChangesExplorer rows={overview.rows} totalDifferences={overview.totalDifferences} worldA0={final0} worldA1={final1} onInspectEvent={onInspectEvent}/>
+    <HistoricalChangesExplorer rows={overview.rows} view={view} totalDifferences={overview.totalDifferences} worldA0={final0} worldA1={final1} onInspectEvent={onInspectEvent} onInspectTrace={onInspectTrace}/>
 
     <section aria-labelledby="integrated-evidence-heading" data-testid="integrated-evidence">
       <h4 id="integrated-evidence-heading">介入が参照された判断を調べる（A1）</h4>
