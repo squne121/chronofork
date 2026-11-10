@@ -15,7 +15,7 @@ import { createAutonomousCalibrationEvaluators } from '../simulation/autonomy/in
 import type { AutonomyCalibration } from '../simulation/autonomy/index.ts'
 import { createRootBranch, forkHistory } from '../simulation/branching/index.ts'
 import type { Branch } from '../simulation/branching/index.ts'
-import type { EventLogEntry, Id, StatModifier, WorldState } from '../simulation/contracts/index.ts'
+import type { DecisionTrace, EventLogEntry, Id, StatModifier, WorldState } from '../simulation/contracts/index.ts'
 import { GOAL_YEAR, PAIR_TRUST_STAT_KEY, START_YEAR, STAT_MODIFIER_RULE_VERSION } from '../simulation/contracts/index.ts'
 import { runTimeline } from '../simulation/engine/index.ts'
 import type { EvaluatorMap, TimelineResult, YearProgress } from '../simulation/engine/index.ts'
@@ -356,4 +356,86 @@ export function directlyInvolvesPair(e:EventLogEntry,pair:readonly [Id,Id]):bool
   return e.involvedRefs.some(ref=>ref.kind==='PERSON_PAIR'
     ?ref.ids[0]===pair[0]&&ref.ids[1]===pair[1]
     :ref.kind==='PERSON'&&pair.includes(ref.id))
+}
+
+/**
+ * 観測専用の年次スライス。完全A0はWorkerのSingleA0Cacheに保持し、
+ * UIには選択年の年初WorldState・その年の確定Event/Traceだけ転送する。
+ * 途中年の結果やA0の全履歴を転送済みと見せない。全記録の件数は実データから集計。
+ */
+export type ObservationYearCounts = Readonly<{year:number;events:number;traces:number}>
+export type ObservationSlice = Readonly<{
+  seed:number
+  mode:'INTEGRATED_EXPERIMENTAL'
+  year:number
+  world:WorldState
+  events:readonly EventLogEntry[]
+  traces:readonly DecisionTrace[]
+  counts:readonly ObservationYearCounts[]
+  technicalGoal:TimelineResult['technicalGoal']
+  goal:TimelineResult['goal']
+  status:TimelineResult['status']
+  a0Source:A0Source
+}>
+export type ObservationInput = Readonly<{seed:number;mode:PlayMode;year:number}>
+export type ObservationResult =
+  | Readonly<{ok:true;observation:ObservationSlice}>
+  | Readonly<{ok:false;code:string;message:string}>
+
+/** 実A0の確定結果だけを読む。UIが計算規則や架空の歴史を生成しないための純粋関数。 */
+export function sliceA0Observation(
+  a0:TimelineRun,year:number,mode:'INTEGRATED_EXPERIMENTAL',a0Source:A0Source,
+):ObservationSlice|undefined{
+  const world=a0.result.snapshots.find(w=>w.year===year)
+  if(!world||a0.result.status!=='COMPLETED')return undefined
+  const counts=Array.from({length:GOAL_YEAR-START_YEAR+1},(_,i)=>({year:START_YEAR+i,events:0,traces:0}))
+  const events:EventLogEntry[]=[],traces:DecisionTrace[]=[]
+  for(const e of a0.result.eventLog){
+    const ix=e.year-START_YEAR
+    if(ix>=0&&ix<counts.length)counts[ix]!.events++
+    if(e.year===year)events.push(e)
+  }
+  for(const t of a0.result.decisionTraces){
+    const ix=t.year-START_YEAR
+    if(ix>=0&&ix<counts.length)counts[ix]!.traces++
+    if(t.year===year)traces.push(t)
+  }
+  return {
+    seed:a0.inputs.seed,mode,year,world,events,traces,counts,
+    goal:a0.result.goal,technicalGoal:a0.result.technicalGoal,status:a0.result.status,a0Source,
+  }
+}
+
+/** PR #109と同じWorker内の完全A0を使う観測専用入口。A1を作らない。 */
+export function runPlayObservation(
+  input:ObservationInput,cache:SingleA0Cache,observer?:ProgressObserver,
+):ObservationResult{
+  if(input.mode!=='INTEGRATED_EXPERIMENTAL')return {ok:false,code:'INVALID_MODE',message:'統合試験モードだけを観測できます'}
+  if(!Number.isSafeInteger(input.year)||input.year<START_YEAR||input.year>GOAL_YEAR)
+    return {ok:false,code:'INVALID_YEAR',message:'観測年は1250〜1350年の整数が必要です'}
+  const prep=prepareRoot(input.seed,input.mode)
+  if(!prep.ok)return prep
+  try{
+    const key=a0CacheKeyOf(prep.context)
+    const cached=cache.get(key)
+    let a0:TimelineRun
+    let source:A0Source
+    if(cached){a0=cached.a0;source='REUSED'}
+    else{
+      const r=runRootTimeline(prep.context,observer)
+      if(!r.ok)return r
+      const root=createRootBranch(r.timeline,[],r.evaluators)
+      if(!root.ok)return {ok:false,code:'A0_ROOT_REJECTED',message:root.code+':'+root.message}
+      a0={...r.a0,result:{...r.timeline,snapshots:root.branch.snapshots,
+        eventLog:root.branch.eventLog,decisionTraces:root.branch.decisionTraces}}
+      cache.put({key,root:root.branch,a0,counts:countsOf(root.branch)})
+      source='COMPUTED'
+    }
+    const observation=sliceA0Observation(a0,input.year,input.mode,source)
+    return observation?{ok:true,observation}
+      :{ok:false,code:'UNCOMPUTED_YEAR',message:'この年の年初WorldStateは確定していません'}
+  }catch(error){
+    cache.clear()
+    return {ok:false,code:'OBSERVATION_EXCEPTION',message:error instanceof Error?error.message:String(error)}
+  }
 }
