@@ -49,9 +49,12 @@ type Props=Readonly<{
   /** 明示操作で取得したA0の人物候補（seed・モード付き）。条件が合わなければ使わない。 */
   candidateSet?:PlayCandidateSet
   fetchingCandidates?:boolean
+  observationLoading?:boolean
   candidateError?:Readonly<{code:string;message:string}>
   onFetchCandidates:(seed:number,mode:PlayMode)=>void
   onCancelCandidates:()=>void
+  /** 年表調査から選択した年と人物。既存の合法な介入対象判定に委ねる。 */
+  observationTarget?:Readonly<{year:number;personId:string;seed:number;token:number}>
   activeBranch:BranchChoice|'A2'
   onRun:(input:PlayInput)=>void
   onViewBranch:(choice:BranchChoice|'A2')=>void
@@ -106,12 +109,17 @@ const countMarried=(w:{legal:{marriages:readonly {status:string}[]}})=>w.legal.m
 const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filter(t=>t.holder.status==='HELD').length
 
 export function InterventionComparePanel(p:Props){
-  const [mode,setMode]=useState<PlayMode>(PLAY_DEFAULT_MODE)
-  const [yearText,setYearText]=useState(String(PLAY_DEMO_YEAR))
-  const [firstId,setFirstId]=useState<string>(PLAY_DEMO_PAIR[0])
-  const [secondId,setSecondId]=useState<string>(PLAY_DEMO_PAIR[1])
-  const [deltaText,setDeltaText]=useState(String(PLAY_DEMO_DELTA))
-  const [durationText,setDurationText]=useState(String(PLAY_DEMO_DURATION))
+  // 観測画面から渡された初期値は、親のkey変更による安全な再マウント時だけ適用する。
+  const observed=p.observationTarget
+  const [mode,setMode]=useState<PlayMode>(observed?'INTEGRATED_EXPERIMENTAL':PLAY_DEFAULT_MODE)
+  const [yearText,setYearText]=useState(String(observed?.year??PLAY_DEMO_YEAR))
+  const [firstId,setFirstId]=useState<string>(observed?.personId??PLAY_DEMO_PAIR[0])
+  const [secondId,setSecondId]=useState<string>(observed
+    ? observed.personId===INTEGRATED_PLAY_DEFAULTS.pair[1]?INTEGRATED_PLAY_DEFAULTS.pair[0]:INTEGRATED_PLAY_DEFAULTS.pair[1]
+    : PLAY_DEMO_PAIR[1])
+  const [deltaText,setDeltaText]=useState(String(observed?INTEGRATED_PLAY_DEFAULTS.signedDelta:PLAY_DEMO_DELTA))
+  const [durationText,setDurationText]=useState(String(observed
+    ? Math.min(INTEGRATED_PLAY_DEFAULTS.durationYears,1350-observed.year):PLAY_DEMO_DURATION))
   const seed=Number(p.seedText.trim())
   const year=Number(yearText),delta=Number(deltaText),duration=Number(durationText)
   const valid=/^\d+$/.test(p.seedText.trim())&&Number.isSafeInteger(seed)&&seed>=0 &&
@@ -246,11 +254,11 @@ export function InterventionComparePanel(p:Props){
     </p>}
     <form className="compare-form" onSubmit={e=>{
       e.preventDefault()
-      if(canRun&&!p.running&&!p.fetchingCandidates)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
+      if(canRun&&!p.running&&!p.fetchingCandidates&&!p.observationLoading)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
         signedDelta:delta,durationYears:duration,mode})
     }}>
       <div className="candidate-source" data-testid="candidate-source">
-        <button type="button" data-testid="candidates-fetch" disabled={!/^\d+$/.test(p.seedText.trim())||!Number.isSafeInteger(seed)||!!p.running||!!p.fetchingCandidates}
+        <button type="button" data-testid="candidates-fetch" disabled={!/^\d+$/.test(p.seedText.trim())||!Number.isSafeInteger(seed)||!!p.running||!!p.fetchingCandidates||!!p.observationLoading}
           onClick={()=>p.onFetchCandidates(seed,mode)}>この条件のA0から人物候補を取得（後から生まれた人物を選ぶ場合）</button>
         {p.fetchingCandidates&&<button type="button" data-testid="candidates-cancel" onClick={p.onCancelCandidates}>取得をキャンセル</button>}
         <span className="note" role="status" data-testid="candidate-status"> {p.fetchingCandidates
@@ -281,7 +289,7 @@ export function InterventionComparePanel(p:Props){
         </label>
       </div>
       <h3 className="step-title"><span className="step-no">2</span>再計算する</h3>
-      <button type="submit" disabled={!canRun||!!p.running||!!p.fetchingCandidates} data-testid="branch-run" className="cta">介入して再計算</button>
+      <button type="submit" disabled={!canRun||!!p.running||!!p.fetchingCandidates||!!p.observationLoading} data-testid="branch-run" className="cta">介入して再計算</button>
       {p.running&&<button type="button" onClick={p.onCancel} data-testid="branch-cancel">計算をキャンセル</button>}
       <span className="note"> {mode==='INTEGRATED_EXPERIMENTAL'
         ?`初期入力例：${personName(INTEGRATED_PLAY_DEFAULTS.pair[0])}と${personName(INTEGRATED_PLAY_DEFAULTS.pair[1])}、${INTEGRATED_PLAY_DEFAULTS.year}年、${INTEGRATED_PLAY_DEFAULTS.signedDelta}、${INTEGRATED_PLAY_DEFAULTS.durationYears}年間（seed ${INTEGRATED_PLAY_DEFAULTS.seed}）。`
