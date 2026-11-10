@@ -23,6 +23,7 @@ describe('統合原史A0の年次観測',()=>{
     expect(v?.traces.map(t=>t.traceId)).toEqual(['t'])
     expect(v?.traces[0]?.eventIds).toEqual([])
     expect(v?.counts[0]).toEqual({year:1250,events:1,traces:1})
+    expect(v?.candidates).toMatchObject({seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',candidates:[]})
     expect(v?.counts[1]).toEqual({year:1251,events:0,traces:0})
     expect(v?.goal).toBeNull()
     expect(sliceA0Observation(fakeRun,1252,'INTEGRATED_EXPERIMENTAL','REUSED')).toBeUndefined()
