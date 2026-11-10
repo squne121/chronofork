@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import App from '../../../src/ui/App.tsx'
 import { interventionTargetIssue } from '../../../src/ui/branch-play-source.ts'
 import type { PlayInput } from '../../../src/ui/branch-play-source.ts'
-import { candidateLabel, candidateSetMatches, candidatesAtYear, extractCandidates } from '../../../src/ui/play-candidates.ts'
+import { candidateLabel, candidateSetMatches, personIdTag, candidatesAtYear, extractCandidates } from '../../../src/ui/play-candidates.ts'
 import type { PlayCandidateSet } from '../../../src/ui/play-candidates.ts'
 import type { CandidatesOutcome, CandidatesRunner, PlayOutcome, PlayRunner } from '../../../src/ui/play-runner.ts'
 import { createExperimentalWorld } from '../../../src/scenario/experimental/index.ts'
@@ -68,7 +68,19 @@ describe('候補の抽出と年別の変化（A0の実WorldStateのみ）', () =
   it('長いIDでも名前・出生年で読め、IDは末尾だけを補助表示する', () => {
     const l = candidateLabel(set.candidates.find(c => c.id === LATER)!)
     expect(l).toContain('セラ'); expect(l).toContain('1252年生'); expect(l).toContain('女')
-    expect(l).not.toContain(LATER); expect(l).toContain(LATER.slice(-8))
+    expect(l).not.toContain(LATER); expect(l).toContain('識別 ' + personIdTag(LATER))
+  })
+  it('実データ形式の構造化ID・名前（marriageId入り）が表示名に残らず、同名でも別人を取り違えない', () => {
+    const real = 'person:b002:auto:[1252,"marriage:normal:[1250,\\"[\\\\\\"person-exp-02\\\\\\",\\\\\\"person-exp-05\\\\\\"]\\"]","person-exp-02","person-exp-05"]'
+    const name = '試験用自律児 1252 (marriage:normal:[1250,"[\\"person-exp-02\\",\\"person-exp-05\\"]"])'
+    const a = { id: real, name, sex: 'MALE' as const, birthYear: 1252 }
+    const b = { ...a, id: real.replace('1252', '1253') }
+    const la = candidateLabel(a)
+    expect(la).toContain('試験用自律児 1252（男・1252年生・識別 ')
+    for (const frag of ['marriage', 'person-exp', '[', '"', '\\']) expect(la).not.toContain(frag)
+    expect(candidateLabel(b)).not.toBe(la) // 名前・出生年・性別が同じでも、識別タグが異なる
+    expect(personIdTag(real)).toBe(personIdTag(real)) // 決定的
+    expect(la).toBe(candidateLabel({ ...a, name: 'X' }).replace('X', '試験用自律児 1252'))
   })
 })
 
@@ -143,7 +155,7 @@ describe('App: 後出生人物のGUI選択', () => {
     setField('branch-fork-year', '1278')
     expect(optionIds('branch-person-two')).toContain(LATER)
     const opt = [...(screen.getByTestId('branch-person-two') as HTMLSelectElement).options].find(o => o.value === LATER)!
-    expect(opt.textContent).toContain('セラ'); expect(opt.textContent).toContain('1252年生'); expect(opt.textContent).not.toContain(LATER)
+    expect(opt.textContent).toContain('セラ'); expect(opt.textContent).toContain('1252年生'); expect(opt.textContent).not.toContain(LATER); expect(opt.textContent).toContain('識別 ')
     expect(optionIds('branch-person-two')).not.toContain('person-sup')
     expect(optionIds('branch-person-two')).not.toContain('person-a1-only')
   })

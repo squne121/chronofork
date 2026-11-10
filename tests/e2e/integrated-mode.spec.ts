@@ -176,8 +176,22 @@ test.describe('統合モード: 後出生KEY人物のGUI選択（Issue #104・�
     await expect(page.getByTestId('branch-results')).toBeVisible({ timeout: 20 * 60_000 })
     await expect(page.getByTestId('branch-error')).toHaveCount(0)
     await expect(page.getByTestId('branch-status')).toContainText('goal=null')
+    // 指定した条件（seed・1278年・+20・5年）で計算が完了している。
+    await expect(page.getByTestId('branch-status')).toContainText('seed 20260101')
+    await expect(page.getByTestId('branch-status')).toContainText('介入 1278年〜1282年')
+    await expect(page.getByTestId('branch-status')).toContainText('補正 +20')
+    await expect(page.getByTestId('integrated-source')).toContainText('1278年から5年間、信頼 +20')
     await expect(page.getByTestId('branch-headline')).toContainText('1278年')
-    await expect(page.getByTestId('branch-headline')).not.toContainText(childId!) // 長いIDでなく名前で表示される
+    // 表示名は読める名前で、内部の構造化ID（marriageId等）を出さない。
+    await expect(page.getByTestId('branch-headline')).not.toContainText(childId!)
+    await expect(page.getByTestId('branch-headline')).not.toContainText('marriage')
+    await expect(page.getByTestId('branch-headline')).toContainText('1252年生')
+    // 介入対象の2人（初期人物と後出生人物）が比較の対象選択に実在する。
+    const values = await page.getByTestId('change-target').locator('option').evaluateAll(os => os.map(o => (o as HTMLOptionElement).value))
+    expect(values).toContain('PERSON:person-exp-05')
+    expect(values).toContain('PERSON:' + childId)
+    // 正式Goalは捏造しない。
+    await expect(page.getByTestId('goal-status')).toContainText('正式な勝敗は未成立')
     await expect(page.getByTestId('integrated-verdict')).toContainText(/差は確認されませんでした|差が確認されました/)
   })
 })
