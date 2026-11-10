@@ -21,7 +21,8 @@ const END_LABEL:Record<ProgressEnd,string>={
   CANCELLED:'キャンセルされました',HALTED:'歴史計算が停止しました（HALTED）',FAILED:'計算に失敗しました',
 }
 /** 計算済みの年・区間・実際の進み具合のみ。残り時間・未来のEventは出さない。 */
-function ProgressLine({label,p,ended}:{label:string;p?:PlayProgress;ended:boolean}){
+function ProgressLine({label,p,ended,reused}:{label:string;p?:PlayProgress;ended:boolean;reused?:boolean}){
+  if(reused)return <li data-testid={`progress-${label}`}>{label}：保存済みの計算結果を再利用しています（A0は再計算していません）</li>
   if(!p)return <li data-testid={`progress-${label}`}>{label}：{ended?'未着手':'開始待ち'}（確定した年はありません）</li>
   return <li data-testid={`progress-${label}`}>
     {label}：{p.startYear}年→{p.goalYear}年の再計算で、{p.confirmedYear}年初まで計算済み
@@ -38,6 +39,8 @@ type Props=Readonly<{
   running?:Readonly<{elapsedSec:number}>
   /** 確定済みの年次進捗（A0/A1別）。途中経過であり結果ではない。 */
   progress?:ProgressState
+  /** A0を再計算せず保存済みを使っている。 */
+  a0Reused?:boolean
   progressEnd?:ProgressEnd
   notice?:string
   calc?:CalcInfo
@@ -293,7 +296,7 @@ export function InterventionComparePanel(p:Props){
       <p><strong>{p.progressEnd?`途中経過（未確定）：${END_LABEL[p.progressEnd]}`:'途中経過（未確定）'}</strong>
         ：下の数値は確定済みの年までです。最終結果・勝敗ではありません。</p>
       <ul>
-        <ProgressLine label="A0" p={p.progress?.a0} ended={!!p.progressEnd}/>
+        <ProgressLine label="A0" p={p.progress?.a0} ended={!!p.progressEnd} reused={p.a0Reused}/>
         <ProgressLine label="A1" p={p.progress?.a1} ended={!!p.progressEnd}/>
         {(p.progress?.a2||p.comparison?.second)&&<ProgressLine label="A2" p={p.progress?.a2} ended={!!p.progressEnd}/>}
       </ul>

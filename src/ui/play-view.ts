@@ -62,6 +62,7 @@ export function toDisplayView(c:PlayComparison):PlayView{
   }
   return {
     mode:c.mode,input:c.input,modifier:c.modifier,a0,a1,displayOmission,
+    ...(c.a0Source?{a0Source:c.a0Source}:{}),
     ...(c.second?{second:toDisplayView(c.second)}:{}),
   }
 }
