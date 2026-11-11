@@ -9,20 +9,72 @@ import type { TimelineRun } from './timeline-source.ts'
 
 const OMITTABLE_EVENT_TYPE='PERSON_PAIR_TRUST_SET'
 const OMITTABLE_RULE='B-009'
-const json=JSON.stringify
+// 同一性の判定は従来どおりJSON文字列の一致。ただし(A0側,A1側)の対ごとに1回だけ判定する(判定が3段で重複していた)。
+// JSON文字列そのものは保持しない(約4万件×2の巨大文字列でヒープが増えるため)。
+/** JSON.stringify(a)===JSON.stringify(b) と同値な構造比較。素のJSON値(キー順序も比較)だけを直接比べ、
+ *  undefined・関数・非有限数・toJSON/非plain object等、JSON化で意味が変わる値に当たったら undefined を返して呼び出し側が文字列比較へ戻す。 */
+function jsonEqual(a:unknown,b:unknown):boolean|undefined{
+  if(typeof a!==typeof b)return undefined
+  if(a===null||b===null)return a===b?true:undefined // 相手側のtoJSONがnullを返し得るため文字列比較へ任せる
+  switch(typeof a){
+    case 'string':case 'boolean':return a===b
+    case 'number':return Number.isFinite(a)&&Number.isFinite(b as number)?a===b:undefined
+    case 'object':break
+    default:return undefined
+  }
+  const x=a as Record<string,unknown>,y=b as Record<string,unknown>
+  if(typeof x.toJSON==='function'||typeof y.toJSON==='function')return undefined
+  const xa=Array.isArray(x),ya=Array.isArray(y)
+  if(xa!==ya)return false
+  if(xa){
+    const p=x as unknown as unknown[],q=y as unknown as unknown[]
+    if(p.length!==q.length)return false
+    for(let i=0;i<p.length;i++){const r=jsonEqual(p[i],q[i]);if(r!==true)return r}
+    return true
+  }
+  const px=Object.getPrototypeOf(x),py=Object.getPrototypeOf(y)
+  if((px!==Object.prototype&&px!==null)||(py!==Object.prototype&&py!==null))return undefined
+  const kx=Object.keys(x),ky=Object.keys(y)
+  // JSON化で脱落・変換される値(undefined・関数・symbol・toJSON)は、キー数の比較より前に文字列比較へ任せる。
+  for(const o of [x,y])for(const k in o){
+    const v=o[k],t=typeof v
+    if(t==='undefined'||t==='function'||t==='symbol'||t==='bigint')return undefined
+    if(t==='object'&&v!==null&&typeof (v as Record<string,unknown>).toJSON==='function')return undefined
+  }
+  if(kx.length!==ky.length)return false
+  for(let i=0;i<kx.length;i++){
+    if(kx[i]!==ky[i])return false
+    const r=jsonEqual(x[kx[i]],y[kx[i]]);if(r!==true)return r
+  }
+  return true
+}
+export const jsonSame=(a:object,b:object):boolean=>jsonEqual(a,b)??(JSON.stringify(a)===JSON.stringify(b))
+
+class SameJson{
+  private readonly memo=new WeakMap<object,{a:object;r:boolean}>()
+  same(a:object,b:object):boolean{
+    if(a===b)return true
+    const m=this.memo.get(b)
+    if(m!==undefined&&m.a===a)return m.r
+    const r=jsonSame(a,b)
+    this.memo.set(b,{a,r})
+    return r
+  }
+}
 
 /** A0/A1の同一内容は同じオブジェクトとして共有する(構造化複製で一度だけ複製される)。 */
-function shared<T>(a0:readonly T[],a1:readonly T[],key:(x:T)=>string):readonly T[]{
+function shared<T extends object>(a0:readonly T[],a1:readonly T[],key:(x:T)=>string,cmp:SameJson):readonly T[]{
   const byKey=new Map(a0.map(x=>[key(x),x] as const))
-  return a1.map(x=>{const o=byKey.get(key(x));return o!==undefined&&json(o)===json(x)?o:x})
+  return a1.map(x=>{const o=byKey.get(key(x));return o!==undefined&&cmp.same(o,x)?o:x})
 }
 
 export function toDisplayView(c:PlayComparison):PlayView{
   const r0=c.a0.result,r1=c.a1.result
+  const cmp=new SameJson()
   const ev0=new Map(r0.eventLog.map(e=>[e.eventId,e])),ev1=new Map(r1.eventLog.map(e=>[e.eventId,e]))
   const tr0=new Map(r0.decisionTraces.map(t=>[t.traceId,t])),tr1=new Map(r1.decisionTraces.map(t=>[t.traceId,t]))
-  const sameEvent=(id:string)=>{const a=ev0.get(id),b=ev1.get(id);return a!==undefined&&b!==undefined&&json(a)===json(b)}
-  const sameTrace=(id:string)=>{const a=tr0.get(id),b=tr1.get(id);return a!==undefined&&b!==undefined&&json(a)===json(b)}
+  const sameEvent=(id:string)=>{const a=ev0.get(id),b=ev1.get(id);return a!==undefined&&b!==undefined&&cmp.same(a,b)}
+  const sameTrace=(id:string)=>{const a=tr0.get(id),b=tr1.get(id);return a!==undefined&&b!==undefined&&cmp.same(a,b)}
   // 候補: 両枝で同一の信頼更新Eventと B-009 Trace。その上で相互参照が閉じる集合だけを省略する。
   const candEvents=new Set(r0.eventLog.filter(e=>e.eventType===OMITTABLE_EVENT_TYPE&&sameEvent(e.eventId)).map(e=>e.eventId))
   const candTraces=new Set(r0.decisionTraces.filter(t=>t.ruleId===OMITTABLE_RULE&&sameTrace(t.traceId)).map(t=>t.traceId))
@@ -52,8 +104,8 @@ export function toDisplayView(c:PlayComparison):PlayView{
     ...run,result:{...run.result,eventLog:events,decisionTraces:traces} as TimelineResult,
   })
   const a0=slim(c.a0,evKept0,trKept0)
-  const a1=slim(c.a1,shared(evKept0,r1.eventLog.filter(e=>!(omitEvents.has(e.eventId)&&sameEvent(e.eventId))),e=>e.eventId),
-    shared(trKept0,r1.decisionTraces.filter(t=>!(omitTraces.has(t.traceId)&&sameTrace(t.traceId))),t=>t.traceId))
+  const a1=slim(c.a1,shared(evKept0,r1.eventLog.filter(e=>!(omitEvents.has(e.eventId)&&sameEvent(e.eventId))),e=>e.eventId,cmp),
+    shared(trKept0,r1.decisionTraces.filter(t=>!(omitTraces.has(t.traceId)&&sameTrace(t.traceId))),t=>t.traceId,cmp))
   const displayOmission:DisplayOmission={
     fullEventCount:{a0:r0.eventLog.length,a1:r1.eventLog.length},
     fullTraceCount:{a0:r0.decisionTraces.length,a1:r1.decisionTraces.length},
