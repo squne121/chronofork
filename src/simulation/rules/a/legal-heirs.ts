@@ -4,7 +4,13 @@ import type { Id, Person, WorldState } from '../../contracts/index.ts'
 
 export type HeirReview =
   | Readonly<{ status: 'READY'; personId: Id; rankedCandidateIds: readonly Id[]; relation: 'DESCENDANT' | 'COLLATERAL' }>
-  | Readonly<{ status: 'PENDING'; reasonCodes: readonly string[]; rankedCandidateIds: readonly Id[] }>
+  | Readonly<{
+    status: 'PENDING'; reasonCodes: readonly string[]; rankedCandidateIds: readonly Id[]
+    /** 採用済みの探索範囲（直系子孫と同胞枝）の外に、共通祖先を持つ存命者がいる場合のID。順位の判断材料ではなく診断のみ。 */
+    outOfScopeKinIds?: readonly Id[]
+  }>
+
+export const OUT_OF_SCOPE_KIN_REASON = 'LIVING_KIN_BEYOND_ADOPTED_SIBLING_SCOPE'
 
 const cmp = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0
 const childrenOf = (persons: readonly Person[], parentId: Id): Person[] =>
@@ -68,5 +74,31 @@ export function reviewLandHeir(world: WorldState, predecessorId: Id): HeirReview
     if (unresolved) return { status: 'PENDING', reasonCodes: [unresolved], rankedCandidateIds: ranked }
     if (heir) return { status: 'READY', personId: heir.personId, rankedCandidateIds: ranked, relation: 'COLLATERAL' }
   }
-  return { status: 'PENDING', reasonCodes: ['NO_ESTABLISHED_HEIR'], rankedCandidateIds: ranked }
+  // 採用済みの範囲で後継が無い。範囲外に共通祖先を持つ存命者がいるかは診断として分け、順位には使わない。
+  // （従兄弟等を後継にする順位は未承認。ここで勝手に採用しない。）
+  const outOfScope = livingKinOutsideScope(byId, predecessorId, new Set(ranked))
+  return outOfScope.length > 0
+    ? { status: 'PENDING', reasonCodes: ['NO_ESTABLISHED_HEIR', OUT_OF_SCOPE_KIN_REASON], rankedCandidateIds: ranked, outOfScopeKinIds: outOfScope }
+    : { status: 'PENDING', reasonCodes: ['NO_ESTABLISHED_HEIR'], rankedCandidateIds: ranked }
+}
+
+function ancestorsOf(byId: ReadonlyMap<Id, Person>, id: Id): Set<Id> {
+  const out = new Set<Id>()
+  const stack = [id]
+  while (stack.length > 0) {
+    const p = byId.get(stack.pop()!)
+    for (const parent of [p?.fatherId, p?.motherId]) {
+      if (parent && !out.has(parent)) { out.add(parent); stack.push(parent) }
+    }
+  }
+  return out
+}
+
+function livingKinOutsideScope(byId: ReadonlyMap<Id, Person>, predecessorId: Id, ranked: ReadonlySet<Id>): Id[] {
+  const mine = ancestorsOf(byId, predecessorId)
+  if (mine.size === 0) return []
+  return [...byId.values()]
+    .filter(p => p.alive && p.personId !== predecessorId && !ranked.has(p.personId) &&
+      [...ancestorsOf(byId, p.personId)].some(a => mine.has(a)))
+    .map(p => p.personId).sort(cmp)
 }

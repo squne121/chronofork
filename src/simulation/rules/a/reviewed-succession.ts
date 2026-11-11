@@ -14,7 +14,7 @@ import type { OrdinaryLaw } from '../../legal/ordinary-authority.ts'
 import { mandateEffectiveNow, reviewOrdinaryAuthority, reviewOrdinaryDelegation, validateOrdinaryLaws } from '../../legal/ordinary-authority.ts'
 import { createASuc04WorldStateEvaluator } from './asuc04-worldstate.ts'
 import { createATit07EvidenceEvaluator } from './atit07-title-transfer.ts'
-import { reviewLandHeir } from './legal-heirs.ts'
+import { OUT_OF_SCOPE_KIN_REASON, reviewLandHeir } from './legal-heirs.ts'
 
 export const REVIEWED_LEGAL_VERSION = 'reviewed-normal-succession-1:CALIBRATION_ONLY'
 
@@ -192,9 +192,11 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
       const traceIndex = traceDrafts.length
       const candidateId = 'asuc04:review:' + JSON.stringify([ctx.year, legalCase.caseId])
       const candidatePersonId = heir?.status === 'READY' ? heir.personId : null
+      const outOfScopeKinIds = heir?.status === 'PENDING' ? heir.outOfScopeKinIds ?? [] : []
       const why = approved ? 'EXPLICIT_AUTHORITY_AND_HEIR_VERIFIED' :
         !predecessorId ? 'PREDECESSOR_EVIDENCE_MISSING' :
         heir?.status === 'PENDING' ? heir.reasonCodes[0]! : 'GAME_02_APPROVAL_EVIDENCE_MISSING'
+      const extraWhy = outOfScopeKinIds.length > 0 ? [OUT_OF_SCOPE_KIN_REASON] : []
       traceDrafts.push({
         year: ctx.year, phase: ctx.phase, ruleId: ctx.ruleId,
         actorRef: { kind: 'REGION', id: title.regionId },
@@ -202,9 +204,10 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
           inputs: { titleId: title.titleId, legalCaseId: legalCase.caseId,
             predecessorPersonId: predecessorId ?? null, candidatePersonId,
             decisionId: proof?.decisionId ?? null, authorityBasisId: proof?.authorityBasisId ?? null,
-            provenance: 'CALIBRATION_ONLY' }, reasonCodes: reason(why) }],
+            outOfScopeKinIds,
+            provenance: 'CALIBRATION_ONLY' }, reasonCodes: [...reason(why), ...extraWhy] }],
         ...(approved ? { selectedCandidateId: candidateId } : {}),
-        status: approved ? 'ACCEPT' : 'DEFER', reasonCodes: reason(why),
+        status: approved ? 'ACCEPT' : 'DEFER', reasonCodes: [...reason(why), ...extraWhy],
         modifierIds: [], ruleVersion: REVIEWED_LEGAL_VERSION,
       })
       if (!approved || !proof || !candidatePersonId || !predecessorId) continue
@@ -344,6 +347,7 @@ export function createReviewedLegalEvaluators(input: ReviewedLegalInput): Review
           candidates: [{ candidateId: pendingId, eligible: false,
             inputs: { titleId: title.titleId, beneficiaryPersonId: successorId,
               sourceDecisionId: mandateDecision?.decisionId ?? null,
+              delegationReviewReasons: lawReview.status === 'PENDING' ? [...lawReview.reasonCodes] : [],
               provenance: 'CALIBRATION_ONLY' },
             reasonCodes: reason('GAME_03_NEW_DELEGATION_EVIDENCE_MISSING') }],
           status: 'DEFER', reasonCodes: reason('GAME_03_NEW_DELEGATION_EVIDENCE_MISSING'),
