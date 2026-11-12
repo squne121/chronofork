@@ -438,10 +438,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           EXPERIMENTAL / CALIBRATION_ONLY ・試験計算（仮データ・partial）
         </p>
         <dl className="status-list">
-          <div>
+          {(!observation||!!comparison)&&<div>
             <dt>観測中の年</dt>
-            <dd data-testid="current-year">{comparison?world.year+'年（年初の状態）':observation?observation.year+'年（A0の年初）':workspaceOpen?world.year+'年（旧試験計算）':'1250〜1350年・原史は未観測'}</dd>
-          </div>
+            <dd data-testid="current-year">{comparison?world.year+'年（年初の状態）':workspaceOpen?world.year+'年（旧試験計算）':'1250〜1350年・原史は未観測'}</dd>
+          </div>}
           <div>
             <dt>観測中の歴史</dt>
             <dd data-testid="history-status">{!comparison&&!observation&&!workspaceOpen?'原史A0（未観測）':branchLabel}</dd>
@@ -451,9 +451,12 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
             <dd data-testid="goal-status">{!comparison&&!workspaceOpen?'正式な勝敗は未成立（goal=null・技術試験のみ）':observation&&!comparison?'正式な勝敗は未成立（goal=null、技術判定は原史欄に表示）':goalStatusLabel(result)}</dd>
           </div>
         </dl>
-        <p className="lead" data-testid="trial-guide">
-          この試験版でできること: 人物間信頼へ介入してA1を作り、同年の別ペアへ追加介入してA2まで再計算できます。A0/A1/A2の実Eventと判断根拠を観測します。正式な歴史・勝敗はまだ評価できません。
-        </p>
+        <details className="trial-help" data-testid="trial-guide-details">
+          <summary>試験構成と現在できること</summary>
+          <p className="lead" data-testid="trial-guide">
+            この試験版でできること: 人物間信頼へ介入してA1を作り、同年の別ペアへ追加介入してA2まで再計算できます。A0/A1/A2の実Eventと判断根拠を観測します。正式な歴史・勝敗はまだ評価できません。
+          </p>
+        </details>
       </header>
 
       <main className="layout">

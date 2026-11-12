@@ -54,3 +54,18 @@
 .effect-card h4{margin:0 0 0.4rem;font-size:0.95rem;}
 .effect-card p{margin:0.3rem 0;font-size:0.94rem;overflow-wrap:anywhere;}
 @media(max-width:960px){.effect-summary{padding:0.75rem;}}
+
+/* UX-R4: ドラッグ中はつまみだけを追従させ、離してから実データを取得する。 */
+.obs-year-ticks{display:flex;justify-content:space-between;gap:0.3rem;padding:0 0.12rem;font-size:0.75rem;color:#566477;}
+.obs-year-nav input[type="range"]{cursor:ew-resize;touch-action:pan-y;accent-color:#2563a5;min-height:1.8rem;}
+.obs-year-nav output{font-weight:600;}
+.obs-holder-history{padding:0.65rem;margin:0.6rem 0;background:#f8fafc;border:1px solid var(--line);border-radius:5px;}
+.obs-holder-history h5{margin:0.2rem 0 0.5rem;}
+.obs-holder-history li{padding:0.35rem 0;line-height:1.5;}
+.obs-holder-history button{margin-left:0.5rem;background:white;border:1px solid var(--line);padding:0.2rem 0.5rem;border-radius:4px;}
+.obs-goal{margin-top:0.7rem;}
+.obs-goal summary,.trial-help summary{cursor:pointer;}
+.obs-family-help{margin:0.7rem 0;}
+.trial-help{font-size:0.86rem;margin:0.5rem 0;flex-basis:100%;}
+.trial-help .lead{margin:0.45rem 0;}
+@media(max-width:960px){.obs-holder-history button{display:block;margin:0.2rem 0 0.45rem;}}

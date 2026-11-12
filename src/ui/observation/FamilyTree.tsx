@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from 'react'
 import type { Id, WorldState } from '../../simulation/contracts/index.ts'
+import { titleLabel } from './title-history.ts'
 import {
   buildFamilyTreeModel,
   type AffiliationView,
@@ -29,8 +30,6 @@ const UNCONFIRMED_TEXT: Record<UnconfirmedNode['reason'], string> = {
   NOT_BORN_YET: 'この年にはまだ出生していない',
   SELF_REFERENCE: '本人を指しており確認できない',
 }
-
-const KIND_TEXT = { TERRITORIAL: '領地', CROWN: '王冠' } as const
 
 function PersonButton({ node, role, onSelect }: { node: PersonNode; role: string; onSelect?: (id: Id) => void }) {
   const dead = node.life.kind === 'DEAD'
@@ -79,8 +78,8 @@ function legalText(a: AffiliationView['legalDynasty']): string {
   return `確定済みだが王朝名を確認できない（ID: ${a.dynastyId}）`
 }
 
-function TitleItem({ t, onSelect }: { t: TitleView; onSelect?: (id: Id) => void }) {
-  const label = `${KIND_TEXT[t.kind]}Title ${t.titleId}（${t.regionName ?? `地域ID: ${t.regionId}`}${t.valid ? '' : '・無効'}）`
+function TitleItem({ t, displayName, onSelect }: { t: TitleView; displayName: string; onSelect?: (id: Id) => void }) {
+  const label = `${displayName}（${t.titleId}${t.valid ? '' : '・無効'}）`
   return (
     <li>
       {onSelect ? (
@@ -153,7 +152,7 @@ export function FamilyTree({ world, personId, onSelectPerson, onSelectTitle }: F
             </span>
           </li>
           {spouses.length === 0 ? (
-            <li><span className="ft-node ft-unknown" data-testid="family-no-spouse"><span className="ft-role">配偶者</span><span className="ft-sub">この年に有効な婚姻は確認できない</span></span></li>
+            <li><span className="ft-node ft-unknown" data-testid="family-no-spouse"><span className="ft-role">配偶者</span><span className="ft-sub">この年に有効な婚姻の記録なし（生涯未婚とは限りません）</span></span></li>
           ) : (
             spouses.map((s) => (
               <li key={s.kind === 'PERSON' ? s.personId : s.refId}>
@@ -197,9 +196,12 @@ export function FamilyTree({ world, personId, onSelectPerson, onSelectTitle }: F
             <span data-testid="family-no-title">この年に保持が確認できるTitleはない</span>
           ) : (
             <ul className="ft-titles" aria-label="記録上のTitle保持" data-testid="family-titles">
-              {titles.map((t) => (
-                <TitleItem key={t.titleId} t={t} {...(onSelectTitle ? { onSelect: onSelectTitle } : {})} />
-              ))}
+              {titles.map((t) => {
+                const record=world.titles.find(x=>x.titleId===t.titleId)
+                return <TitleItem key={t.titleId} t={t}
+                  displayName={record?titleLabel(record,world):t.titleId}
+                  {...(onSelectTitle ? { onSelect: onSelectTitle } : {})}/>
+              })}
             </ul>
           )}
         </dd>
