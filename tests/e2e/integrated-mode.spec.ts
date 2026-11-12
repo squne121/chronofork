@@ -302,8 +302,17 @@ test.describe('観測中心UX114: 介入前の統合A0を実Workerで観測(オ�
     await expect(page.getByTestId('branch-person-one')).toHaveValue(await page.getByTestId('obs-person').inputValue())
     await expect(page.getByTestId('branch-results')).toHaveCount(0)
 
+    // 年表の入口から実記録の年を選び、出来事を1回クリックして人物・根拠を調べる。
+    const initialPerson=await page.getByTestId('obs-person').inputValue()
+    const hinted=page.locator('[data-testid^="obs-hint-year-"]')
+    await expect(hinted.first()).toBeVisible()
+    await hinted.first().click()
+    await expect(page.getByTestId('obs-event-list').getByRole('button').first()).toBeVisible({timeout:90_000})
+    await page.getByTestId('obs-event-list').getByRole('button').first().click()
+    await expect(page.getByTestId('obs-event-detail')).toBeVisible()
+    await page.getByTestId('obs-person').selectOption(initialPerson)
     // 同じ100年A0を使い、1345年の介入からA1の5年だけを実再計算する。
-    await page.getByText('年代記の年別件数（実Event・Trace）').click()
+    await page.getByText('すべての年の記録件数を見る（Event・Trace）').click()
     await page.getByRole('button',{name:/^1345年・事件/}).click()
     await expect(page.getByTestId('obs-year-label')).toContainText('1345年初',{timeout:90_000})
     await expect(page.getByTestId('obs-cache-source')).toContainText('再利用')
