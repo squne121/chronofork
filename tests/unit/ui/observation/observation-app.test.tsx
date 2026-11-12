@@ -8,6 +8,7 @@ import {extractCandidates} from '../../../../src/ui/play-candidates.ts'
 import type {CandidatesRunner,ObservationOutcome} from '../../../../src/ui/play-runner.ts'
 import type {PlayOutcome,PlayRunner} from '../../../../src/ui/play-runner.ts'
 import {createExperimentalIntegratedWorld} from '../../../../src/scenario/experimental/index.ts'
+import {buildTitleHoldingHistories} from '../../../../src/ui/observation/title-history.ts'
 
 beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
 afterEach(cleanup)
@@ -21,6 +22,7 @@ it('介入前に実A0を観測すると、旧C004年表を同じ歴史と誤表�
     counts:Array.from({length:101},(_,i)=>({year:1250+i,events:0,traces:0})),
     technicalGoal:null,goal:null,status:'COMPLETED',a0Source:'COMPUTED',
     candidates:extractCandidates(20260101,'INTEGRATED_EXPERIMENTAL',[world,{...world,year:1251}]),
+    titleHistories:buildTitleHoldingHistories([world],[]),
   }
   const runner:PlayRunner=Object.assign(
     (input:PlayInput):Readonly<{promise:Promise<PlayOutcome>;cancel:()=>void}>=>({
@@ -56,6 +58,7 @@ it('観測A0の候補は1250年だけではなく、介入年1251年にも適格
     seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',year:1250,world,events:[],traces:[],
     counts:Array.from({length:101},(_,i)=>({year:1250+i,events:0,traces:0})),
     technicalGoal:null,goal:null,status:'COMPLETED',a0Source:'COMPUTED',candidates,
+    titleHistories:buildTitleHoldingHistories([world],[]),
   }
   const runner:PlayRunner=Object.assign((input:PlayInput)=>({
     promise:Promise.resolve({kind:'FAILED',code:'NOT_USED',message:String(input.year)} as PlayOutcome),
@@ -98,6 +101,7 @@ it('ユーザー指定のA0 seedを使用し、観測完了後も再観測・旧
       seed:input.seed,mode:'INTEGRATED_EXPERIMENTAL',year:input.year,world,
       events:[],traces:[],counts:[],technicalGoal:null,goal:null,status:'COMPLETED',a0Source:'COMPUTED',
       candidates:extractCandidates(input.seed,'INTEGRATED_EXPERIMENTAL',[world]),
+      titleHistories:buildTitleHoldingHistories([world],[]),
     }
     return {promise:Promise.resolve({kind:'DONE',result:{ok:true,observation},computeMs:1} as ObservationOutcome),cancel:()=>{}}
   },reset:()=>{}})

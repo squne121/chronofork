@@ -9,7 +9,7 @@ import type { WorkerLike } from '../../../../src/ui/play-runner.ts'
 const fakeRun={
   inputs:{seed:20260101},
   result:{status:'COMPLETED',goal:null,technicalGoal:null,
-    snapshots:[{year:1250,persons:[]},{year:1251,persons:[]}],
+    snapshots:[{year:1250,persons:[],titles:[]},{year:1251,persons:[],titles:[]}],
     eventLog:[{eventId:'e',year:1250,eventType:'PERSON_BIRTH'}],
     decisionTraces:[{traceId:'t',year:1250,status:'DEFER',ruleId:'B-005',eventIds:[]}],
   },
@@ -26,6 +26,7 @@ describe('統合原史A0の年次観測',()=>{
     expect(v?.candidates).toMatchObject({seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',candidates:[]})
     expect(v?.counts[1]).toEqual({year:1251,events:0,traces:0,focusEvents:0})
     expect(v?.goal).toBeNull()
+    expect(v?.titleHistories).toEqual([])
     expect(sliceA0Observation(fakeRun,1252,'INTEGRATED_EXPERIMENTAL','REUSED')).toBeUndefined()
   })
   it('観測と比較が同じWorkerを共有し、キャンセル時には破棄する',async()=>{

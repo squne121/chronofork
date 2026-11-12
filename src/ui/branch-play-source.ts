@@ -26,6 +26,8 @@ import type { TimelineRun } from './timeline-source.ts'
 import { extractCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
 import { isObservationFocusEvent } from './integrated-overview.ts'
+import { buildTitleHoldingHistories } from './observation/title-history.ts'
+import type { TitleHoldingHistory } from './observation/title-history.ts'
 import { buildA0CacheKey, countsOf } from './a0-cache.ts'
 import type { A0Source, SingleA0Cache } from './a0-cache.ts'
 export type { A0Source } from './a0-cache.ts'
@@ -431,6 +433,8 @@ export type ObservationSlice = Readonly<{
   events:readonly EventLogEntry[]
   traces:readonly DecisionTrace[]
   counts:readonly ObservationYearCounts[]
+  /** 実A0の各年初から得たTitle保持者推移。正式な継承成立を意味しない。 */
+  titleHistories:readonly TitleHoldingHistory[]
   /** 1250〜1350の実A0全snapshotから作成した軽量KEY人物候補。1年だけの候補ではない。 */
   candidates:PlayCandidateSet
   technicalGoal:TimelineResult['technicalGoal']
@@ -445,6 +449,7 @@ export type ObservationResult =
 
 // 保持中の同じA0に対して軽量KEY人物候補を再集計しない。Worker破棄でGC可能。
 const observationCandidateCache=new WeakMap<TimelineRun,PlayCandidateSet>()
+const observationTitleHistoryCache=new WeakMap<TimelineRun,readonly TitleHoldingHistory[]>()
 /** 実A0の確定結果だけを読む。UIが計算規則や架空の歴史を生成しないための純粋関数。 */
 export function sliceA0Observation(
   a0:TimelineRun,year:number,mode:'INTEGRATED_EXPERIMENTAL',a0Source:A0Source,
@@ -472,8 +477,13 @@ export function sliceA0Observation(
     candidates=extractCandidates(a0.inputs.seed,mode,a0.result.snapshots)
     observationCandidateCache.set(a0,candidates)
   }
+  let titleHistories=observationTitleHistoryCache.get(a0)
+  if(!titleHistories){
+    titleHistories=buildTitleHoldingHistories(a0.result.snapshots,a0.result.eventLog)
+    observationTitleHistoryCache.set(a0,titleHistories)
+  }
   return {
-    seed:a0.inputs.seed,mode,year,world,events,traces,counts,candidates,
+    seed:a0.inputs.seed,mode,year,world,events,traces,counts,candidates,titleHistories,
     goal:a0.result.goal,technicalGoal:a0.result.technicalGoal,status:a0.result.status,a0Source,
   }
 }
