@@ -59,12 +59,15 @@ describe('介入前の原史A0観測画面',()=>{
   })
   it('人間向け年表は高頻度の人口Eventを省略表示し、利用者が全記録へ戻れる',()=>{
     const pop={...event,eventId:'synthetic-pop',eventType:'POPULATION_COHORT'} as EventLogEntry
-    const withPop={...view,events:[...view.events,pop],counts:view.counts.map((c,i)=>i===0?{...c,focusEvents:2}:c)}
+    const supporting={...event,eventId:'synthetic-supporting',eventType:'PERSON_SUPPORTING_RECORD'} as EventLogEntry
+    const withPop={...view,events:[...view.events,pop,supporting],counts:view.counts.map((c,i)=>i===0?{...c,focusEvents:2}:c)}
     render(<ObservationPanel {...seedProps} observation={withPop} loading={false}
       onLoad={vi.fn()} onCancel={vi.fn()} onIntervene={vi.fn()}/>)
     expect(screen.getByTestId('obs-event-list').textContent).not.toContain('POPULATION_COHORT')
+    expect(screen.getByTestId('obs-event-list').textContent).not.toContain('PERSON_SUPPORTING_RECORD')
     fireEvent.click(screen.getByTestId('obs-all-events'))
     expect(screen.getByTestId('obs-event-list').textContent).toContain('POPULATION_COHORT')
+    expect(screen.getByTestId('obs-event-list').textContent).toContain('PERSON_SUPPORTING_RECORD')
   })
   it('実記録がある年のボタンは自動重大度でなく年代順に探索年を切り替える',()=>{
     const onLoad=vi.fn()

@@ -3,7 +3,7 @@ import type { ObservationSlice } from '../branch-play-source.ts'
 import type { PlayProgress } from '../play-progress.ts'
 import { associationsFor, collectAssociations } from './associations.ts'
 import { FamilyTree } from './FamilyTree.tsx'
-import { eventHeadline, namesOf, EVENT_CATEGORIES, inCategory } from '../integrated-overview.ts'
+import { eventHeadline, namesOf, EVENT_CATEGORIES, inCategory, isObservationFocusEvent } from '../integrated-overview.ts'
 import { describeEvent, shortPersonName } from '../event-summary.ts'
 import type { EventLogEntry, DecisionTrace, Id } from '../../simulation/contracts/index.ts'
 import type { GoalFailureCode } from '../../simulation/goal.ts'
@@ -72,7 +72,7 @@ export function ObservationPanel(p:Props){
   const names=useMemo(()=>namesOf(v?.world),[v])
   const eventKind=(e:EventLogEntry)=>EVENT_CATEGORIES.find(c=>inCategory(e,c))?.label??labelOf(e.eventType)
   const readableEvent=(e:EventLogEntry)=>eventHeadline(e,names,eventKind(e))
-  const isPeopleTitleEvent=(e:EventLogEntry)=>EVENT_CATEGORIES.some(c=>inCategory(e,c))
+  const isPeopleTitleEvent=(e:EventLogEntry)=>isObservationFocusEvent(e)
   const yearHints=(v?.counts??[]).filter(c=>(c.focusEvents??0)>0)
   const types=[...new Set(v?.events.map(e=>e.eventType)??[])].sort()
   const events=(v?.events??[]).filter(e=>(eventType==='ALL'||e.eventType===eventType)&&
@@ -204,7 +204,7 @@ export function ObservationPanel(p:Props){
       <div className="obs-two-col">
         <div className="obs-timeline">
           <h3>年表・{v.year}年に記録された出来事</h3>
-          <p className="note">最初は、婚姻・出生・死亡・王朝帰属・土地Titleなどの確定記録だけを示します。人口等の記録も下で確認できます。</p>
+          <p className="note">最初は婚姻・出生・死亡・王朝帰属・土地Titleなどを示します。人口や補助人物の登録を含む全Eventも下から表示できます。</p>
           <label>Event種別
             <select data-testid="obs-event-type" value={eventType} onChange={e=>{setEventType(e.target.value);setEventLimit(SHOW)}}>
               <option value="ALL">全種類</option>

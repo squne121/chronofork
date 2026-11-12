@@ -25,7 +25,7 @@ import { EXPERIMENTAL_TUNING } from '../simulation/tuning.ts'
 import type { TimelineRun } from './timeline-source.ts'
 import { extractCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
-import { EVENT_CATEGORIES, inCategory } from './integrated-overview.ts'
+import { isObservationFocusEvent } from './integrated-overview.ts'
 import { buildA0CacheKey, countsOf } from './a0-cache.ts'
 import type { A0Source, SingleA0Cache } from './a0-cache.ts'
 export type { A0Source } from './a0-cache.ts'
@@ -457,7 +457,7 @@ export function sliceA0Observation(
     const ix=e.year-START_YEAR
     if(ix>=0&&ix<counts.length){
       counts[ix]!.events++
-      if(EVENT_CATEGORIES.some(c=>inCategory(e,c)))counts[ix]!.focusEvents++
+      if(isObservationFocusEvent(e))counts[ix]!.focusEvents++
     }
     if(e.year===year)events.push(e)
   }
