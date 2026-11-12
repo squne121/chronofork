@@ -1,7 +1,7 @@
 // 差分検証: 検証済み WorldState から pairTrust だけが変わった場合の高速な妥当性確認。
 // 肯定できた場合のみ true を返す。少しでも疑わしい（pairTrust 以外が変化、診断が 1 件でも出る）場合は false を返し、
 // 呼出側が従来の validateWorldState（全体検証）で正確な診断を得る。検証自体を省略するものではない。
-import type { Id, WorldState } from '../contracts/index.ts'
+import type { Id, PersonPairTrust, WorldState } from '../contracts/index.ts'
 import type { Diagnostic } from './diagnostics.ts'
 import { checkPairTrustRecords } from './integrity.ts'
 import { parsePairTrustRecords } from './parse.ts'
@@ -55,7 +55,25 @@ export function confirmPairTrustOnlyChangeValid(before: WorldState, after: World
   const personIds = new Set<Id>(after.persons.map((p) => p.personId))
   let clean = true
   const flag = () => { clean = false }
-  checkPairTrustRecords(records, after.year, (_kind, id) => personIds.has(id) || (flag(), false), flag)
+  checkPairTrustRecords(records, after.year, (_kind, id) => personIds.has(id) || (flag(), false), flag, (id) => personIds.has(id))
   if (!clean) return false
-  return new Set(afterList.map(keyOf)).size === afterList.length
+  return hasNoDuplicatePair(afterList, changed)
+}
+
+/**
+ * 人物ペアの重複が無いこと。`before` は検証済み（保持される記録同士は別参照・別ペア）なので、
+ * 参照の重複が無いことと、新規/変更された記録（少数）が他のどの記録とも同一ペアでないことを確認すれば全件確認と同値になる。
+ * 変更が多い場合は従来どおり全記録のキー数で確認する。
+ */
+function hasNoDuplicatePair(afterList: readonly PersonPairTrust[], changed: readonly PersonPairTrust[]): boolean {
+  if (changed.length > 8) return new Set(afterList.map(keyOf)).size === afterList.length
+  // 同一参照が複数回現れる場合（保持される記録の重複を含む）は同一ペアの重複。
+  if (new Set<object>(afterList).size !== afterList.length) return false
+  for (const c of changed) {
+    let same = 0 // 自身を含めてちょうど 1 件（同一参照が複数回現れる場合も重複）
+    for (const r of afterList) {
+      if (r.personIds[0] === c.personIds[0] && r.personIds[1] === c.personIds[1] && ++same > 1) return false
+    }
+  }
+  return true
 }
