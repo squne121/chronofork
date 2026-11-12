@@ -6,6 +6,7 @@ import { FamilyTree } from './FamilyTree.tsx'
 import { eventHeadline, namesOf, EVENT_CATEGORIES, inCategory } from '../integrated-overview.ts'
 import { describeEvent, shortPersonName } from '../event-summary.ts'
 import type { EventLogEntry, DecisionTrace, Id } from '../../simulation/contracts/index.ts'
+import type { GoalFailureCode } from '../../simulation/goal.ts'
 import './observation.css'
 
 type Props = Readonly<{
@@ -27,7 +28,20 @@ const EVENT_LABELS:Readonly<Record<string,string>>={
 }
 const labelOf=(type:string)=>EVENT_LABELS[type]??type
 const SHOW=35
-const reason=(codes:readonly string[])=>codes.length?codes.join('、'):'理由コードの記録なし'
+const GOAL_REASON:Readonly<Record<GoalFailureCode,string>>={
+  NOT_TERRITORIAL:'土地の称号ではない',TITLE_INVALID:'称号が無効',TITLE_NOT_HEREDITARY:'世襲できない称号',
+  TITLE_NOT_RECOGNIZED:'称号の承認が不足',REQUIRES_RECOGNITION:'現在の主権による承認が必要',
+  HOLDER_UNDETERMINED:'保持者が未確定',HOLDER_NOT_FOUND:'保持者の人物記録がない',
+  HOLDER_DEAD:'保持者が死亡している',DYNASTY_UNDETERMINED:'法的王朝所属が未確定',
+  DYNASTY_MISMATCH:'保持者の法的王朝が対象と異なる',REGION_NOT_FOUND:'対象の地域記録がない',
+  NO_CONTROL:'直接支配または有効な統治委任がない',
+}
+const reason=(codes:readonly string[])=>codes.length
+  ?codes.map(code=>code in GOAL_REASON
+    ?GOAL_REASON[code as GoalFailureCode]+'（'+code+'）':code).join('、')
+  :'理由コードの記録なし'
+const goalStatusText=(status:string)=>status==='ACHIEVED'?'条件を満たしている':
+  status==='NOT_ACHIEVED'?'条件を満たしていない':status==='INVALID_INPUT'?'検証不能な入力':'評価対象外'
 
 /** PR-2: 介入前の原史A0を、証拠のある履歴だけで調べる。WorldStateは選択年の年初。 */
 export function ObservationPanel(p:Props){
@@ -174,11 +188,15 @@ export function ObservationPanel(p:Props){
       </div>
       <div className="obs-goal" data-testid="obs-goal">
         <h3>1350年の王朝存続条件（技術判定）</h3>
-        <p>正式勝敗：未成立。技術判定：{goal?.status??'記録なし'}（介入前のA0、1350年初の実状態）</p>
+        <p>正式勝敗：未成立。技術判定：{goal?goalStatusText(goal.status)+'（'+goal.status+'）':'記録なし'}
+          （介入前A0・1350年初の実状態。正式なゲームの勝敗ではありません）</p>
         {assessments.length>0&&<details open>
           <summary>Title別の不足条件と根拠</summary>
           <ul>{assessments.map(a=><li key={a.titleId}>
-            <strong>{a.titleId}</strong>：{a.qualifies?'条件に一致':reason(a.failures)}
+            <strong>{(()=>{const t=v.world.titles.find(x=>x.titleId===a.titleId);
+              const region=v.world.regions.find(r=>r.regionId===t?.regionId);
+              return region?region.name+'の称号（'+a.titleId+'）':a.titleId})()}</strong>：
+              {a.qualifies?'条件を満たしている（技術判定）':'不足している条件：'+reason(a.failures)}
           </li>)}</ul>
         </details>}
         {goal?.status==='INVALID_INPUT'&&<p>計算結果の技術評価はデータ不正のため成立していません。</p>}

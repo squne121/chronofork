@@ -50,6 +50,7 @@ describe('介入前の原史A0観測画面',()=>{
     expect(screen.getByTestId('obs-trace-list').textContent).toContain('B-005')
     expect(screen.getByTestId('obs-trace-list').textContent).toContain('保留')
     expect(screen.getByTestId('obs-goal').textContent).toContain('TITLE_NOT_RECOGNIZED')
+    expect(screen.getByTestId('obs-goal').textContent).toContain('称号の承認が不足')
     expect(screen.getByTestId('obs-goal').textContent).toContain('正式勝敗：未成立')
     expect(screen.getByTestId('obs-event-list').textContent).toContain('出生')
     expect(screen.getByTestId('family-tree')).toBeTruthy()

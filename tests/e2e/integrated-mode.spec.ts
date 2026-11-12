@@ -266,6 +266,7 @@ test.describe('統合モード: 同年・別ペアに追加介入してA2を作�
     await page.getByTestId('a2-run').click()
     await expect(page.getByTestId('a2-results')).toBeVisible({timeout:20*60_000})
     await expect(page.getByTestId('a2-goal-summary')).toContainText('A2 ACHIEVED（技術検証）')
+    await expect(page.getByTestId('effect-a2-comparison')).toContainText('A1→A2')
     await expect(page.getByTestId('a2-title-basis')).toContainText('新規ControlMandate')
     await expect(page.getByTestId('goal-status')).toContainText('正式な勝敗は未成立')
     await expect(page.getByTestId('history-status')).toContainText('A2')

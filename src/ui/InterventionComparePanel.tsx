@@ -149,6 +149,7 @@ export function InterventionComparePanel(p:Props){
     return inOptions(selected)?list:[<option key="__missing" value={selected} disabled>{personName(selected)}（{yearOk?`${year}年初には存在しません`:'年を確認してください'}）</option>,...list]
   }
   const data=p.comparison?compareYear(p.comparison,p.year):undefined
+  const secondData=p.comparison?.second?compareYear(p.comparison.second,p.year):undefined
   const before=data?.a0World,after=data?.a1World
   const input=p.comparison?.input
   const continuityA0=p.comparison?observeDynastyContinuity(
@@ -348,6 +349,17 @@ export function InterventionComparePanel(p:Props){
               :'技術判定の状態に違いがあります。詳細は土地Title別の評価で確認できます。'}</p>
             {p.comparison.second&&<p data-testid="effect-a2-goal">A2（第2介入後）：{trialGoalStatus(p.comparison.second.a1.result.technicalGoal)}</p>}
           </div>
+          {p.comparison.second&&<div className="effect-card" data-testid="effect-a2-comparison">
+            <h4>追加介入の結果（A1→A2）</h4>
+            <p>{personName(p.comparison.second.input.firstPersonId)} と {personName(p.comparison.second.input.secondPersonId)}に
+              {p.comparison.second.input.signedDelta>0?'+':''}{p.comparison.second.input.signedDelta}の信頼補正を追加しました。</p>
+            <p>この年の確定Event差分：<strong>{secondData?.events.length??0}件</strong></p>
+            <p className="note">{(secondData?.events.length??0)===0?
+              'この年の確定Eventに差はありません。別の年のEventや判断が不変とは限りません。':
+              'この年にA1とA2でEventの追加・消失・内容差が確認されました。'}</p>
+            <p>1350年の技術判定：A1 {trialGoalStatus(p.comparison.second.a0.result.technicalGoal)}
+              → A2 {trialGoalStatus(p.comparison.second.a1.result.technicalGoal)}</p>
+          </div>}
         </div>
         <p className="note">A0/A1は同じseed・実行構成で再計算しています。確認した差を表示しており、この介入だけが原因と断定しません。正式な勝敗は未成立です。</p>
       </section>
