@@ -23,9 +23,10 @@ export function titleLabel(title:Title,world:WorldState):string{
   const region=world.regions.find(r=>r.regionId===title.regionId)
   if(title.kind==='CROWN'){
     const country=world.countries.find(c=>c.countryId===region?.sovereignCountryId)
-    return (country?.name??region?.name??'名称未確認')+'王位（王冠称号）'
+    return country?country.name+'王位（王冠称号）':
+      '王冠称号（地域ID: '+title.regionId+'／国名未確認）'
   }
-  return (region?.name??title.regionId)+'の領主権（領地称号）'
+  return region?region.name+'の領主権（領地称号）':'領地称号（地域ID: '+title.regionId+'／地域名未確認）'
 }
 
 /** 年初の保持者だけで期間をまとめる。保持変更を正式な世襲・移転Eventとみなさない。 */
