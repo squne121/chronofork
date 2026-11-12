@@ -79,7 +79,7 @@ function legalText(a: AffiliationView['legalDynasty']): string {
 }
 
 function TitleItem({ t, displayName, onSelect }: { t: TitleView; displayName: string; onSelect?: (id: Id) => void }) {
-  const label = `${displayName}（${t.titleId}${t.valid ? '' : '・無効'}）`
+  const label = `${displayName}${t.valid ? '' : '（無効）'}`
   return (
     <li>
       {onSelect ? (
