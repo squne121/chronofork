@@ -322,6 +322,8 @@ test.describe('観測中心UX114: 介入前の統合A0を実Workerで観測(オ�
     await expect(page.getByTestId('branch-run')).toBeEnabled()
     await page.getByTestId('branch-run').click()
     await expect(page.getByTestId('branch-results')).toBeVisible({timeout:8*60_000})
+    await expect(page.getByTestId('effect-summary')).toBeVisible()
+    await expect(page.getByTestId('effect-year-events')).toContainText('差分')
     await expect(page.getByTestId('branch-error')).toHaveCount(0)
     await expect(page.getByTestId('integrated-a0-source')).toContainText('再利用')
     await expect(page.getByTestId('history-status')).toContainText('A1')

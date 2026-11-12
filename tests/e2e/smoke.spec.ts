@@ -11,6 +11,19 @@ const REGIONS = [
 
 test.use({ viewport: { width: 1280, height: 800 } })
 
+test('初回は未観測の原史A0だけを入口にし、旧C004/直接介入は明示操作で開く',async({page})=>{
+  await page.goto('/')
+  await expect(page.getByTestId('obs-intro')).toBeVisible()
+  await expect(page.getByTestId('obs-start')).toBeVisible()
+  await expect(page.getByTestId('history-status')).toContainText('未観測')
+  await expect(page.getByTestId('current-year')).not.toContainText('1273')
+  await expect(page.getByTestId('legacy-workspace')).not.toHaveAttribute('open','')
+  await expect(page.getByTestId('branch-run')).toBeHidden()
+  await page.getByTestId('legacy-toggle').click()
+  await expect(page.getByTestId('branch-run')).toBeVisible()
+})
+
+
 test('experimental・partial・正式な勝敗未成立・37件TODOを明示する', async ({ page }) => {
   await page.goto('/?entry=legacy')
   await expect(page.getByRole('heading', { name: 'Project Chronofork', level: 1 })).toBeVisible()
@@ -305,6 +318,9 @@ for (const width of [1280, 960]) {
     await expect(page.getByTestId('play-mode-description')).toContainText('背景法令')
     await expect(page.getByTestId('branch-fork-year')).toHaveValue('1250')
     await page.getByTestId('branch-run').click()
+    await expect(page.getByTestId('effect-summary')).toBeVisible()
+    await expect(page.getByTestId('effect-judgement')).toContainText('REJECT')
+    await expect(page.getByTestId('effect-judgement')).toContainText('ACCEPT')
     await expect(page.getByTestId('branch-status')).toContainText('A1 COMPLETED')
     await expect(page.getByTestId('trial-goal-mode')).toContainText('通常法制')
     await expect(page.getByTestId('trial-goal-a0')).toContainText('技術検証')
