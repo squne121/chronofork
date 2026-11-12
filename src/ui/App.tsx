@@ -306,6 +306,8 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     setEventId(undefined)
     setTraceId(undefined)
     setSelection(undefined)
+    // 計算完了後は実際の差分要約へ移動し、技術ログの海で迷わせない。
+    setTimeout(()=>document.getElementById('effect-summary')?.scrollIntoView?.({block:'start'}),0)
   }
   const runComparison = (input:PlayInput) => {
     setNotice(undefined)

@@ -321,7 +321,37 @@ export function InterventionComparePanel(p:Props){
         onRun={p.onRun} onViewA2={()=>p.onViewBranch('A2')}/>
     }
     {p.comparison&&input&&before&&after&&<div data-testid="branch-results" className="compare-results">
-      <h3 className="step-title"><span className="step-no">3</span>同じ年のA0/A1を比べる</h3>
+      <section className="effect-summary" id="effect-summary" data-testid="effect-summary" aria-labelledby="effect-summary-heading">
+        <h3 id="effect-summary-heading">この介入で、実際に何が変わった？</h3>
+        <p>選んだ2人：<strong>{personName(pair[0])} と {personName(pair[1])}</strong></p>
+        <p data-testid="effect-input">介入条件：{input.year}年から{input.durationYears}年間、2人の信頼を
+          <strong>{input.signedDelta>0?'+':''}{input.signedDelta}</strong>補正。これは入力値であり、歴史の結果とは別です。</p>
+        <div className="effect-cards">
+          <div className="effect-card" data-testid="effect-judgement">
+            <h4>対象の判断（{p.year}年）</h4>
+            <p>A0 {traceA0?.status??'記録なし'}（スコア {score(traceA0)}） → A1 {traceA1?.status??'記録なし'}（スコア {score(traceA1)}）</p>
+            <p className="note">{!traceA0&&!traceA1?'この年の対象B-004判断は記録されていません。':
+              traceA0?.status===traceA1?.status?'判断の採否は変わっていません。':'判断の採否に違いが確認されました。'}</p>
+          </div>
+          <div className="effect-card" data-testid="effect-year-events">
+            <h4>確定した出来事（{p.year}年）</h4>
+            <p>A0/A1の差分：<strong>{eventRows.length}件</strong>（選んだ2人・子 {focused.length}件 / その他 {other.length}件）</p>
+            <p className="note">{eventRows.length===0
+              ?'この年の確定Eventに差はありません。後年の出来事や判断まで同一とは限りません。'
+              :'この年に実Eventの追加・消失・内容差が記録されています。下の一覧から出典を確認できます。'}</p>
+          </div>
+          <div className="effect-card" data-testid="effect-technical-goal">
+            <h4>1350年の王朝存続条件（技術判定）</h4>
+            <p>A0 {trialGoalStatus(goalA0)} → A1 {trialGoalStatus(goalA1)}</p>
+            <p className="note">{goalA0?.status===goalA1?.status
+              ?'技術判定の達成状態は変わっていません。Title別の不足理由には違いがある可能性があります。'
+              :'技術判定の状態に違いがあります。詳細は土地Title別の評価で確認できます。'}</p>
+            {p.comparison.second&&<p data-testid="effect-a2-goal">A2（第2介入後）：{trialGoalStatus(p.comparison.second.a1.result.technicalGoal)}</p>}
+          </div>
+        </div>
+        <p className="note">A0/A1は同じseed・実行構成で再計算しています。確認した差を表示しており、この介入だけが原因と断定しません。正式な勝敗は未成立です。</p>
+      </section>
+      <h3 className="step-title"><span className="step-no">3</span>同じ年のA0/A1を詳しく比べる</h3>
       <div className="headline" data-testid="branch-headline">
         <p><strong>{personName(pair[0])}と{personName(pair[1])}</strong>（{p.year}年）</p>
         <ul>
