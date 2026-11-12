@@ -3,6 +3,9 @@ import type { ObservationSlice } from '../branch-play-source.ts'
 import type { PlayProgress } from '../play-progress.ts'
 import { associationsFor, collectAssociations } from './associations.ts'
 import { FamilyTree } from './FamilyTree.tsx'
+import { eventHeadline, namesOf, EVENT_CATEGORIES, inCategory } from '../integrated-overview.ts'
+import { describeEvent, shortPersonName } from '../event-summary.ts'
+import type { EventLogEntry, DecisionTrace, Id } from '../../simulation/contracts/index.ts'
 import './observation.css'
 
 type Props = Readonly<{
@@ -40,6 +43,8 @@ export function ObservationPanel(p:Props){
   const [relatedOnly,setRelatedOnly]=useState(false)
   const [eventLimit,setEventLimit]=useState(SHOW)
   const [traceLimit,setTraceLimit]=useState(SHOW)
+  const [showAllEvents,setShowAllEvents]=useState(false)
+  const [yearHintLimit,setYearHintLimit]=useState(8)
   const persons=useMemo(()=>v?.world.persons.filter(x=>x.birthYear<=v.year)??[],[v])
   const person=persons.some(x=>x.personId===selectedPerson)?selectedPerson:
     (persons.find(x=>x.interactionRole!=='SUPPORTING')??persons[0])?.personId??''
@@ -50,13 +55,37 @@ export function ObservationPanel(p:Props){
     [associations,person])
   const eventRefs=new Set(refs.filter(x=>x.source.type==='EVENT').map(x=>(x.source as {eventId:string}).eventId))
   const traceRefs=new Set(refs.filter(x=>x.source.type==='TRACE').map(x=>(x.source as {traceId:string}).traceId))
+  const names=useMemo(()=>namesOf(v?.world),[v])
+  const eventKind=(e:EventLogEntry)=>EVENT_CATEGORIES.find(c=>inCategory(e,c))?.label??labelOf(e.eventType)
+  const readableEvent=(e:EventLogEntry)=>eventHeadline(e,names,eventKind(e))
+  const isPeopleTitleEvent=(e:EventLogEntry)=>EVENT_CATEGORIES.some(c=>inCategory(e,c))
+  const yearHints=(v?.counts??[]).filter(c=>(c.focusEvents??0)>0)
   const types=[...new Set(v?.events.map(e=>e.eventType)??[])].sort()
-  const events=(v?.events??[]).filter(e=>(eventType==='ALL'||e.eventType===eventType)&&(!relatedOnly||eventRefs.has(e.eventId)))
+  const events=(v?.events??[]).filter(e=>(eventType==='ALL'||e.eventType===eventType)&&
+    (showAllEvents||eventType!=='ALL'||isPeopleTitleEvent(e))&&(!relatedOnly||eventRefs.has(e.eventId)))
   const traces=(v?.traces??[]).filter(t=>(traceFilter==='ALL'||
     traceFilter==='EVENTLESS'&&t.eventIds.length===0&&(t.status==='DEFER'||t.status==='REJECT')||
     traceFilter===t.status)&&(!relatedOnly||traceRefs.has(t.traceId)))
   const chosenEvent=v?.events.find(x=>x.eventId===eventId)
   const chosenTrace=v?.traces.find(x=>x.traceId===traceId)
+  const sourcePersonIds=(e:EventLogEntry)=>(associations?.confirmed??[])
+    .filter(a=>a.source.type==='EVENT'&&a.source.eventId===e.eventId&&a.target.kind==='PERSON')
+    .map(a=>a.target.id)
+    .filter((id,i,all)=>all.indexOf(id)===i)
+  const evidencePersons=chosenEvent?sourcePersonIds(chosenEvent)
+    .filter(id=>persons.some(x=>x.personId===id)):[]
+  const chooseEvent=(e:EventLogEntry)=>{
+    setEventId(e.eventId);setTraceId('')
+    const first=sourcePersonIds(e).find(id=>persons.some(x=>x.personId===id))
+    if(first)setSelectedPerson(first)
+  }
+  const traceActor=(t:DecisionTrace)=>{
+    const label=(id:Id)=>shortPersonName(persons.find(x=>x.personId===id)?.name??id)
+    return t.actorRef.kind==='PERSON_PAIR'?t.actorRef.ids.map(label).join(' と ')
+      :t.actorRef.kind==='PERSON'?label(t.actorRef.id):'人物以外の対象'
+  }
+  const statusText=(status:string)=>status==='ACCEPT'?'採用':status==='DEFER'?'保留':
+    status==='REJECT'?'不採用':status
   const title=v?.world.titles.find(x=>x.titleId===selectedTitle)
   // 実stateChangeにTitle IDがあるEvent、または根拠付きAssociationだけを関連として表示する。
   const titleEvidenceIds=new Set((associations?.confirmed??[])
@@ -120,8 +149,22 @@ export function ObservationPanel(p:Props){
           <button type="button" disabled={p.loading||!seedMatches||v.year>=1350} onClick={()=>yearChange(v.year+1)}>翌年</button>
           <span data-testid="obs-cache-source">A0：{v.a0Source==='REUSED'?'保存済みの原史を再利用':'この条件で実計算済み'}</span>
         </div>
+        <section className="obs-year-hints" data-testid="obs-year-hints">
+          <h3>人物・家系・所領の記録がある年から探す</h3>
+          <p className="note">実Eventに該当種別が記録された年を年代順に示します。重要度の順位ではありません。</p>
+          {yearHints.length===0?<p className="note">この原史で該当年の記録は確認できません。</p>:<>
+            <div className="obs-year-jumps">
+              {yearHints.slice(0,yearHintLimit).map(c=><button type="button" key={c.year}
+                disabled={p.loading||!seedMatches} data-testid={'obs-hint-year-'+c.year}
+                onClick={()=>yearChange(c.year)}>{c.year}年・人物/所領 {c.focusEvents}件</button>)}
+            </div>
+            {yearHints.length>yearHintLimit&&<button type="button" className="obs-more" onClick={()=>setYearHintLimit(n=>n+12)}>
+              残り{yearHints.length-yearHintLimit}年の候補を見る
+            </button>}
+          </>}
+        </section>
         <details>
-          <summary>年代記の年別件数（実Event・Trace）</summary>
+          <summary>すべての年の記録件数を見る（Event・Trace）</summary>
           <div className="obs-year-jumps">
             {v.counts.map(c=><button type="button" key={c.year} disabled={p.loading||!seedMatches}
               aria-current={c.year===v.year?'date':undefined}
@@ -143,6 +186,7 @@ export function ObservationPanel(p:Props){
       <div className="obs-two-col">
         <div className="obs-timeline">
           <h3>年表・{v.year}年に記録された出来事</h3>
+          <p className="note">最初は、婚姻・出生・死亡・王朝帰属・土地Titleなどの確定記録だけを示します。人口等の記録も下で確認できます。</p>
           <label>Event種別
             <select data-testid="obs-event-type" value={eventType} onChange={e=>{setEventType(e.target.value);setEventLimit(SHOW)}}>
               <option value="ALL">全種類</option>
@@ -153,21 +197,43 @@ export function ObservationPanel(p:Props){
             <input type="checkbox" checked={relatedOnly} onChange={e=>setRelatedOnly(e.target.checked)}/>
             選択人物に根拠のある記録だけ
           </label>
-          <p className="note" data-testid="obs-event-count">この年のEvent {v.events.length}件／表示条件に一致 {events.length}件。年初snapshotとは時点が異なります。</p>
+          <label className="obs-check">
+            <input type="checkbox" data-testid="obs-all-events" checked={showAllEvents}
+              onChange={e=>{setShowAllEvents(e.target.checked);setEventLimit(SHOW)}}/>
+            人口などを含む全Eventを表示
+          </label>
+          <p className="note" data-testid="obs-event-count">この年の確定Event {v.events.length}件／表示 {events.length}件。
+            年初の人物状態とは時点が異なります。非表示の記録も削除していません。</p>
           <ol className="obs-record-list" data-testid="obs-event-list">
             {events.slice(0,eventLimit).map(e=><li key={e.eventId}>
-              <button type="button" aria-pressed={eventId===e.eventId} onClick={()=>{setEventId(e.eventId);setTraceId('')}}>
-                {labelOf(e.eventType)}（{e.eventType}）
+              <button type="button" aria-pressed={eventId===e.eventId} onClick={()=>chooseEvent(e)}>
+                {readableEvent(e)}
               </button>
             </li>)}
           </ol>
           {events.length>eventLimit&&<button type="button" onClick={()=>setEventLimit(n=>n+SHOW)}>Eventをさらに表示</button>}
           {chosenEvent&&<div className="obs-record-detail" data-testid="obs-event-detail">
-            <h4>{labelOf(chosenEvent.eventType)}：{chosenEvent.year}年</h4>
-            <p>確定した状態変化 {chosenEvent.stateChanges.length}件、関連判断 {chosenEvent.sourceTraceIds.length}件。</p>
-            <div className="obs-related-links">{chosenEvent.sourceTraceIds.map(id=><button type="button" key={id}
-              onClick={()=>{setTraceId(id);setTraceFilter('ALL')}}>関連するDecisionTraceを開く</button>)}</div>
-            <details><summary>Eventの出典・実状態差分</summary>
+            <h4>{readableEvent(chosenEvent)}</h4>
+            {describeEvent(chosenEvent,names)?.lines.map(line=><p key={line}>{line}</p>)}
+            <p>実際の状態変化 {chosenEvent.stateChanges.length}件。関係する人物と記録上の判断だけを辿れます。</p>
+            {evidencePersons.length>0&&<div className="obs-related-links" data-testid="obs-event-people">
+              {evidencePersons.map(id=><button type="button" key={id} onClick={()=>setSelectedPerson(id)}>
+                {shortPersonName(persons.find(x=>x.personId===id)!.name)}の家系を見る
+              </button>)}
+            </div>}
+            {chosenEvent.sourceTraceIds.length===0
+              ?<p className="note">このEventに直接紐づくDecisionTraceは記録されていません。</p>
+              :<div data-testid="obs-event-reasons">
+                <h4>この出来事につながる判断の記録</h4>
+                {chosenEvent.sourceTraceIds.map(id=>{
+                  const t=v.traces.find(x=>x.traceId===id)
+                  return <p key={id}>{t
+                    ?<><strong>{statusText(t.status)}</strong> — {traceActor(t)}／判断規則 {t.ruleId}
+                      <button type="button" onClick={()=>{setTraceId(id);setTraceFilter('ALL')}}>根拠を詳しく見る</button></>
+                    :<>参照された判断 {id} の詳細は、この年の表示にはありません</>}</p>
+                })}
+              </div>}
+            <details><summary>検証用：Eventの出典・実状態差分（{chosenEvent.eventType}）</summary>
               <pre>{JSON.stringify(chosenEvent,null,2)}</pre></details>
           </div>}
           <h3>DecisionTrace（実際の採否・判断根拠）</h3>
@@ -184,14 +250,14 @@ export function ObservationPanel(p:Props){
           <ol className="obs-record-list" data-testid="obs-trace-list">
             {traces.slice(0,traceLimit).map(t=><li key={t.traceId}>
               <button type="button" aria-pressed={traceId===t.traceId} onClick={()=>{setTraceId(t.traceId);setEventId('')}}>
-                {t.ruleId}・{t.status}（Event {t.eventIds.length}件）
+                {statusText(t.status)}／{traceActor(t)}（規則 {t.ruleId}・{t.status}、Event {t.eventIds.length}件）
               </button>
             </li>)}
           </ol>
           {traces.length>traceLimit&&<button type="button" onClick={()=>setTraceLimit(n=>n+SHOW)}>Traceをさらに表示</button>}
           {chosenTrace&&<div className="obs-record-detail" data-testid="obs-trace-detail">
-            <h4>{chosenTrace.ruleId}・{chosenTrace.status}</h4>
-            <p>判断理由：{reason(chosenTrace.reasonCodes)}</p>
+            <h4>{traceActor(chosenTrace)}についての判断：{statusText(chosenTrace.status)}</h4>
+            <p>規則 {chosenTrace.ruleId}（{chosenTrace.status}）。記録された理由：{reason(chosenTrace.reasonCodes)}</p>
             <p>実際に関連づくEvent：{chosenTrace.eventIds.length}件。記録されていない事件は補いません。</p>
             <div className="obs-related-links">{chosenTrace.eventIds.map(id=><button type="button" key={id}
               onClick={()=>{setEventId(id);setEventType('ALL')}}>関連Eventを開く</button>)}</div>
@@ -202,7 +268,7 @@ export function ObservationPanel(p:Props){
           <h3>この年の人物・法的関係</h3>
           <label>調べる人物
             <select data-testid="obs-person" value={person} onChange={e=>{setSelectedPerson(e.target.value);setSelectedTitle('')}}>
-              {persons.map(x=><option value={x.personId} key={x.personId}>{x.name}（{x.birthYear}年生）</option>)}
+              {persons.map(x=><option value={x.personId} key={x.personId}>{shortPersonName(x.name)}（{x.birthYear}年生）</option>)}
             </select>
           </label>
           {person&&<FamilyTree world={v.world} personId={person} onSelectPerson={setSelectedPerson} onSelectTitle={setSelectedTitle}/>}

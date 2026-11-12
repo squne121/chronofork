@@ -35,3 +35,12 @@
 .obs-workspace-layout {padding:1rem 0 0;}
 .obs-seed-tools {display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;}
 @media(max-width:960px){.obs-workspace-layout{grid-template-columns:1fr;}}
+
+/* UX-R2: 歴史の記録と人物の関連を辿る視覚的階層。 */
+.obs-year-hints {padding:0.65rem;background:#f8fafc;border:1px solid var(--line);border-radius:5px;}
+.obs-year-hints h3{margin:0 0 0.2rem;}
+.obs-year-hints .obs-year-jumps{max-height:9.5rem;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));}
+.obs-more{margin-top:0.5rem;border:1px solid var(--line);background:#fff;border-radius:4px;padding:0.35rem 0.7rem;}
+.obs-record-detail h4 {line-height:1.5;}
+.obs-record-detail p{line-height:1.5;}
+.obs-event-people {margin:0.4rem 0;flex-wrap:wrap;}

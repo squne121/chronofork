@@ -25,6 +25,7 @@ import { EXPERIMENTAL_TUNING } from '../simulation/tuning.ts'
 import type { TimelineRun } from './timeline-source.ts'
 import { extractCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
+import { EVENT_CATEGORIES, inCategory } from './integrated-overview.ts'
 import { buildA0CacheKey, countsOf } from './a0-cache.ts'
 import type { A0Source, SingleA0Cache } from './a0-cache.ts'
 export type { A0Source } from './a0-cache.ts'
@@ -421,7 +422,7 @@ export function directlyInvolvesPair(e:EventLogEntry,pair:readonly [Id,Id]):bool
  * UIには選択年の年初WorldState・その年の確定Event/Traceだけ転送する。
  * 途中年の結果やA0の全履歴を転送済みと見せない。全記録の件数は実データから集計。
  */
-export type ObservationYearCounts = Readonly<{year:number;events:number;traces:number}>
+export type ObservationYearCounts = Readonly<{year:number;events:number;traces:number;focusEvents?:number}>
 export type ObservationSlice = Readonly<{
   seed:number
   mode:'INTEGRATED_EXPERIMENTAL'
@@ -450,11 +451,14 @@ export function sliceA0Observation(
 ):ObservationSlice|undefined{
   const world=a0.result.snapshots.find(w=>w.year===year)
   if(!world||a0.result.status!=='COMPLETED')return undefined
-  const counts=Array.from({length:GOAL_YEAR-START_YEAR+1},(_,i)=>({year:START_YEAR+i,events:0,traces:0}))
+  const counts=Array.from({length:GOAL_YEAR-START_YEAR+1},(_,i)=>({year:START_YEAR+i,events:0,traces:0,focusEvents:0}))
   const events:EventLogEntry[]=[],traces:DecisionTrace[]=[]
   for(const e of a0.result.eventLog){
     const ix=e.year-START_YEAR
-    if(ix>=0&&ix<counts.length)counts[ix]!.events++
+    if(ix>=0&&ix<counts.length){
+      counts[ix]!.events++
+      if(EVENT_CATEGORIES.some(c=>inCategory(e,c)))counts[ix]!.focusEvents++
+    }
     if(e.year===year)events.push(e)
   }
   for(const t of a0.result.decisionTraces){
