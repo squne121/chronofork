@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { titleLabel } from './title-history.ts'
 import type { ObservationSlice } from '../branch-play-source.ts'
 import type { PlayProgress } from '../play-progress.ts'
 import { associationsFor, collectAssociations } from './associations.ts'
@@ -59,6 +60,7 @@ export function ObservationPanel(p:Props){
   const [traceLimit,setTraceLimit]=useState(SHOW)
   const [showAllEvents,setShowAllEvents]=useState(false)
   const [yearHintLimit,setYearHintLimit]=useState(8)
+  const [scrubYear,setScrubYear]=useState<number|null>(null) // ドラッグ中のみ表示を更新する
   const persons=useMemo(()=>v?.world.persons.filter(x=>x.birthYear<=v.year)??[],[v])
   const person=persons.some(x=>x.personId===selectedPerson)?selectedPerson:
     (persons.find(x=>x.interactionRole!=='SUPPORTING')??persons[0])?.personId??''
@@ -101,6 +103,7 @@ export function ObservationPanel(p:Props){
   const statusText=(status:string)=>status==='ACCEPT'?'採用':status==='DEFER'?'保留':
     status==='REJECT'?'不採用':status
   const title=v?.world.titles.find(x=>x.titleId===selectedTitle)
+  const titleHistory=v?.titleHistories.find(x=>x.titleId===selectedTitle)
   // 実stateChangeにTitle IDがあるEvent、または根拠付きAssociationだけを関連として表示する。
   const titleEvidenceIds=new Set((associations?.confirmed??[])
     .filter(a=>a.titleId===selectedTitle&&a.source.type==='EVENT')
@@ -114,9 +117,12 @@ export function ObservationPanel(p:Props){
   const openTitleTrace=(id:string)=>{setTraceId(id);setEventId('');setTraceFilter('ALL');setRelatedOnly(false)}
   const goal=v?.technicalGoal
   const assessments=(goal?.status==='NOT_ACHIEVED'||goal?.status==='ACHIEVED')?goal.assessments:[]
+  const territorialAssessments=assessments.filter(a=>v?.world.titles.find(t=>t.titleId===a.titleId)?.kind==='TERRITORIAL')
   const yearChange=(y:number)=>{
-    setEventId('');setTraceId('');setSelectedTitle('');setEventType('ALL');setEventLimit(SHOW);setTraceLimit(SHOW)
-    p.onLoad(y)
+    setScrubYear(null)
+    setEventId('');setTraceId('');setEventType('ALL');setRelatedOnly(false)
+    setEventLimit(SHOW);setTraceLimit(SHOW)
+    if(y!==v?.year)p.onLoad(y)
   }
   return <section className="panel obs" aria-labelledby="obs-heading" data-testid="observation-main">
     <header className="obs-head">
@@ -155,9 +161,17 @@ export function ObservationPanel(p:Props){
     {v&&<div className="obs-body">
       <div className="obs-year-nav">
         <label htmlFor="obs-year">年表・観測する年（年初）</label>
-        <input id="obs-year" type="range" min={1250} max={1350} step={1} value={v.year}
-          disabled={p.loading||!seedMatches} aria-valuetext={v.year+'年'} onChange={e=>yearChange(Number(e.target.value))}/>
-        <output data-testid="obs-year-label">{v.year}年初</output>
+        <input id="obs-year" type="range" min={1250} max={1350} step={1}
+          value={scrubYear??v.year} disabled={p.loading||!seedMatches}
+          aria-valuetext={(scrubYear??v.year)+'年初'} data-testid="obs-year-slider"
+          onChange={e=>setScrubYear(Number(e.currentTarget.value))}
+          onPointerUp={e=>yearChange(Number(e.currentTarget.value))}
+          onPointerCancel={()=>setScrubYear(null)}
+          onKeyUp={e=>{if(['ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(e.key))
+            yearChange(Number(e.currentTarget.value))}}
+          onBlur={e=>{if(scrubYear!==null)yearChange(Number(e.currentTarget.value))}}/>
+        <div className="obs-year-ticks" aria-hidden="true"><span>1250</span><span>1275</span><span>1300</span><span>1325</span><span>1350</span></div>
+        <output data-testid="obs-year-label">{scrubYear===null?v.year+'年初':scrubYear+'年初（離すと観測）'}</output>
         <div className="obs-year-controls">
           <button type="button" disabled={p.loading||!seedMatches||v.year<=1250} onClick={()=>yearChange(v.year-1)}>前年</button>
           <button type="button" disabled={p.loading||!seedMatches||v.year>=1350} onClick={()=>yearChange(v.year+1)}>翌年</button>
@@ -185,21 +199,6 @@ export function ObservationPanel(p:Props){
               onClick={()=>yearChange(c.year)}>{c.year}年・事件{c.events}／判断{c.traces}</button>)}
           </div>
         </details>
-      </div>
-      <div className="obs-goal" data-testid="obs-goal">
-        <h3>1350年の王朝存続条件（技術判定）</h3>
-        <p>正式勝敗：未成立。技術判定：{goal?goalStatusText(goal.status)+'（'+goal.status+'）':'記録なし'}
-          （介入前A0・1350年初の実状態。正式なゲームの勝敗ではありません）</p>
-        {assessments.length>0&&<details open>
-          <summary>Title別の不足条件と根拠</summary>
-          <ul>{assessments.map(a=><li key={a.titleId}>
-            <strong>{(()=>{const t=v.world.titles.find(x=>x.titleId===a.titleId);
-              const region=v.world.regions.find(r=>r.regionId===t?.regionId);
-              return region?region.name+'の称号（'+a.titleId+'）':a.titleId})()}</strong>：
-              {a.qualifies?'条件を満たしている（技術判定）':'不足している条件：'+reason(a.failures)}
-          </li>)}</ul>
-        </details>}
-        {goal?.status==='INVALID_INPUT'&&<p>計算結果の技術評価はデータ不正のため成立していません。</p>}
       </div>
       <div className="obs-two-col">
         <div className="obs-timeline">
@@ -290,17 +289,45 @@ export function ObservationPanel(p:Props){
             </select>
           </label>
           {person&&<FamilyTree world={v.world} personId={person} onSelectPerson={setSelectedPerson} onSelectTitle={setSelectedTitle}/>}
-          <label>調べるTitle（選択年初の記録）
+          <details className="obs-family-help">
+            <summary>子どもの数・配偶者の表示の意味</summary>
+            <p>子はこの年初までに確認できる親子関係（死亡した子も含む）です。</p>
+            <p>配偶者はこの年に有効（ACTIVE）な婚姻だけを表示しています。「記録なし」は生涯未婚を意味しません。</p>
+            <p>出生は婚姻・両親の年齢・出生枠・CALIBRATION_ONLYの抽選に基づきます。実際の成立・不成立はその年のB-002 DecisionTraceで確認できます。</p>
+          </details>
+          <label>称号の歴代保持者を調べる（王位・領地別）
             <select data-testid="obs-title-select" value={title?.titleId??''} onChange={e=>setSelectedTitle(e.target.value)}>
               <option value="">選択してください</option>
-              {v.world.titles.map(t=><option key={t.titleId} value={t.titleId}>{t.titleId}</option>)}
+              {v.world.titles.map(t=><option key={t.titleId} value={t.titleId}>{titleLabel(t,v.world)}</option>)}
             </select>
           </label>
           {title&&<div data-testid="obs-title-detail">
-            <h4>選択したTitle：{title.titleId}</h4>
-            <p>種類：{title.kind}／有効：{title.valid?'はい':'いいえ'}／承認：{title.recognition.status}</p>
+            <h4>{titleLabel(title,v.world)}</h4>
+            <details><summary>技術情報：称号のIDと権利状態</summary>
+              <p>ID：{title.titleId}／種類：{title.kind}／有効：{title.valid?'はい':'いいえ'}／承認：{title.recognition.status}</p>
+            </details>
             <p>保持と合法的な王朝存続判定は別の条件です。上段の1350年技術判定と、以下の選択年の実記録を区別してください。</p>
-            <p className="note">Title IDへの直接の根拠があるEvent {titleEvents.length}件、双方向参照が一致するTrace {titleTraces.length}件。</p>
+            {titleHistory&&<section className="obs-holder-history" data-testid="obs-title-history">
+              <h5>歴代の保持者（年初の実記録）</h5>
+              <p className="note">各年の年初に確認された保持状況です。正式な継承の成立や移転理由を推定しません。</p>
+              <ol>{titleHistory.intervals.map((period,i)=><li key={period.fromYear+'-'+i}>
+                <strong>{period.fromYear}{period.throughYear>period.fromYear?'〜'+period.throughYear:''}年初：</strong>
+                {period.holder.status==='HELD'
+                  ?<span>{shortPersonName(period.holder.personName)}（記録上の保持者）</span>
+                  :period.holder.status==='UNDETERMINED'?'保持者未確定（相続等は別途確認）':'当年初の称号記録なし'}
+                <button type="button" data-testid={'obs-holder-year-'+period.fromYear}
+                  disabled={p.loading||!seedMatches} onClick={()=>yearChange(period.fromYear)}>その年へ</button>
+              </li>)}</ol>
+              <details>
+                <summary>実際に記録されたTitle移転Event（{titleHistory.transfers.length}件）</summary>
+                {titleHistory.transfers.length===0?<p>確定した移転Eventを確認できません。保持者変化を正式継承とはみなしません。</p>:
+                  <ul>{titleHistory.transfers.map(e=><li key={e.eventId}>{e.year}年
+                    <button type="button" disabled={p.loading||!seedMatches} onClick={()=>yearChange(e.year)}>
+                      Eventが起きた年を調べる
+                    </button></li>)}</ul>}
+              </details>
+            </section>}
+            <p className="note">この年のTitleへ直接の根拠があるEvent {titleEvents.length}件、相互参照の一致するTrace {titleTraces.length}件。</p>
             {titleEvents.length===0&&<p className="note">この年の記録では直接の変化・関連を確認できません。何も起きなかったとは断定しません。</p>}
             {titleEvents.length>0&&<ul>{titleEvents.map(e=><li key={e.eventId}>
               <button type="button" data-testid="obs-title-event-link" onClick={()=>openTitleEvent(e.eventId)}>
@@ -319,6 +346,24 @@ export function ObservationPanel(p:Props){
             </button>}
           <p className="note">介入は既存の人物間信頼調整のみです。対象者の適格性・成立・歴史変化は保証しません。</p>
         </aside>
+      </div>
+      <div className="obs-goal" data-testid="obs-goal">
+        <h3>1350年の王朝存続条件 — 何が不足している？</h3>
+        <p>ナルヴェン王朝の存命人物が、承認済みで世襲可能な領地を保持し、直接支配または有効な委任を持つことが条件です。王位のみでは達成できません。</p>
+        {territorialAssessments.length>0&&<p data-testid="obs-goal-snapshot">
+          領地称号 {territorialAssessments.length}件中、条件を満たすもの {territorialAssessments.filter(a=>a.qualifies).length}件。
+        </p>}
+        <p>正式勝敗：未成立。技術判定：{goal?goalStatusText(goal.status)+'（'+goal.status+'）':'記録なし'}
+          （介入前A0・1350年初の実状態。正式なゲームの勝敗ではありません）</p>
+        {assessments.length>0&&<details>
+          <summary>各称号の不足理由（王位と領主権を区別）</summary>
+          <ul>{assessments.map(a=><li key={a.titleId}>
+            <strong>{(()=>{const t=v.world.titles.find(x=>x.titleId===a.titleId);
+              return t?titleLabel(t,v.world):a.titleId})()}</strong>：
+              {a.qualifies?'条件を満たしている（技術判定）':'不足している条件：'+reason(a.failures)}
+          </li>)}</ul>
+        </details>}
+        {goal?.status==='INVALID_INPUT'&&<p>計算結果の技術評価はデータ不正のため成立していません。</p>}
       </div>
     </div>}
   </section>
