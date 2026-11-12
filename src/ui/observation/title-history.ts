@@ -40,9 +40,10 @@ export function buildTitleHoldingHistories(
     const intervals:TitleHoldingInterval[]=[]
     for(const world of worlds){
       const t=world.titles.find(x=>x.titleId===titleId)
-      const holder:TitleHoldingInterval['holder']=t?.holder.status==='HELD'
-        ?{status:'HELD',personId:t.holder.personId,
-          personName:world.persons.find(p=>p.personId===t.holder.personId)?.name??'参照先の人物名を確認できない'}
+      const currentHolder=t?.holder
+      const holder:TitleHoldingInterval['holder']=currentHolder?.status==='HELD'
+        ?{status:'HELD',personId:currentHolder.personId,
+          personName:world.persons.find(p=>p.personId===currentHolder.personId)?.name??'参照先の人物名を確認できない'}
         :{status:t?'UNDETERMINED':'NOT_RECORDED'}
       const last=intervals.at(-1)
       const same=last?.holder.status===holder.status &&
