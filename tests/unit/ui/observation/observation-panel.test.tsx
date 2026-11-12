@@ -97,6 +97,27 @@ describe('介入前の原史A0観測画面',()=>{
     fireEvent.click(screen.getByTestId('obs-title-trace-link'))
     expect(screen.getByTestId('obs-trace-detail').textContent).toContain('A-TIT-07')
   })
+  it('各Titleを選び、年初の歴代保持者・未確定を辿れる。王位と領主権は別の称号',()=>{
+    const onLoad=vi.fn()
+    const next={...world,year:1251,titles:world.titles.map(t=>
+      t.titleId===titleId?{...t,holder:{status:'HELD' as const,personId:'person-exp-02'}}:t)}
+    const later={...world,year:1252,titles:world.titles.map(t=>
+      t.titleId===titleId?{...t,holder:{status:'UNDETERMINED' as const}}:t)}
+    const value={...view,titleHistories:buildTitleHoldingHistories([world,next,later],[])}
+    render(<ObservationPanel {...seedProps} observation={value} loading={false}
+      onLoad={onLoad} onCancel={vi.fn()} onIntervene={vi.fn()}/>)
+    const options=[...screen.getByTestId('obs-title-select').querySelectorAll('option')].map(o=>o.textContent??'')
+    expect(options.some(x=>x.includes('エルディア王位'))).toBe(true)
+    expect(options.some(x=>x.includes('エルディア中央の領主権'))).toBe(true)
+    fireEvent.change(screen.getByTestId('obs-title-select'),{target:{value:titleId}})
+    const history=screen.getByTestId('obs-title-history')
+    expect(history.textContent).toContain('1250年初')
+    expect(history.textContent).toContain('1251年初')
+    expect(history.textContent).toContain('1252年初')
+    expect(history.textContent).toContain('保持者未確定')
+    fireEvent.click(screen.getByTestId('obs-holder-year-1251'))
+    expect(onLoad).toHaveBeenCalledWith(1251)
+  })
   it('年を移動すると、その年に存在しないEvent種別フィルタを解除する',()=>{
     const onLoad=vi.fn()
     render(<ObservationPanel {...seedProps} observation={view} loading={false} onLoad={onLoad}

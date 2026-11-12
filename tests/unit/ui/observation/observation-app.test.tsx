@@ -40,6 +40,7 @@ it('介入前に実A0を観測すると、旧C004年表を同じ歴史と誤表�
   fireEvent.click(screen.getByTestId('obs-start'))
   await screen.findByTestId('obs-year-label')
   expect(screen.getByTestId('history-status').textContent).toContain('A0')
+  expect(screen.queryByTestId('current-year')).toBeNull() // シークバーとの年表示重複を避ける
   expect(screen.queryByRole('heading',{name:'年表（Event）と判断根拠（DecisionTrace）'})).toBeNull()
   expect(screen.getByTestId('obs-goal').textContent).toContain('正式勝敗：未成立')
   expect(screen.getByTestId('obs-person')).toHaveProperty('value',person.personId)
