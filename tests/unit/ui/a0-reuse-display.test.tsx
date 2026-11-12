@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 // A0再利用の表示(偽の進捗を出さない)と、seed変更/新規ゲームでのrunner.reset呼び出しを検証する。
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi , beforeEach} from 'vitest'
 import App from '../../../src/ui/App.tsx'
 import type { PlayOutcome, PlayRunHooks, PlayRunner } from '../../../src/ui/play-runner.ts'
 import type { ProgressObserver } from '../../../src/ui/play-progress.ts'
 
+
+beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
 afterEach(cleanup)
 function controlled() {
   const calls: { resolve: (o: PlayOutcome) => void; progress: ProgressObserver; hooks?: PlayRunHooks }[] = []

@@ -24,3 +24,14 @@
 .obs-related-links {display:flex;flex-wrap:wrap;gap:0.25rem;}
 .obs-person {border-left:1px solid var(--line);padding-left:0.8rem;}
 @media(max-width:1050px){.obs-two-col{grid-template-columns:1fr}.obs-person{border-left:0;border-top:1px solid var(--line);padding:0.5rem 0 0}}
+
+/* UX-R1: 初見で原史探索を見せ、旧試験/直接介入は利用者が展開する。 */
+.obs-eyebrow {font-weight:700;letter-spacing:0.03em;color:#46566e;margin:0 0 0.35rem;}
+.obs-question {font-size:clamp(1.05rem,2vw,1.45rem);font-weight:700;line-height:1.45;margin:0.35rem 0 0.55rem;}
+.obs-guidance {padding:0.6rem 0.8rem;border-left:3px solid var(--accent);background:#eef5fd;margin:0.6rem 0;}
+.obs-workspace {min-width:0;overflow:visible;}
+.obs-workspace>summary {cursor:pointer;padding:0.85rem 1rem;background:white;border:1px solid var(--line);border-radius:6px;font-weight:600;}
+.obs-workspace[open]>summary {border-bottom-left-radius:0;border-bottom-right-radius:0;}
+.obs-workspace-layout {padding:1rem 0 0;}
+.obs-seed-tools {display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;}
+@media(max-width:960px){.obs-workspace-layout{grid-template-columns:1fr;}}

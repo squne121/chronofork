@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 // 統合モードの確定済み年次進捗表示。runner を差し替え、通知・キャンセル・HALTED・古い通知の無視を検証する。
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it , beforeEach} from 'vitest'
 import App from '../../../src/ui/App.tsx'
 import type { PlayOutcome, PlayRunner } from '../../../src/ui/play-runner.ts'
 import type { PlayProgress, ProgressObserver } from '../../../src/ui/play-progress.ts'
 
+
+beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
 afterEach(cleanup)
 type Call = { resolve: (o: PlayOutcome) => void; progress: ProgressObserver }
 function controlled() {

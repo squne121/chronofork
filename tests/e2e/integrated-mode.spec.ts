@@ -8,7 +8,7 @@ test.describe('統合モード: 起動・計算中の操作・キャンセル(�
   test.use({ viewport: { width: 1280, height: 800 } })
 
   test('モード選択でPR #78の実測条件が初期入力例に入り、計算中も操作でき、キャンセルで復旧する', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     await expect(page.getByTestId('play-mode-description')).toContainText('PR #78')
     await expect(page.getByTestId('branch-fork-year')).toHaveValue('1250')
@@ -54,7 +54,7 @@ test.describe('統合モード: 起動・計算中の操作・キャンセル(�
   })
 
   test('旧2モードは従来どおり同期で再計算でき、統合モードの表示を出さない', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('branch-run').click()
     await expect(page.getByTestId('branch-results')).toBeVisible({ timeout: 60_000 })
     await expect(page.getByTestId('branch-status')).toContainText('A1 COMPLETED')
@@ -70,7 +70,7 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
   for (const width of [1280, 960]) {
     test(`統合モード選択→再計算→A0/A1切替→年表→判断根拠(${width}px)`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
-      await page.goto('/')
+      await page.goto('/?entry=legacy')
       await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
       const started = Date.now()
       await page.getByTestId('branch-run').click()
@@ -113,7 +113,7 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
 
   test('960px: 対象比較のTraceリンクは詳細を画面内へ移動する', async ({page}) => {
     await page.setViewportSize({width:960,height:900})
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     // 実計算で差分が生まれ、人物02が対象選択肢に出現する試験条件。
     await page.getByTestId('branch-trust-delta').fill('-40')
@@ -131,7 +131,7 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
 
   test('1280px: Event差分ゼロでも介入した2人を選び、A0/A1の判断Traceを開ける', async ({page}) => {
     await page.setViewportSize({width:1280,height:900})
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     // 既存の固定seed・初期入力例（信頼−20）は、これまでEvent差分0を実測した試験条件。
     await page.getByTestId('branch-run').click()
@@ -163,7 +163,7 @@ test.describe('統合モード: A0キャッシュの実Worker再利用(オプト
 
   test('1回目は100年のA0を計算し、介入年を変えた2回目はA0を再利用してA1だけ年次進捗を出す', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     await page.getByTestId('branch-fork-year').fill('1340')
     await page.getByTestId('branch-run').click()
@@ -190,7 +190,7 @@ test.describe('統合モード: 後出生KEY人物のGUI選択（Issue #104・�
 
   test('A0の候補を取得し、1278年に1252年生まれの人物と初期人物へ介入できる', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     // 取得前は初期人物のみ。取得中は介入の再計算が始まらず、画面は操作できる。
     await expect(page.getByTestId('branch-person-two').locator('option', { hasText: '1252年生' })).toHaveCount(0)
@@ -242,7 +242,7 @@ test.describe('統合モード: 同年・別ペアに追加介入してA2を作�
   test.skip(!heavy, 'CHRONOFORK_E2E_INTEGRATED=1 のときだけ実行する')
   test.setTimeout(30*60_000)
   test('A0観測→A1第1介入→A2第2介入→1350年の厳格技術Goalと3枝の観測',async({page})=>{
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     await page.getByTestId('candidates-fetch').click()
     await expect(page.getByTestId('candidate-status')).toContainText('A0の',{timeout:12*60_000})

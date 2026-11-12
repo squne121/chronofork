@@ -78,9 +78,12 @@ export function ObservationPanel(p:Props){
   return <section className="panel obs" aria-labelledby="obs-heading" data-testid="observation-main">
     <header className="obs-head">
       <div>
+        <p className="obs-eyebrow">亡国の王冠 — 1250〜1350年</p>
         <h2 id="obs-heading">原史A0を観測する</h2>
-        <p className="note">介入前に、実際に計算された歴史を調べます。1250〜1350年、年初WorldStateと確定済みEvent・DecisionTraceを表示します。</p>
-        <p className="note">統合法制・世代継続（EXPERIMENTAL / CALIBRATION_ONLY）。正式な勝敗は未成立（goal=null）。</p>
+        <p className="obs-question">1350年、ナルヴェン王朝には合法な世襲所領が残るのか？</p>
+        <p className="note">歴史がどう動くかを見て、人物・婚姻・土地称号（Title）と判断の記録を辿ります。調べた人物から介入を試せます。</p>
+        {!v&&!p.loading&&<p className="obs-guidance" data-testid="obs-intro">まだ原史の計算結果は表示していません。下のボタンで1250〜1350年の世界を計算します。</p>}
+        <p className="note">試験構成（EXPERIMENTAL / CALIBRATION_ONLY）。1350年の技術判定は正式な勝敗ではありません（goal=null）。</p>
       </div>
       <div className="obs-seed-tools">
         <label htmlFor="obs-seed-input">統合A0のseed

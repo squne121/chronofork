@@ -12,7 +12,7 @@ const REGIONS = [
 test.use({ viewport: { width: 1280, height: 800 } })
 
 test('experimental・partial・正式な勝敗未成立・37件TODOを明示する', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   await expect(page.getByRole('heading', { name: 'Project Chronofork', level: 1 })).toBeVisible()
   await expect(page.getByTestId('experimental-banner')).toContainText('試験計算')
   await expect(page.getByTestId('current-year')).toContainText('1250年')
@@ -31,7 +31,7 @@ test('experimental・partial・正式な勝敗未成立・37件TODOを明示す�
 })
 
 test('年スライダーで 1250→1251→1350 を選び、実計算の人口が変化する', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   const slider = page.getByRole('slider')
   await expect(slider).toBeEnabled()
   await expect(slider).toHaveAttribute('max', '1350')
@@ -57,7 +57,7 @@ test('年スライダーで 1250→1251→1350 を選び、実計算の人口が
 })
 
 test('EventLog の人口差分から Trace を開き、Event へ戻れる', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   await page.getByTestId('event-target').selectOption('GROUP:group-west-commons')
   const item = page.getByTestId('chronicle-list').getByRole('button')
   await expect(item).toHaveCount(1)
@@ -87,7 +87,7 @@ test('EventLog の人口差分から Trace を開き、Event へ戻れる', asyn
 })
 
 test('6地域が表示され、選択すると詳細が切り替わる', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   const map = page.getByTestId('region-map')
   await expect(map.getByRole('button')).toHaveCount(6)
   for (const [id, name] of REGIONS) {
@@ -99,7 +99,7 @@ test('6地域が表示され、選択すると詳細が切り替わる', async (
 })
 
 test('キーボードで地域を選択できる', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   const node = page.getByTestId('region-node-region-eldia-south')
   await node.focus()
   await page.keyboard.press('Enter')
@@ -111,7 +111,7 @@ test('キーボードで地域を選択できる', async ({ page }) => {
 })
 
 test('人口集団・人物・称号を選択し、リンクで詳細を切り替えられる', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   await page.getByTestId('region-node-region-eldia-central').click()
   await page.getByTestId('detail').getByRole('button', { name: '中央・一般住民' }).click()
   await expect(page.getByRole('tab', { name: '人口集団' })).toHaveAttribute('aria-selected', 'true')
@@ -127,7 +127,7 @@ test('人口集団・人物・称号を選択し、リンクで詳細を切り�
 })
 
 test('タブ操作は選択を解除し、詳細リンク移動は選択を維持する', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   const detail = page.getByTestId('detail')
   const empty = '地域・集団・人物・称号を選ぶと詳細を表示します。'
 
@@ -160,7 +160,7 @@ test('タブ操作は選択を解除し、詳細リンク移動は選択を維�
 })
 
 test('Event 切替・対象フィルタ変更で古い Trace/詳細が残らない。seed と 1350 年の案内', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   const list = page.getByTestId('chronicle-list').getByRole('button')
   await list.nth(0).click()
   await page.getByTestId('event-detail').getByRole('button', { name: /判断根拠を開く/ }).click()
@@ -195,7 +195,7 @@ test('Event 切替・対象フィルタ変更で古い Trace/詳細が残らな�
 
 test('介入→実再計算→同一年比較→A0/A1切替→Event/Traceを辿れる',async({page})=>{
   test.setTimeout(90000)
-  await page.goto('/')
+  await page.goto('/?entry=legacy')
   await expect(page.getByTestId('branch-results')).toHaveCount(0)
   await page.getByTestId('branch-run').click()
   await expect(page.getByTestId('branch-status')).toContainText('A1 COMPLETED')
@@ -226,7 +226,7 @@ for (const width of [1280, 960]) {
   test(`${width}px: 介入→A0 REJECT/A1 ACCEPT→婚姻→出生→Event→Trace を横スクロールなしで操作できる`, async ({ page }, testInfo) => {
     test.setTimeout(90000)
     await page.setViewportSize({ width, height: 900 })
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     // 初期表示: 目標・観測年・歴史・正式勝敗未成立・CALIBRATION_ONLY が先に読める。内部診断は折りたたみ。
     await expect(page.getByTestId('trial-guide')).toBeVisible()
     await expect(page.getByTestId('experimental-banner')).toContainText('CALIBRATION_ONLY')
@@ -300,7 +300,7 @@ for (const width of [1280, 960]) {
   test(`${width}px: 国内通常法制の実再計算と世代・1350年Goalを試せる`,async({page})=>{
     test.setTimeout(90000)
     await page.setViewportSize({width,height:900})
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('ORDINARY_LAW')
     await expect(page.getByTestId('play-mode-description')).toContainText('背景法令')
     await expect(page.getByTestId('branch-fork-year')).toHaveValue('1250')

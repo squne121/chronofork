@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 // A0の観測実行はsynthetic応答を渡す。実100年計算のE2E証拠ではない。
 import {cleanup,fireEvent,render,screen} from '@testing-library/react'
-import {afterEach,expect,it,vi} from 'vitest'
+import {afterEach,expect,it,vi, beforeEach} from 'vitest'
 import App from '../../../../src/ui/App.tsx'
 import type {ObservationSlice,PlayInput} from '../../../../src/ui/branch-play-source.ts'
 import {extractCandidates} from '../../../../src/ui/play-candidates.ts'
 import type {CandidatesRunner,ObservationOutcome} from '../../../../src/ui/play-runner.ts'
 import type {PlayOutcome,PlayRunner} from '../../../../src/ui/play-runner.ts'
 import {createExperimentalIntegratedWorld} from '../../../../src/scenario/experimental/index.ts'
+
+beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
 afterEach(cleanup)
 
 it('介入前に実A0を観測すると、旧C004年表を同じ歴史と誤表示せず選択年・人物を介入へ渡す',async()=>{

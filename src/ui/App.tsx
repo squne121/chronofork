@@ -63,6 +63,9 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const tokenRef = useRef(0)
   const handleRef = useRef<PlayRunHandle | undefined>(undefined)
   const [a0Reused, setA0Reused] = useState(false)
+  // 初回は実A0の観測を主入口にする。旧試験UIは明示的な「開発用」入口でのみ開く。
+  const [workspaceOpen,setWorkspaceOpen]=useState(()=>
+    typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('entry')==='legacy')
   const [observation,setObservation]=useState<ObservationSlice>()
   const [obsLoading,setObsLoading]=useState(false)
   const [obsError,setObsError]=useState<{code:string;message:string}>()
@@ -218,6 +221,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     if(!observation||observation.seed!==Number(observationSeedText.trim()))return
     setSeedText(String(observation.seed))
     setObsTarget(old=>({year,personId,seed:observation.seed,token:(old?.token??0)+1}))
+    setWorkspaceOpen(true)
     setNotice('観測年・人物を介入フォームへ反映しました。2人目と補正値を確認してください。')
     setTimeout(()=>document.getElementById('branch-heading')?.scrollIntoView?.({block:'start'}),0)
   }
@@ -283,6 +287,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     }
     const seed=Number(seedStr)
     setRun(runExperimentalTimeline(seed))
+    setWorkspaceOpen(true)
     setComparison(undefined)
     setPlayError(undefined)
     setEventId(undefined)
@@ -292,6 +297,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const applyView = (c:PlayView, input:PlayInput) => {
     setPlayError(undefined)
     setComparison(c)
+    setWorkspaceOpen(true)
     setActiveBranch(c.second?'A2':'A1')
     setRun(c.second?c.second.a1:c.a1)
     setYear(input.year)
@@ -432,15 +438,15 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
         <dl className="status-list">
           <div>
             <dt>観測中の年</dt>
-            <dd data-testid="current-year">{comparison?world.year:observation?.year??world.year}年（年初の状態）</dd>
+            <dd data-testid="current-year">{comparison?world.year+'年（年初の状態）':observation?observation.year+'年（A0の年初）':workspaceOpen?world.year+'年（旧試験計算）':'1250〜1350年・原史は未観測'}</dd>
           </div>
           <div>
             <dt>観測中の歴史</dt>
-            <dd data-testid="history-status">{branchLabel}</dd>
+            <dd data-testid="history-status">{!comparison&&!observation&&!workspaceOpen?'原史A0（未観測）':branchLabel}</dd>
           </div>
           <div>
             <dt>1350年の正式勝敗</dt>
-            <dd data-testid="goal-status">{observation&&!comparison?'正式な勝敗は未成立（goal=null、技術判定は原史欄に表示）':goalStatusLabel(result)}</dd>
+            <dd data-testid="goal-status">{!comparison&&!workspaceOpen?'正式な勝敗は未成立（goal=null・技術試験のみ）':observation&&!comparison?'正式な勝敗は未成立（goal=null、技術判定は原史欄に表示）':goalStatusLabel(result)}</dd>
           </div>
         </dl>
         <p className="lead" data-testid="trial-guide">
@@ -454,6 +460,12 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
             seedText={observationSeedText} onSeedText={changeSelectedSeed} onReset={rerun}
             onLoad={loadObservation} onCancel={cancelObservation} onIntervene={observationToIntervene}/>
         </div>
+        <details className="obs-main obs-workspace" data-testid="legacy-workspace" open={workspaceOpen}
+          onToggle={e=>setWorkspaceOpen(e.currentTarget.open)}>
+          <summary data-testid="legacy-toggle">
+            {comparison?'介入結果とA0/A1/A2の比較を確認する':observation?'調べた人物から介入・比較する':'開発用：旧試験と直接介入の操作を開く'}
+          </summary>
+          <div className="layout obs-workspace-layout">
         <div className="flow-col">
           <InterventionComparePanel key={obsTarget?.token??"default"} seedText={seedText} year={year} comparison={comparison} error={playError}
             running={running ? { elapsedSec } : undefined} progress={progress} a0Reused={a0Reused} progressEnd={progressEnd} notice={notice} calc={calc} onCancel={cancelRun}
@@ -540,6 +552,8 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           </section>
         </div>
         </>}
+          </div>
+        </details>
       </main>
     </div>
   )

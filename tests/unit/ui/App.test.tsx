@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it , beforeEach} from 'vitest'
 import { createExperimentalScenario } from '../../../src/scenario/experimental/index.ts'
 import { runTimeline } from '../../../src/simulation/engine/index.ts'
 import { createCalibrationEvaluators } from '../../../src/simulation/rules/c/index.ts'
@@ -23,6 +23,8 @@ const groupPop = (id: string) => {
   return within(screen.getByTestId('detail')).getByText('人口').nextElementSibling?.textContent
 }
 
+
+beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
 afterEach(cleanup)
 
 describe('App', () => {
