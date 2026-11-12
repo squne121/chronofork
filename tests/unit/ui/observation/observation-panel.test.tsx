@@ -67,7 +67,7 @@ describe('介入前の原史A0観測画面',()=>{
     expect(screen.getByTestId('obs-event-list').textContent).not.toContain('PERSON_SUPPORTING_RECORD')
     fireEvent.click(screen.getByTestId('obs-all-events'))
     expect(screen.getByTestId('obs-event-list').textContent).toContain('POPULATION_COHORT')
-    expect(screen.getByTestId('obs-event-list').textContent).toContain('PERSON_SUPPORTING_RECORD')
+    expect(screen.getByTestId('obs-event-list').textContent).toContain('SUPPORTING人物の登録')
   })
   it('実記録がある年のボタンは自動重大度でなく年代順に探索年を切り替える',()=>{
     const onLoad=vi.fn()
