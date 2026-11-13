@@ -167,7 +167,7 @@ export function ObservationPanel(p:Props){
           onChange={e=>setScrubYear(Number(e.currentTarget.value))}
           onPointerUp={e=>yearChange(Number(e.currentTarget.value))}
           onPointerCancel={()=>setScrubYear(null)}
-          onKeyUp={e=>{if(['ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(e.key))
+          onKeyUp={e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key))
             yearChange(Number(e.currentTarget.value))}}
           onBlur={e=>{if(scrubYear!==null)yearChange(Number(e.currentTarget.value))}}/>
         <div className="obs-year-ticks" aria-hidden="true"><span>1250</span><span>1275</span><span>1300</span><span>1325</span><span>1350</span></div>

@@ -154,6 +154,19 @@ describe('介入前の原史A0観測画面',()=>{
     expect(onLoad).toHaveBeenCalledTimes(1)
     expect(onLoad).toHaveBeenCalledWith(1270)
   })
+  for (const key of ['ArrowUp','ArrowDown']) {
+    it(key+'でも年の操作を確定し、再計算のリクエストは一度だけ送る',()=>{
+      const onLoad=vi.fn()
+      render(<ObservationPanel {...seedProps} observation={view} loading={false}
+        onLoad={onLoad} onCancel={vi.fn()} onIntervene={vi.fn()}/>)
+      const slider=screen.getByTestId('obs-year-slider')
+      fireEvent.change(slider,{target:{value:'1260'}})
+      expect(onLoad).not.toHaveBeenCalled()
+      fireEvent.keyUp(slider,{key})
+      expect(onLoad).toHaveBeenCalledTimes(1)
+      expect(onLoad).toHaveBeenCalledWith(1260)
+    })
+  }
   it('選択年を変更すると正しい年を要求し、未計算の年を予測表示しない',()=>{
     const onLoad=vi.fn()
     render(<ObservationPanel {...seedProps} observation={view} loading={false} onLoad={onLoad}
