@@ -21,7 +21,7 @@ const P2='person-exp-02',P5='person-exp-05'
 const REF_SUPPORTING_ID='support:population:["trial:issue71:C004:1260:east-female",0]'
 // Issue #120: 旧PR #78の再帰JSON文字列IDは非互換。新v1仕様の固定digestを独立照合する。
 // Before: REF_SON_ID='person:b002:auto:[1252,"marriage:normal:[1250,\\"[\\\\\\"person-exp-02\\\\\\",\\\\\\"person-exp-05\\\\\\"]\\"]","person-exp-02","person-exp-05"]'
-const REF_SON_ID='person:b002:auto:70ddf08d99139e80d48abd461e44635b7a16db1d778a5e1efcc92c6fbfa5f62d'
+const REF_SON_ID='person:b002:auto:de9b82062b967c1c2a5fca815723733210022a7f5cb3702b69197102fb0c93dd'
 const REF_COHORT={cohortId:'trial:issue71:C004:1260:east-female',groupId:'group-east-elite',
   affiliationHouseId:'house-cardon',familyPoolId:'trial:issue71:independently-attested-cardon-unrelated-family',
   tier:'REGIONAL_LOWER_NOBILITY',sex:'FEMALE',birthYear:1260,memberCount:1,source:'C004_COHORT',
@@ -96,7 +96,7 @@ describe('experimental integrated run: 共通実行構成',()=>{
     const {options}=createExperimentalIntegratedTimelineOptions('x')
     expect(options).toMatchObject({seed:20260101,technicalGoalEvaluation:true,goal:{dynastyId:'dynasty-nalven'}})
   })
-  it('SUPPORTING・昇格・ID・係数の実値がPR #78と一致する(1278年経路の固定照合)',()=>{
+  it('SUPPORTING・昇格・係数とv1新IDの実値を固定照合（旧再帰ID非互換）',()=>{
     expect(INTEGRATED_SUPPORTING_PERSON_ID).toBe(REF_SUPPORTING_ID)
     expect(INTEGRATED_WITNESSED_SON_ID).toBe(REF_SON_ID)
     expect(INTEGRATED_SUPPORTING_COHORTS).toEqual([REF_COHORT])
@@ -109,6 +109,23 @@ describe('experimental integrated run: 共通実行構成',()=>{
       houseSupportWeight:2,sameHouseBonus:10,maxPairs:1600})
     expect(INTEGRATED_SUPPORTING_CLEARANCES[0]).toMatchObject({
       clearanceId:'trial:issue71:independent-kinship-check:1278',checkedYear:1278,validUntilYear:1320})
+  })
+  it('Issue #120: 固定個人証拠が再計算済の実人物（1251年出生男子）を参照する',()=>{
+    const world=createExperimentalIntegratedWorld()
+    const evaluator=createExperimentalIntegratedEvaluators(world,[])
+    const first=runYear(world,{seed:INTEGRATED_SEED,branchId:'A0',evaluators:evaluator})
+    expect(first.status).toBe('COMPLETED')
+    if(first.status!=='COMPLETED')return
+    const second=runYear(first.world,{seed:INTEGRATED_SEED,branchId:'A0',evaluators:evaluator})
+    expect(second.status).toBe('COMPLETED')
+    if(second.status!=='COMPLETED')return
+    const descendant=second.world.persons.find(p=>p.personId===REF_SON_ID)
+    expect(descendant).toMatchObject({
+      personId:REF_SON_ID,sex:'MALE',birthYear:1251,
+      fatherId:P2,motherId:P5,
+    })
+    expect(second.events.some(e=>e.eventType==='PERSON_BIRTH'&&
+      e.involvedRefs.some(r=>r.kind==='PERSON'&&r.id===REF_SON_ID))).toBe(true)
   })
   it('A0: 共通入口の評価器はPR #78直書き構成と同じ年次結果(世界・Event・Trace)を出す',()=>{
     const world=createExperimentalIntegratedWorld()

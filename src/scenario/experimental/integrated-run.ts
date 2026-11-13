@@ -59,10 +59,10 @@ const INTEGRATED_SUPPORTING_LIMITS = Object.freeze({
   maxRecordsPerYear: 1, maxAliveSupporting: 1, perCohortSamples: 1, maximumPreviewAge: 65,
 })
 
-/** 1250年P2×P5婚姻からB002が実出生した場合の1252年男子の安定ID(対象IDの固定のみ。出生を保証しない)。 */
+/** Issue #120: v1 ID・同seed再計算で1251年出生する男子の個別証拠を参照（CALIBRATION_ONLY）。 */
 const integratedMarriageId = ordinaryMarriageIdForPairYear(INTEGRATED_START_YEAR, INTEGRATED_PAIR)
 export const INTEGRATED_WITNESSED_SON_ID = childIdForMarriageYear(
-  integratedMarriageId, INTEGRATED_PAIR[0], INTEGRATED_PAIR[1], 1252)
+  integratedMarriageId, INTEGRATED_PAIR[0], INTEGRATED_PAIR[1], 1251)
 
 /** ペア個別の禁親確認証拠(合成)。C004・生存者確認とは別個の資料として与える。 */
 export const INTEGRATED_SUPPORTING_CLEARANCES: readonly SupportingKinshipClearance[] = Object.freeze([{
