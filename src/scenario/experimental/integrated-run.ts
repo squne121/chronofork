@@ -11,10 +11,10 @@ import type { NextgenContractCalibration } from '../../simulation/legal/nextgen-
 import { EXPERIMENTAL_B009_CALIBRATION } from '../../simulation/rules/b/index.ts'
 import type { B001PromotionInput } from '../../simulation/rules/b/index.ts'
 import { childIdForMarriageYear } from '../../simulation/rules/b/b002-worldstate.ts'
+import { ordinaryMarriageIdForPairYear } from '../../simulation/rules/a/aleg01-ordinary.ts'
 import type { SupportingKinshipClearance } from '../../simulation/rules/a/index.ts'
 import { supportingCandidateId } from '../../simulation/population/supporting-marriage.ts'
 import type { SupportingMarriageCohort } from '../../simulation/population/supporting-marriage.ts'
-import { pairKey } from '../../simulation/intervention/index.ts'
 import { createExperimentalWorld, NALVEN_DYNASTY_ID } from './world-1250.ts'
 import { createExperimentalOrdinaryLegalTrial } from './ordinary-legal-trial.ts'
 import type { ProvenanceEntry } from './provenance.ts'
@@ -60,7 +60,7 @@ const INTEGRATED_SUPPORTING_LIMITS = Object.freeze({
 })
 
 /** 1250年P2×P5婚姻からB002が実出生した場合の1252年男子の安定ID(対象IDの固定のみ。出生を保証しない)。 */
-const integratedMarriageId = 'marriage:normal:' + JSON.stringify([INTEGRATED_START_YEAR, pairKey(INTEGRATED_PAIR)])
+const integratedMarriageId = ordinaryMarriageIdForPairYear(INTEGRATED_START_YEAR, INTEGRATED_PAIR)
 export const INTEGRATED_WITNESSED_SON_ID = childIdForMarriageYear(
   integratedMarriageId, INTEGRATED_PAIR[0], INTEGRATED_PAIR[1], 1252)
 

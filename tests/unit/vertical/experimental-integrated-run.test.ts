@@ -19,7 +19,9 @@ import {EXPERIMENTAL_B009_CALIBRATION} from '../../../src/simulation/rules/b/ind
 const P2='person-exp-02',P5='person-exp-05'
 // PR #78 直書きの控え(src/の定数を再利用しない独立値)。
 const REF_SUPPORTING_ID='support:population:["trial:issue71:C004:1260:east-female",0]'
-const REF_SON_ID='person:b002:auto:[1252,"marriage:normal:[1250,\\"[\\\\\\"person-exp-02\\\\\\",\\\\\\"person-exp-05\\\\\\"]\\"]","person-exp-02","person-exp-05"]'
+// Issue #120: 旧PR #78の再帰JSON文字列IDは非互換。新v1仕様の固定digestを独立照合する。
+// Before: REF_SON_ID='person:b002:auto:[1252,"marriage:normal:[1250,\\"[\\\\\\"person-exp-02\\\\\\",\\\\\\"person-exp-05\\\\\\"]\\"]","person-exp-02","person-exp-05"]'
+const REF_SON_ID='person:b002:auto:70ddf08d99139e80d48abd461e44635b7a16db1d778a5e1efcc92c6fbfa5f62d'
 const REF_COHORT={cohortId:'trial:issue71:C004:1260:east-female',groupId:'group-east-elite',
   affiliationHouseId:'house-cardon',familyPoolId:'trial:issue71:independently-attested-cardon-unrelated-family',
   tier:'REGIONAL_LOWER_NOBILITY',sex:'FEMALE',birthYear:1260,memberCount:1,source:'C004_COHORT',
