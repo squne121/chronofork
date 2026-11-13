@@ -148,6 +148,15 @@ describe('Issue #119: 採用済みGAME-02 王位継承の法制審査',()=>{
     expect(checkWorldIntegrity(r.world).some(x=>x.code==='DEAD_CROWN_HOLDER')).toBe(false)
   })
 
+  it('死亡保持者の王位が失効済みでもHELDを残さず、継承承認は発生しない',()=>{
+    const w=start()
+    const invalid:WorldState={...w,titles:w.titles.map(t=>t.titleId===CROWN?{...t,valid:false}:t)}
+    const r=complete(run(invalid))
+    expect(title(r.world,CROWN).holder.status).toBe('UNDETERMINED')
+    expect(r.world.legal.cases.find(c=>c.titleId===CROWN)?.status).toBe('PENDING')
+    expect(r.traces.some(t=>t.reasonCodes.includes('EXPLICIT_CROWN_AUTHORITY_AND_HEIR_VERIFIED'))).toBe(false)
+  })
+
   it('未確認の法的王朝所属で候補を確定せず、前保持者死亡後も領地・委任・税権は独立',()=>{
     const w=start()
     const unresolved:WorldState={...w,persons:w.persons.map(p=>
