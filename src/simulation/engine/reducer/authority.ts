@@ -31,6 +31,7 @@ function allowances(c: DomainCommand): readonly Allowance[] {
     case 'LEGAL_TITLE_TRANSFER':
     case 'TITLE_RECOGNITION_SET':
     case 'LEGAL_CASE_SET':
+    case 'COUNTRY_RULER_SET':
     case 'CONTROL_MANDATE_SET':
     case 'TAX_MANDATE_SET':
       return [{ domain: 'A', phases: LEGAL_PHASES }]
@@ -94,6 +95,9 @@ export function checkCommandAuthority(
 
   if (!Object.hasOwn(COMMAND_WRITE_OWNER, c.type)) return reject('INVALID_COMMAND', `未知の command 種別: ${String((c as { type: unknown }).type)}`)
   const owner = COMMAND_WRITE_OWNER[c.type]
+  if (c.type === 'COUNTRY_RULER_SET' && s.sourceRuleId !== 'A-TIT-07') {
+    return reject('WRITE_OWNER_VIOLATION', '王位に対応する国家統治者更新はA-TIT-07のみ実行できます')
+  }
   if (c.type === 'MARRIAGE_DISSOLVE' && s.sourceRuleId !== 'A-LEG-01') {
     return reject('WRITE_OWNER_VIOLATION', '婚姻終了はA-LEG-01のみが確定します')
   }
