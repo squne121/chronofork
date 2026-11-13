@@ -290,6 +290,10 @@ test.describe('観測中心UX114: 介入前の統合A0を実Workerで観測(オ�
     await page.getByTestId('obs-start').click()
     await expect(page.getByTestId('candidates-fetch')).toBeDisabled()
     await expect(page.getByTestId('obs-year-label')).toContainText('1250年初',{timeout:12*60_000})
+    await expect(page.getByTestId('obs-future-context')).toBeVisible()
+    await expect(page.getByTestId('obs-future-current')).toContainText('1250年')
+    await expect(page.getByTestId('obs-future-ending')).toContainText('原史A0')
+    await expect(page.getByTestId('obs-future-ending')).toContainText('1350年')
     await expect(page.getByTestId('obs-cache-source')).toContainText('実計算')
     await expect(page.getByTestId('obs-goal')).toContainText('正式勝敗：未成立')
     await page.locator('#obs-year').focus()
@@ -354,6 +358,7 @@ test.describe('観測中心UX114: 介入前の統合A0を実Workerで観測(オ�
     await expect(page.getByTestId('branch-error')).toHaveCount(0)
     await expect(page.getByTestId('integrated-a0-source')).toContainText('再利用')
     await expect(page.getByTestId('history-status')).toContainText('A1')
+    await expect(page.getByTestId('obs-future-ending')).toContainText('原史A0') // A1の結末にすり替えない
     await expect(page.getByTestId('observation-main')).toBeVisible()
   })
 })

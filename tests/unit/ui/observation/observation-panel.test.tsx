@@ -37,6 +37,7 @@ const view:ObservationSlice={
   counts:Array.from({length:101},(_,i)=>({year:1250+i,events:i===0?2:0,traces:i===0?2:0})),
   candidates:{seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',candidates:[]},
   titleHistories:buildTitleHoldingHistories([world],[titleEvent]),
+  knownA0Ending:null,
   technicalGoal:{status:'NOT_ACHIEVED',assessments:[{
     titleId:'synthetic-title',holderPersonId:null,qualifies:false,
     failures:['TITLE_NOT_RECOGNIZED'],basis:null,

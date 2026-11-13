@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { titleLabel } from './title-history.ts'
+import { A0FutureContext } from './A0FutureContext.tsx'
 import type { ObservationSlice } from '../branch-play-source.ts'
 import type { PlayProgress } from '../play-progress.ts'
 import { associationsFor, collectAssociations } from './associations.ts'
@@ -288,6 +289,8 @@ export function ObservationPanel(p:Props){
               {persons.map(x=><option value={x.personId} key={x.personId}>{shortPersonName(x.name)}（{x.birthYear}年生）</option>)}
             </select>
           </label>
+          {person&&seedMatches&&<A0FutureContext observation={v} personId={person}
+            disabled={p.loading} onYearSelect={yearChange} onTitleSelect={setSelectedTitle}/>}
           {person&&<FamilyTree world={v.world} personId={person} onSelectPerson={setSelectedPerson} onSelectTitle={setSelectedTitle}/>}
           <details className="obs-family-help">
             <summary>子どもの数・配偶者の表示の意味</summary>
