@@ -49,9 +49,12 @@ type Props=Readonly<{
   /** 明示操作で取得したA0の人物候補（seed・モード付き）。条件が合わなければ使わない。 */
   candidateSet?:PlayCandidateSet
   fetchingCandidates?:boolean
+  observationLoading?:boolean
   candidateError?:Readonly<{code:string;message:string}>
   onFetchCandidates:(seed:number,mode:PlayMode)=>void
   onCancelCandidates:()=>void
+  /** 年表調査から選択した年と人物。既存の合法な介入対象判定に委ねる。 */
+  observationTarget?:Readonly<{year:number;personId:string;seed:number;token:number}>
   activeBranch:BranchChoice|'A2'
   onRun:(input:PlayInput)=>void
   onViewBranch:(choice:BranchChoice|'A2')=>void
@@ -106,12 +109,17 @@ const countMarried=(w:{legal:{marriages:readonly {status:string}[]}})=>w.legal.m
 const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filter(t=>t.holder.status==='HELD').length
 
 export function InterventionComparePanel(p:Props){
-  const [mode,setMode]=useState<PlayMode>(PLAY_DEFAULT_MODE)
-  const [yearText,setYearText]=useState(String(PLAY_DEMO_YEAR))
-  const [firstId,setFirstId]=useState<string>(PLAY_DEMO_PAIR[0])
-  const [secondId,setSecondId]=useState<string>(PLAY_DEMO_PAIR[1])
-  const [deltaText,setDeltaText]=useState(String(PLAY_DEMO_DELTA))
-  const [durationText,setDurationText]=useState(String(PLAY_DEMO_DURATION))
+  // 観測画面から渡された初期値は、親のkey変更による安全な再マウント時だけ適用する。
+  const observed=p.observationTarget
+  const [mode,setMode]=useState<PlayMode>(observed?'INTEGRATED_EXPERIMENTAL':PLAY_DEFAULT_MODE)
+  const [yearText,setYearText]=useState(String(observed?.year??PLAY_DEMO_YEAR))
+  const [firstId,setFirstId]=useState<string>(observed?.personId??PLAY_DEMO_PAIR[0])
+  const [secondId,setSecondId]=useState<string>(observed
+    ? observed.personId===INTEGRATED_PLAY_DEFAULTS.pair[1]?INTEGRATED_PLAY_DEFAULTS.pair[0]:INTEGRATED_PLAY_DEFAULTS.pair[1]
+    : PLAY_DEMO_PAIR[1])
+  const [deltaText,setDeltaText]=useState(String(observed?INTEGRATED_PLAY_DEFAULTS.signedDelta:PLAY_DEMO_DELTA))
+  const [durationText,setDurationText]=useState(String(observed
+    ? Math.min(INTEGRATED_PLAY_DEFAULTS.durationYears,1350-observed.year):PLAY_DEMO_DURATION))
   const seed=Number(p.seedText.trim())
   const year=Number(yearText),delta=Number(deltaText),duration=Number(durationText)
   const valid=/^\d+$/.test(p.seedText.trim())&&Number.isSafeInteger(seed)&&seed>=0 &&
@@ -141,6 +149,7 @@ export function InterventionComparePanel(p:Props){
     return inOptions(selected)?list:[<option key="__missing" value={selected} disabled>{personName(selected)}（{yearOk?`${year}年初には存在しません`:'年を確認してください'}）</option>,...list]
   }
   const data=p.comparison?compareYear(p.comparison,p.year):undefined
+  const secondData=p.comparison?.second?compareYear(p.comparison.second,p.year):undefined
   const before=data?.a0World,after=data?.a1World
   const input=p.comparison?.input
   const continuityA0=p.comparison?observeDynastyContinuity(
@@ -246,11 +255,11 @@ export function InterventionComparePanel(p:Props){
     </p>}
     <form className="compare-form" onSubmit={e=>{
       e.preventDefault()
-      if(canRun&&!p.running&&!p.fetchingCandidates)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
+      if(canRun&&!p.running&&!p.fetchingCandidates&&!p.observationLoading)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
         signedDelta:delta,durationYears:duration,mode})
     }}>
       <div className="candidate-source" data-testid="candidate-source">
-        <button type="button" data-testid="candidates-fetch" disabled={!/^\d+$/.test(p.seedText.trim())||!Number.isSafeInteger(seed)||!!p.running||!!p.fetchingCandidates}
+        <button type="button" data-testid="candidates-fetch" disabled={!/^\d+$/.test(p.seedText.trim())||!Number.isSafeInteger(seed)||!!p.running||!!p.fetchingCandidates||!!p.observationLoading}
           onClick={()=>p.onFetchCandidates(seed,mode)}>この条件のA0から人物候補を取得（後から生まれた人物を選ぶ場合）</button>
         {p.fetchingCandidates&&<button type="button" data-testid="candidates-cancel" onClick={p.onCancelCandidates}>取得をキャンセル</button>}
         <span className="note" role="status" data-testid="candidate-status"> {p.fetchingCandidates
@@ -281,7 +290,7 @@ export function InterventionComparePanel(p:Props){
         </label>
       </div>
       <h3 className="step-title"><span className="step-no">2</span>再計算する</h3>
-      <button type="submit" disabled={!canRun||!!p.running||!!p.fetchingCandidates} data-testid="branch-run" className="cta">介入して再計算</button>
+      <button type="submit" disabled={!canRun||!!p.running||!!p.fetchingCandidates||!!p.observationLoading} data-testid="branch-run" className="cta">介入して再計算</button>
       {p.running&&<button type="button" onClick={p.onCancel} data-testid="branch-cancel">計算をキャンセル</button>}
       <span className="note"> {mode==='INTEGRATED_EXPERIMENTAL'
         ?`初期入力例：${personName(INTEGRATED_PLAY_DEFAULTS.pair[0])}と${personName(INTEGRATED_PLAY_DEFAULTS.pair[1])}、${INTEGRATED_PLAY_DEFAULTS.year}年、${INTEGRATED_PLAY_DEFAULTS.signedDelta}、${INTEGRATED_PLAY_DEFAULTS.durationYears}年間（seed ${INTEGRATED_PLAY_DEFAULTS.seed}）。`
@@ -313,7 +322,48 @@ export function InterventionComparePanel(p:Props){
         onRun={p.onRun} onViewA2={()=>p.onViewBranch('A2')}/>
     }
     {p.comparison&&input&&before&&after&&<div data-testid="branch-results" className="compare-results">
-      <h3 className="step-title"><span className="step-no">3</span>同じ年のA0/A1を比べる</h3>
+      <section className="effect-summary" id="effect-summary" data-testid="effect-summary" aria-labelledby="effect-summary-heading">
+        <h3 id="effect-summary-heading">この介入で、実際に何が変わった？</h3>
+        <p>選んだ2人：<strong>{personName(pair[0])} と {personName(pair[1])}</strong></p>
+        <p data-testid="effect-input">介入条件：{input.year}年から{input.durationYears}年間、2人の信頼を
+          <strong>{input.signedDelta>0?'+':''}{input.signedDelta}</strong>補正。これは入力値であり、歴史の結果とは別です。</p>
+        <div className="effect-cards">
+          <div className="effect-card" data-testid="effect-judgement">
+            <h4>対象の判断（{p.year}年）</h4>
+            <p>A0 {traceA0?.status??'記録なし'}（スコア {score(traceA0)}） → A1 {traceA1?.status??'記録なし'}（スコア {score(traceA1)}）</p>
+            <p className="note">{!traceA0&&!traceA1?'この年の対象B-004判断は記録されていません。':
+              traceA0?.status===traceA1?.status?'判断の採否は変わっていません。':'判断の採否に違いが確認されました。'}</p>
+          </div>
+          <div className="effect-card" data-testid="effect-year-events">
+            <h4>確定した出来事（{p.year}年）</h4>
+            <p>A0/A1の差分：<strong>{eventRows.length}件</strong>（選んだ2人・子 {focused.length}件 / その他 {other.length}件）</p>
+            <p className="note">{eventRows.length===0
+              ?'この年の確定Eventに差はありません。後年の出来事や判断まで同一とは限りません。'
+              :'この年に実Eventの追加・消失・内容差が記録されています。下の一覧から出典を確認できます。'}</p>
+          </div>
+          <div className="effect-card" data-testid="effect-technical-goal">
+            <h4>1350年の王朝存続条件（技術判定）</h4>
+            <p>A0 {trialGoalStatus(goalA0)} → A1 {trialGoalStatus(goalA1)}</p>
+            <p className="note">{goalA0?.status===goalA1?.status
+              ?'技術判定の達成状態は変わっていません。Title別の不足理由には違いがある可能性があります。'
+              :'技術判定の状態に違いがあります。詳細は土地Title別の評価で確認できます。'}</p>
+            {p.comparison.second&&<p data-testid="effect-a2-goal">A2（第2介入後）：{trialGoalStatus(p.comparison.second.a1.result.technicalGoal)}</p>}
+          </div>
+          {p.comparison.second&&<div className="effect-card" data-testid="effect-a2-comparison">
+            <h4>追加介入の結果（A1→A2）</h4>
+            <p>{personName(p.comparison.second.input.firstPersonId)} と {personName(p.comparison.second.input.secondPersonId)}に
+              {p.comparison.second.input.signedDelta>0?'+':''}{p.comparison.second.input.signedDelta}の信頼補正を追加しました。</p>
+            <p>この年の確定Event差分：<strong>{secondData?.events.length??0}件</strong></p>
+            <p className="note">{(secondData?.events.length??0)===0?
+              'この年の確定Eventに差はありません。別の年のEventや判断が不変とは限りません。':
+              'この年にA1とA2でEventの追加・消失・内容差が確認されました。'}</p>
+            <p>1350年の技術判定：A1 {trialGoalStatus(p.comparison.second.a0.result.technicalGoal)}
+              → A2 {trialGoalStatus(p.comparison.second.a1.result.technicalGoal)}</p>
+          </div>}
+        </div>
+        <p className="note">A0/A1は同じseed・実行構成で再計算しています。確認した差を表示しており、この介入だけが原因と断定しません。正式な勝敗は未成立です。</p>
+      </section>
+      <h3 className="step-title"><span className="step-no">3</span>同じ年のA0/A1を詳しく比べる</h3>
       <div className="headline" data-testid="branch-headline">
         <p><strong>{personName(pair[0])}と{personName(pair[1])}</strong>（{p.year}年）</p>
         <ul>

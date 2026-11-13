@@ -1,7 +1,7 @@
 // 再計算の実行方式。重い統合モードはWeb Workerで実行し、キャンセル(terminate)・失敗を区別して返す。
 // Workerは同一プレイ中の原史A0キャッシュの保持場所であり、寿命はこのモジュールが管理する。
 import { runPlayComparison } from './branch-play-source.ts'
-import type { PlayInput, PlayResult, PlayView } from './branch-play-source.ts'
+import type { ObservationInput, ObservationSlice, PlayInput, PlayResult, PlayView } from './branch-play-source.ts'
 import type { WorkerRequest, WorkerResponse } from './play-worker.ts'
 import { runPlayCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
@@ -17,10 +17,17 @@ export type PlayRunHooks=Readonly<{
   /** A0を再計算せず保存済みを使うとき一度だけ。A0の進捗通知は出ない。 */
   onA0Reused?:()=>void
 }>
+export type ObservationOutcome =
+  | Readonly<{kind:'DONE';result:Readonly<{ok:true;observation:ObservationSlice}>|Readonly<{ok:false;code:string;message:string}>;computeMs:number}>
+  | Readonly<{kind:'CANCELLED'}>
+  | Readonly<{kind:'FAILED';code:string;message:string}>
+export type ObservationHandle=Readonly<{promise:Promise<ObservationOutcome>;cancel:()=>void}>
 /** onProgress は確定済みの年次進捗だけ。完了・失敗・キャンセル後は呼ばれない。 */
 export type PlayRunner=((input:PlayInput,onProgress?:ProgressObserver,hooks?:PlayRunHooks)=>PlayRunHandle)&Readonly<{
   /** 保持しているA0とWorkerを破棄する(新規ゲーム・seed変更・タブ破棄)。実行中ならキャンセル扱い。 */
   reset?:()=>void
+  /** 介入なしA0の選択年を既存の共有Workerで観測する。 */
+  observe?:(input:ObservationInput,onProgress?:ProgressObserver)=>ObservationHandle
 }>
 
 /** 最後の実行から無操作でこの時間が過ぎたら、A0ごとWorkerを解放する(数GBの常駐を避ける)。 */
@@ -96,7 +103,47 @@ export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
     })
     return {promise,cancel:()=>settle({kind:'CANCELLED'})}
   }
-  const runner:PlayRunner=Object.assign(run,{reset:()=>{
+
+  const observe=(input:ObservationInput,onProgress?:ProgressObserver):ObservationHandle=>{
+    let done=false
+    let settle:(o:ObservationOutcome)=>void=()=>{}
+    const promise=new Promise<ObservationOutcome>(resolve=>{
+      const holder={settle:(o:PlayOutcome)=>{
+        settle(o.kind==='CANCELLED'?{kind:'CANCELLED'}:
+          {kind:'FAILED',code:'RUN_INTERRUPTED',message:'観測が中断されました'})
+      }}
+      settle=o=>{
+        if(done)return;done=true
+        if(active===holder)active=undefined
+        if(o.kind==='DONE')armIdle();else dropWorker()
+        resolve(o)
+      }
+      if(active){done=true;resolve({kind:'FAILED',code:'RUN_IN_PROGRESS',message:'別の計算が実行中です'});return}
+      active=holder
+      if(idleTimer!==undefined){clearTimeout(idleTimer);idleTimer=undefined}
+      try{worker??=create()}catch(error){
+        const unavailable=typeof Worker==='undefined'
+        settle({kind:'FAILED',code:unavailable?'WORKER_UNAVAILABLE':'WORKER_START_FAILED',
+          message:unavailable?'このブラウザではWeb Workerを利用できません':error instanceof Error?error.message:String(error)})
+        return
+      }
+      const w=worker
+      w.onmessage=(e:MessageEvent<WorkerResponse>)=>{
+        const m=e.data
+        if('kind' in m){if(!done&&m.kind==='PROGRESS')onProgress?.(m.progress);return}
+        if(m.ok&&!('observation' in m)){
+          settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'観測以外の応答です'});return
+        }
+        settle({kind:'DONE',computeMs:m.computeMs,result:m.ok?{ok:true,observation:m.observation}:
+          {ok:false,code:m.code,message:m.message}})
+      }
+      w.onerror=e=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_ERROR',message:e.message||'Worker障害'})
+      w.onmessageerror=()=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'観測結果を受信できません'})
+      w.postMessage({observe:input})
+    })
+    return {promise,cancel:()=>settle({kind:'CANCELLED'})}
+  }
+  const runner:PlayRunner=Object.assign(run,{observe,reset:()=>{
     const a=active
     if(a)a.settle({kind:'CANCELLED'}) // 内部でdropWorker
     dropWorker()

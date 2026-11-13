@@ -19,6 +19,9 @@ export const EVENT_CATEGORIES:readonly EventCategory[]=Object.freeze([
 ])
 const typesOf=(e:EventLogEntry)=>e.eventType.split('+')
 export const inCategory=(e:EventLogEntry,c:EventCategory)=>typesOf(e).some(t=>c.types.includes(t))
+/** 原史探索の最初の一覧: 大量の補助人物登録は表示しないが、全Eventを保持・再表示可能にする。 */
+export const isObservationFocusEvent=(e:EventLogEntry)=>
+  EVENT_CATEGORIES.some(c=>c.key!=='supporting'&&inCategory(e,c))
 
 export type CategoryRow=Readonly<{
   category:EventCategory

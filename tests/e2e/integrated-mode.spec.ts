@@ -8,7 +8,7 @@ test.describe('統合モード: 起動・計算中の操作・キャンセル(�
   test.use({ viewport: { width: 1280, height: 800 } })
 
   test('モード選択でPR #78の実測条件が初期入力例に入り、計算中も操作でき、キャンセルで復旧する', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     await expect(page.getByTestId('play-mode-description')).toContainText('PR #78')
     await expect(page.getByTestId('branch-fork-year')).toHaveValue('1250')
@@ -16,7 +16,7 @@ test.describe('統合モード: 起動・計算中の操作・キャンセル(�
     await expect(page.getByTestId('branch-duration')).toHaveValue('5')
     await expect(page.getByTestId('branch-person-one')).toHaveValue('person-exp-02')
     await expect(page.getByTestId('branch-person-two')).toHaveValue('person-exp-05')
-    await expect(page.getByLabel(/seed/)).toHaveValue('20260101')
+    await expect(page.getByTestId('seed-input')).toHaveValue('20260101')
 
     await page.getByTestId('branch-run').click()
     await expect(page.getByTestId('branch-running')).toContainText('計算中')
@@ -54,7 +54,7 @@ test.describe('統合モード: 起動・計算中の操作・キャンセル(�
   })
 
   test('旧2モードは従来どおり同期で再計算でき、統合モードの表示を出さない', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('branch-run').click()
     await expect(page.getByTestId('branch-results')).toBeVisible({ timeout: 60_000 })
     await expect(page.getByTestId('branch-status')).toContainText('A1 COMPLETED')
@@ -70,7 +70,7 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
   for (const width of [1280, 960]) {
     test(`統合モード選択→再計算→A0/A1切替→年表→判断根拠(${width}px)`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
-      await page.goto('/')
+      await page.goto('/?entry=legacy')
       await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
       const started = Date.now()
       await page.getByTestId('branch-run').click()
@@ -113,7 +113,7 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
 
   test('960px: 対象比較のTraceリンクは詳細を画面内へ移動する', async ({page}) => {
     await page.setViewportSize({width:960,height:900})
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     // 実計算で差分が生まれ、人物02が対象選択肢に出現する試験条件。
     await page.getByTestId('branch-trust-delta').fill('-40')
@@ -131,7 +131,7 @@ test.describe('統合モード: 100年の実計算(オプトイン)', () => {
 
   test('1280px: Event差分ゼロでも介入した2人を選び、A0/A1の判断Traceを開ける', async ({page}) => {
     await page.setViewportSize({width:1280,height:900})
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     // 既存の固定seed・初期入力例（信頼−20）は、これまでEvent差分0を実測した試験条件。
     await page.getByTestId('branch-run').click()
@@ -163,7 +163,7 @@ test.describe('統合モード: A0キャッシュの実Worker再利用(オプト
 
   test('1回目は100年のA0を計算し、介入年を変えた2回目はA0を再利用してA1だけ年次進捗を出す', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     await page.getByTestId('branch-fork-year').fill('1340')
     await page.getByTestId('branch-run').click()
@@ -190,7 +190,7 @@ test.describe('統合モード: 後出生KEY人物のGUI選択（Issue #104・�
 
   test('A0の候補を取得し、1278年に1252年生まれの人物と初期人物へ介入できる', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     // 取得前は初期人物のみ。取得中は介入の再計算が始まらず、画面は操作できる。
     await expect(page.getByTestId('branch-person-two').locator('option', { hasText: '1252年生' })).toHaveCount(0)
@@ -242,7 +242,7 @@ test.describe('統合モード: 同年・別ペアに追加介入してA2を作�
   test.skip(!heavy, 'CHRONOFORK_E2E_INTEGRATED=1 のときだけ実行する')
   test.setTimeout(30*60_000)
   test('A0観測→A1第1介入→A2第2介入→1350年の厳格技術Goalと3枝の観測',async({page})=>{
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     await page.getByTestId('candidates-fetch').click()
     await expect(page.getByTestId('candidate-status')).toContainText('A0の',{timeout:12*60_000})
@@ -266,6 +266,7 @@ test.describe('統合モード: 同年・別ペアに追加介入してA2を作�
     await page.getByTestId('a2-run').click()
     await expect(page.getByTestId('a2-results')).toBeVisible({timeout:20*60_000})
     await expect(page.getByTestId('a2-goal-summary')).toContainText('A2 ACHIEVED（技術検証）')
+    await expect(page.getByTestId('effect-a2-comparison')).toContainText('A1→A2')
     await expect(page.getByTestId('a2-title-basis')).toContainText('新規ControlMandate')
     await expect(page.getByTestId('goal-status')).toContainText('正式な勝敗は未成立')
     await expect(page.getByTestId('history-status')).toContainText('A2')
@@ -275,5 +276,89 @@ test.describe('統合モード: 同年・別ペアに追加介入してA2を作�
     await expect(page.getByTestId('history-status')).toContainText('A1')
     await page.getByTestId('view-a2').click()
     await expect(page.getByTestId('history-status')).toContainText('A2')
+  })
+})
+
+test.describe('観測中心UX114: 介入前の統合A0を実Workerで観測(オプトイン)',()=>{
+  test.skip(!heavy, 'CHRONOFORK_E2E_INTEGRATED=1 のときだけ実行する(100年A0計算)')
+  test.setTimeout(15*60_000)
+  test('原史の年移動・EventなしDEFER/REJECT・人物選択→介入フォームが同じA0を再利用',async({page})=>{
+    await page.setViewportSize({width:1280,height:900})
+    await page.goto('/')
+    await expect(page.getByTestId('branch-results')).toHaveCount(0)
+    await expect(page.getByTestId('obs-seed-input')).toHaveValue('20260101')
+    await page.getByTestId('obs-start').click()
+    await expect(page.getByTestId('candidates-fetch')).toBeDisabled()
+    await expect(page.getByTestId('obs-year-label')).toContainText('1250年初',{timeout:12*60_000})
+    await expect(page.getByTestId('obs-future-context')).toBeVisible()
+    await expect(page.getByTestId('obs-future-current')).toContainText('1250年')
+    await expect(page.getByTestId('obs-future-ending')).toContainText('原史A0')
+    await expect(page.getByTestId('obs-future-ending')).toContainText('1350年')
+    await expect(page.getByTestId('obs-cache-source')).toContainText('実計算')
+    await expect(page.getByTestId('obs-goal')).toContainText('正式勝敗：未成立')
+    await page.locator('#obs-year').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByTestId('obs-year-label')).toContainText('1251年初',{timeout:90_000})
+    await expect(page.getByTestId('obs-cache-source')).toContainText('再利用')
+    await page.getByTestId('obs-title-select').selectOption('title-exp-central')
+    await expect(page.getByTestId('obs-title-detail')).toContainText('エルディア中央の領主権')
+    await expect(page.getByTestId('obs-title-history')).toContainText('年初')
+    await page.getByTestId('obs-title-select').selectOption('title-exp-crown-eldia')
+    await expect(page.getByTestId('obs-title-detail')).toContainText('エルディア王位')
+    await expect(page.getByTestId('obs-trace-count')).toContainText('Trace')
+    await page.getByTestId('obs-to-intervention').click()
+    await expect(page.getByTestId('play-law-mode')).toHaveValue('INTEGRATED_EXPERIMENTAL')
+    await expect(page.getByTestId('branch-fork-year')).toHaveValue('1251')
+    await expect(page.getByTestId('branch-person-one')).toHaveValue(await page.getByTestId('obs-person').inputValue())
+    await expect(page.getByTestId('branch-results')).toHaveCount(0)
+
+    // 年表の入口から実記録の年を選び、出来事を1回クリックして人物・根拠を調べる。
+    const initialPerson=await page.getByTestId('obs-person').inputValue()
+    const hinted=page.locator('[data-testid^="obs-hint-year-"]')
+    await expect(hinted.first()).toBeVisible()
+    await hinted.first().click()
+    await expect(page.getByTestId('obs-event-list').getByRole('button').first()).toBeVisible({timeout:90_000})
+    await page.getByTestId('obs-event-list').getByRole('button').first().click()
+    await expect(page.getByTestId('obs-event-detail')).toBeVisible()
+    await page.getByTestId('obs-person').selectOption(initialPerson)
+    // クリックでジャンプするだけではなく、ドラッグ中につまみと年表示が連続追従する。
+    const seek=page.getByTestId('obs-year-slider')
+    const rect=await seek.boundingBox()
+    if(!rect)throw new Error('YEAR_SLIDER_NOT_VISIBLE')
+    await page.mouse.move(rect.x+8,rect.y+rect.height/2)
+    await page.mouse.down()
+    await page.mouse.move(rect.x+rect.width*0.56,rect.y+rect.height/2,{steps:12})
+    await expect(page.getByTestId('obs-year-label')).toContainText('離すと観測')
+    const draggedYear=await seek.inputValue()
+    await page.mouse.up()
+    await expect(page.getByTestId('obs-year-label')).toContainText(draggedYear+'年初',{timeout:90_000})
+    await expect(page.getByTestId('obs-cache-source')).toContainText('再利用')
+    // 同じ100年A0を使い、1345年の介入からA1の5年だけを実再計算する。
+    await page.getByText('すべての年の記録件数を見る（Event・Trace）').click()
+    await page.getByRole('button',{name:/^1345年・事件/}).click()
+    await expect(page.getByTestId('obs-year-label')).toContainText('1345年初',{timeout:90_000})
+    await expect(page.getByTestId('obs-cache-source')).toContainText('再利用')
+
+    // 960pxで観測・人物操作ができ、横スクロールが発生しない。
+    await page.setViewportSize({width:960,height:900})
+    await expect(page.getByTestId('obs-person')).toBeVisible()
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true)
+
+    await page.getByTestId('obs-to-intervention').click()
+    await expect(page.getByTestId('branch-fork-year')).toHaveValue('1345')
+    await expect(page.getByTestId('branch-person-one')).toHaveValue(await page.getByTestId('obs-person').inputValue())
+    await page.getByTestId('branch-fork-year').fill('1344')
+    await expect(page.getByTestId('branch-run')).toBeEnabled()
+    await page.getByTestId('branch-fork-year').fill('1345')
+    await expect(page.getByTestId('branch-run')).toBeEnabled()
+    await page.getByTestId('branch-run').click()
+    await expect(page.getByTestId('branch-results')).toBeVisible({timeout:8*60_000})
+    await expect(page.getByTestId('effect-summary')).toBeVisible()
+    await expect(page.getByTestId('effect-year-events')).toContainText('差分')
+    await expect(page.getByTestId('branch-error')).toHaveCount(0)
+    await expect(page.getByTestId('integrated-a0-source')).toContainText('再利用')
+    await expect(page.getByTestId('history-status')).toContainText('A1')
+    await expect(page.getByTestId('obs-future-ending')).toContainText('原史A0') // A1の結末にすり替えない
+    await expect(page.getByTestId('observation-main')).toBeVisible()
   })
 })

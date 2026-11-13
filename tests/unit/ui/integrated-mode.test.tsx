@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // 統合法制・世代継続(experimental)モードの軽量回帰。100年の実計算は integrated-mode-long.test.ts(オプトイン)で行う。
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it , beforeEach} from 'vitest'
 import App from '../../../src/ui/App.tsx'
 import { INTEGRATED_PLAY_DEFAULTS, interventionTargetIssue, playModeLabel, runPlayComparison } from '../../../src/ui/branch-play-source.ts'
 import type { PlayComparison, PlayInput, PlayView } from '../../../src/ui/branch-play-source.ts'
@@ -12,6 +12,8 @@ import { toDisplayView } from '../../../src/ui/play-view.ts'
 import { INTEGRATED_PAIR, INTEGRATED_SEED, INTEGRATED_TRUST_REDUCTION, createExperimentalIntegratedTimelineOptions } from '../../../src/scenario/experimental/index.ts'
 import type { DecisionTrace, EventLogEntry } from '../../../src/simulation/contracts/index.ts'
 
+
+beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
 afterEach(cleanup)
 
 describe('統合モードの初期入力例(CALIBRATION_ONLY)', () => {
@@ -189,7 +191,7 @@ describe('App: 統合モードの選択・実行・キャンセル', () => {
     expect(field('branch-duration')).toBe('5')
     expect(field('branch-person-one')).toBe('person-exp-02')
     expect(field('branch-person-two')).toBe('person-exp-05')
-    expect((screen.getByLabelText(/seed/) as HTMLInputElement).value).toBe('20260101')
+    expect((screen.getByTestId('seed-input') as HTMLInputElement).value).toBe('20260101')
     // 入力は変更できる(初期例は強制ではない)。
     fireEvent.change(screen.getByTestId('branch-trust-delta'), { target: { value: '-35' } })
     expect(field('branch-trust-delta')).toBe('-35')

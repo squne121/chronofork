@@ -2,7 +2,7 @@
 // Issue #104: GUIの後出生KEY人物の選択。高速な軽量fixtureで、候補の年別変化・A0との一致・入力の受け渡し・無効化を検証する。
 // 100年の実計算は later-key-intervention-long.test.ts（オプトイン）と tests/e2e/integrated-mode.spec.ts（オプトイン）で行う。
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it , beforeEach} from 'vitest'
 import App from '../../../src/ui/App.tsx'
 import { interventionTargetIssue } from '../../../src/ui/branch-play-source.ts'
 import type { PlayInput } from '../../../src/ui/branch-play-source.ts'
@@ -12,6 +12,8 @@ import type { CandidatesOutcome, CandidatesRunner, PlayOutcome, PlayRunner } fro
 import { createExperimentalWorld } from '../../../src/scenario/experimental/index.ts'
 import type { Person, WorldState } from '../../../src/simulation/contracts/index.ts'
 
+
+beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
 afterEach(cleanup)
 
 const base = createExperimentalWorld()
@@ -192,7 +194,7 @@ describe('App: 後出生人物のGUI選択', () => {
     const { c, p } = setup()
     await fetchAndResolve(c)
     setField('branch-fork-year', '1278'); setField('branch-person-two', LATER)
-    fireEvent.change(screen.getByLabelText(/seed/), { target: { value: '7' } })
+    fireEvent.change(screen.getByTestId('seed-input'), { target: { value: '7' } })
     expect(optionIds('branch-person-two')).not.toContain(LATER)
     expect(screen.getByTestId('candidate-status').textContent).toContain('初期人物のみ')
     expect((screen.getByTestId('branch-run') as HTMLButtonElement).disabled).toBe(true)

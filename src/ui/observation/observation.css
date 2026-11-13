@@ -1,0 +1,84 @@
+/* UX114 A中心：既存の開発用UIとは独立して原史A0を主導線に置く。 */
+.obs-main { grid-column: 1 / -1; min-width: 0; }
+.obs { display:flex; flex-direction:column; gap:0.75rem; }
+.obs-head {display:flex; justify-content:space-between; align-items:start; flex-wrap:wrap; gap:0.6rem;}
+.obs-head .cta, .obs-person .cta { background:#e7f1ff; border:1px solid var(--accent); border-radius:4px; padding:0.5rem; }
+.obs-year-nav {display:grid; gap:0.35rem; padding:0.5rem; border:1px solid var(--line); border-radius:5px;}
+.obs-year-nav input {width:100%;}
+.obs-year-controls {display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;}
+.obs-year-controls button, .obs-year-jumps button, .obs-related-links button {padding:0.2rem 0.4rem; border:1px solid var(--line); background:white; border-radius:4px;}
+.obs-year-jumps {display:grid; grid-template-columns:repeat(auto-fill,minmax(9rem,1fr));gap:0.2rem;max-height:13rem;overflow:auto;}
+.obs-year-jumps button[aria-current] {border-color:var(--accent);font-weight:700;}
+.obs-goal {padding:0.5rem; background:#f1f8ff; border:1px solid #b6d4f0; border-radius:5px;}
+.obs-goal h3 {margin-top:0;}
+.obs-two-col {display:grid; grid-template-columns:minmax(0, 7fr) minmax(17rem, 4fr); gap:1rem;}
+.obs-timeline,.obs-person {min-width:0;}
+.obs-timeline label,.obs-person label {display:flex; flex-direction:column;gap:0.2rem; margin:0.35rem 0;}
+.obs-timeline select,.obs-person select {min-width:0;max-width:100%;padding:0.25rem;}
+.obs-timeline .obs-check {flex-direction:row; align-items:center;}
+.obs-record-list {display:grid; gap:0.2rem;max-height:18rem; overflow:auto; padding-left:1.3rem;}
+.obs-record-list button {border:1px solid transparent; background:transparent;color:var(--accent);text-align:left;cursor:pointer;overflow-wrap:anywhere;}
+.obs-record-list button[aria-pressed="true"]{border-color:var(--accent);background:#e7f1ff;}
+.obs-record-detail {min-width:0;border:1px solid var(--line);padding:0.5rem;overflow-wrap:anywhere;}
+.obs-record-detail pre {max-height:18rem;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:0.8rem;}
+.obs-related-links {display:flex;flex-wrap:wrap;gap:0.25rem;}
+.obs-person {border-left:1px solid var(--line);padding-left:0.8rem;}
+@media(max-width:1050px){.obs-two-col{grid-template-columns:1fr}.obs-person{border-left:0;border-top:1px solid var(--line);padding:0.5rem 0 0}}
+
+/* UX-R1: 初見で原史探索を見せ、旧試験/直接介入は利用者が展開する。 */
+.obs-eyebrow {font-weight:700;letter-spacing:0.03em;color:#46566e;margin:0 0 0.35rem;}
+.obs-question {font-size:clamp(1.05rem,2vw,1.45rem);font-weight:700;line-height:1.45;margin:0.35rem 0 0.55rem;}
+.obs-guidance {padding:0.6rem 0.8rem;border-left:3px solid var(--accent);background:#eef5fd;margin:0.6rem 0;}
+.obs-workspace {min-width:0;overflow:visible;}
+.obs-workspace>summary {cursor:pointer;padding:0.85rem 1rem;background:white;border:1px solid var(--line);border-radius:6px;font-weight:600;}
+.obs-workspace[open]>summary {border-bottom-left-radius:0;border-bottom-right-radius:0;}
+.obs-workspace-layout {padding:1rem 0 0;}
+.obs-seed-tools {display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;}
+@media(max-width:960px){.obs-workspace-layout{grid-template-columns:1fr;}}
+
+/* UX-R2: 歴史の記録と人物の関連を辿る視覚的階層。 */
+.obs-year-hints {padding:0.65rem;background:#f8fafc;border:1px solid var(--line);border-radius:5px;}
+.obs-year-hints h3{margin:0 0 0.2rem;}
+.obs-year-hints .obs-year-jumps{max-height:9.5rem;grid-template-columns:repeat(auto-fill,minmax(11rem,1fr));}
+.obs-more{margin-top:0.5rem;border:1px solid var(--line);background:#fff;border-radius:4px;padding:0.35rem 0.7rem;}
+.obs-record-detail h4 {line-height:1.5;}
+.obs-record-detail p{line-height:1.5;}
+.obs-event-people {margin:0.4rem 0;flex-wrap:wrap;}
+
+/* UX-R3: 補正入力と、判断/Event/技術Goalの実結果を分けて上位表示する。 */
+.effect-summary {padding:0.9rem 1rem;border:1px solid #a8c4dc;background:#f1f7fd;border-radius:6px;}
+.effect-summary h3{font-size:1.15rem;margin:0 0 0.7rem;}
+.effect-summary>p{line-height:1.6;}
+.effect-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:0.7rem;}
+.effect-card{background:#fff;border:1px solid #c2d3e2;border-radius:5px;padding:0.7rem;min-width:0;}
+.effect-card h4{margin:0 0 0.4rem;font-size:0.95rem;}
+.effect-card p{margin:0.3rem 0;font-size:0.94rem;overflow-wrap:anywhere;}
+@media(max-width:960px){.effect-summary{padding:0.75rem;}}
+
+/* UX-R4: ドラッグ中はつまみだけを追従させ、離してから実データを取得する。 */
+.obs-year-ticks{display:flex;justify-content:space-between;gap:0.3rem;padding:0 0.12rem;font-size:0.75rem;color:#566477;}
+.obs-year-nav input[type="range"]{cursor:ew-resize;touch-action:pan-y;accent-color:#2563a5;min-height:1.8rem;}
+.obs-year-nav output{font-weight:600;}
+.obs-holder-history{padding:0.65rem;margin:0.6rem 0;background:#f8fafc;border:1px solid var(--line);border-radius:5px;}
+.obs-holder-history h5{margin:0.2rem 0 0.5rem;}
+.obs-holder-history li{padding:0.35rem 0;line-height:1.5;}
+.obs-holder-history button{margin-left:0.5rem;background:white;border:1px solid var(--line);padding:0.2rem 0.5rem;border-radius:4px;}
+.obs-goal{margin-top:0.7rem;}
+.obs-goal summary,.trial-help summary{cursor:pointer;}
+.obs-family-help{margin:0.7rem 0;}
+.trial-help{font-size:0.86rem;margin:0.5rem 0;flex-basis:100%;}
+.trial-help .lead{margin:0.45rem 0;}
+@media(max-width:960px){.obs-holder-history button{display:block;margin:0.2rem 0 0.45rem;}}
+
+/* DEC-074: 選択年初と計算済み原史A0の既知未来を並置。改変史とは混ぜない。 */
+.obs-a0-future{padding:0.65rem;margin:0.65rem 0;border:1px solid var(--line);background:#fafcff;border-radius:5px;}
+.obs-a0-future h4{margin:0 0 0.5rem;font-size:0.97rem;}
+.obs-a0-future-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.5rem;}
+.obs-a0-future-grid>div{padding:0.5rem;background:#fff;border:1px solid #d7e3ed;border-radius:4px;display:flex;flex-direction:column;gap:0.25rem;min-width:0;}
+.obs-context-label{font-size:0.78rem;color:#59677b;line-height:1.4;}
+.obs-a0-future-grid strong{font-size:0.96rem;overflow-wrap:anywhere;}
+.obs-a0-future-grid button,.obs-a0-future-titles button{border:1px solid var(--line);border-radius:4px;background:white;color:var(--accent);cursor:pointer;padding:0.2rem 0.4rem;text-align:left;}
+.obs-a0-future-titles{margin-top:0.6rem;}
+.obs-a0-future-titles ul{margin:0.35rem 0 0;padding-left:1.1rem;}
+.obs-a0-future-titles li{margin:0.3rem 0;line-height:1.5;overflow-wrap:anywhere;}
+@media(max-width:650px){.obs-a0-future-grid{grid-template-columns:1fr;}}
