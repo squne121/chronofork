@@ -37,7 +37,7 @@ export function validateOrdinaryLaws(laws: readonly OrdinaryLaw[]): readonly str
   for (const [i, l] of laws.entries()) {
     if (!l || !id(l.lawId) || !id(l.sovereignCountryId) || !id(l.issuerRef?.id) ||
         l.issuerRef.kind !== 'COUNTRY' || l.issuerRef.id !== l.sovereignCountryId ||
-        !['NORMAL_MARRIAGE','NORMAL_LAND_SUCCESSION','NEW_CONTROL_MANDATE'].includes(l.action) ||
+        !['NORMAL_MARRIAGE','NORMAL_LAND_SUCCESSION','CROWN_SUCCESSION','NEW_CONTROL_MANDATE'].includes(l.action) ||
         !Number.isSafeInteger(l.effectiveFromYear) || !Number.isSafeInteger(l.endExclusiveYear) ||
         l.effectiveFromYear >= l.endExclusiveYear ||
         l.origin !== 'BACKGROUND_PRE_1250' || l.provenance !== 'CALIBRATION_ONLY') {
