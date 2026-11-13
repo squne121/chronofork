@@ -82,8 +82,9 @@ function succession(base: RuleEvaluator, input: Input): RuleEvaluator {
       t.year === ctx.year && t.actorRef.kind === 'PERSON' && t.status === 'ACCEPT' && t.eventIds.length === 1)
     const crowns = world.titles.filter(t => t.kind === 'CROWN').sort((a,b) => cmp(a.titleId,b.titleId))
     for (const title of crowns) {
-      const deadHolder = title.holder.status === 'HELD'
-        ? world.persons.find(p => p.personId === title.holder.personId) : undefined
+      const holder = title.holder
+      const deadHolder = holder.status === 'HELD'
+        ? world.persons.find(p => p.personId === holder.personId) : undefined
       const freshDeath = !!deadHolder && !deadHolder.alive && deadHolder.deathYear === ctx.year
       const staleDeath = !!deadHolder && !deadHolder.alive && (deadHolder.deathYear ?? Infinity) < ctx.year
       const pending = world.legal.cases.filter(c => c.titleId === title.titleId &&
@@ -92,6 +93,7 @@ function succession(base: RuleEvaluator, input: Input): RuleEvaluator {
       const newIncident = freshDeath || staleDeath
       const current = pending.length === 1 ? pending[0] : undefined
       const predecessorId = newIncident ? deadHolder?.personId : current && predecessorOf(current)
+      if (!hasId(predecessorId)) continue
       const predecessor = world.persons.find(p => p.personId === predecessorId)
       if (!predecessor || predecessor.alive || !Number.isSafeInteger(predecessor.deathYear) ||
           predecessor.deathYear! > ctx.year) continue
