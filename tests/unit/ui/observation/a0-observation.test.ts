@@ -27,6 +27,7 @@ describe('統合原史A0の年次観測',()=>{
     expect(v?.counts[1]).toEqual({year:1251,events:0,traces:0,focusEvents:0})
     expect(v?.goal).toBeNull()
     expect(v?.titleHistories).toEqual([])
+    expect(v?.knownA0Ending).toBeNull()
     expect(sliceA0Observation(fakeRun,1252,'INTEGRATED_EXPERIMENTAL','REUSED')).toBeUndefined()
   })
   it('観測と比較が同じWorkerを共有し、キャンセル時には破棄する',async()=>{

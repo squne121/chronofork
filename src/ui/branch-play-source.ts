@@ -27,6 +27,8 @@ import { extractCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
 import { isObservationFocusEvent } from './integrated-overview.ts'
 import { buildTitleHoldingHistories } from './observation/title-history.ts'
+import { buildA0KnownEnding } from './observation/a0-known-ending.ts'
+import type { A0KnownEnding } from './observation/a0-known-ending.ts'
 import type { TitleHoldingHistory } from './observation/title-history.ts'
 import { buildA0CacheKey, countsOf } from './a0-cache.ts'
 import type { A0Source, SingleA0Cache } from './a0-cache.ts'
@@ -435,6 +437,8 @@ export type ObservationSlice = Readonly<{
   counts:readonly ObservationYearCounts[]
   /** 実A0の各年初から得たTitle保持者推移。正式な継承成立を意味しない。 */
   titleHistories:readonly TitleHoldingHistory[]
+  /** 選択年と分離した、1350年初の確定A0だけに基づく軽量な人物の結末。 */
+  knownA0Ending:A0KnownEnding|null
   /** 1250〜1350の実A0全snapshotから作成した軽量KEY人物候補。1年だけの候補ではない。 */
   candidates:PlayCandidateSet
   technicalGoal:TimelineResult['technicalGoal']
@@ -482,8 +486,10 @@ export function sliceA0Observation(
     titleHistories=buildTitleHoldingHistories(a0.result.snapshots,a0.result.eventLog)
     observationTitleHistoryCache.set(a0,titleHistories)
   }
+  const finalWorld=a0.result.snapshots.find(w=>w.year===GOAL_YEAR)
+  const knownA0Ending=buildA0KnownEnding(world,finalWorld)
   return {
-    seed:a0.inputs.seed,mode,year,world,events,traces,counts,candidates,titleHistories,
+    seed:a0.inputs.seed,mode,year,world,events,traces,counts,candidates,titleHistories,knownA0Ending,
     goal:a0.result.goal,technicalGoal:a0.result.technicalGoal,status:a0.result.status,a0Source,
   }
 }
