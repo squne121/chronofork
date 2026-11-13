@@ -4,6 +4,7 @@
 import type { DecisionTraceDraft, Id, PersonBirthCommand, RuleOutcome, WorldState } from '../../contracts/index.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
+import { GENERATED_ID_DOMAINS, recordGeneratedIdSource, stableGeneratedId } from '../../engine/stable-generated-id.ts'
 import type { AutonomyCalibration } from '../../autonomy/config.ts'
 import { checkAutonomyCalibration } from '../../autonomy/config.ts'
 
@@ -12,7 +13,7 @@ const cmp = (a:string,b:string) => a<b?-1:a>b?1:0
 
 /** parent/marriage/yearのみを使う。枝番号や走査順を混ぜない。 */
 export const childIdForMarriageYear = (marriageId:Id,fatherId:Id,motherId:Id,year:number):Id =>
-  'person:b002:auto:'+JSON.stringify([year,marriageId,fatherId,motherId])
+  stableGeneratedId(GENERATED_ID_DOMAINS.B002_PERSON,[year,marriageId,fatherId,motherId])
 
 export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEvaluator {
   const c=checkAutonomyCalibration(input).birth
@@ -22,6 +23,7 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
     }
     const commands:PersonBirthCommand[]=[]
     const traceDrafts:DecisionTraceDraft[]=[]
+    const seenGeneratedIds=new Map<Id,string>()
     const pendingByGroup=new Map<Id,number>()
     const marriages=world.legal.marriages.filter(m=>m.status==='ACTIVE')
       .sort((a,b)=>cmp(a.marriageId,b.marriageId))
@@ -48,14 +50,21 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
       else if(slot.claimedBirths+(pendingByGroup.get(mother.originGroupId)??0)>=slot.birthSlots) reason='BIRTH_COHORT_SLOT_EXHAUSTED'
       else reason='WORLDSTATE_RNG_BIRTH_SELECTED'
       const accepted=reason==='WORLDSTATE_RNG_BIRTH_SELECTED'
+      const personSource=father&&mother
+        ?[ctx.year,m.marriageId,father.personId,mother.personId] as const
+        :[ctx.year,m.marriageId] as const
       const id=father&&mother?childIdForMarriageYear(m.marriageId,father.personId,mother.personId,ctx.year):
-        'person:b002:unresolved:'+JSON.stringify([ctx.year,m.marriageId])
+        stableGeneratedId(GENERATED_ID_DOMAINS.B002_UNRESOLVED,personSource)
+      recordGeneratedIdSource(seenGeneratedIds,id,personSource)
+      const candidateSource=[ctx.year,m.marriageId] as const
+      const candidateId=stableGeneratedId(GENERATED_ID_DOMAINS.B002_CANDIDATE,candidateSource)
+      recordGeneratedIdSource(seenGeneratedIds,candidateId,candidateSource)
       const index=traceDrafts.length
       traceDrafts.push({
         year:ctx.year,phase:ctx.phase,ruleId:ctx.ruleId,
         actorRef:{kind:'PERSON',id},
         candidates:[{
-          candidateId:'b002:auto:'+JSON.stringify([ctx.year,m.marriageId]),eligible:accepted,
+          candidateId,eligible:accepted,
           inputs:{marriageId:m.marriageId,personIds:[...m.personIds],fatherId:father?.personId??null,
             motherId:mother?.personId??null,motherAge:ageMother,fatherAge:ageFather,
             fertilityChancePermille:c.chancePermille,childPersonId:id,childSex,
@@ -64,7 +73,7 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
             provenance:'CALIBRATION_ONLY'},
           reasonCodes:['CALIBRATION_ONLY',reason],
         }],
-        ...(accepted?{selectedCandidateId:'b002:auto:'+JSON.stringify([ctx.year,m.marriageId])}:{}),
+        ...(accepted?{selectedCandidateId:candidateId}:{}),
         status:accepted?'ACCEPT':reason==='BIRTH_RNG_NOT_SELECTED'?'REJECT':'DEFER',
         reasonCodes:['CALIBRATION_ONLY',reason],
         modifierIds:[],
@@ -73,16 +82,20 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
       })
       if(!accepted||!father||!mother)continue
       pendingByGroup.set(mother.originGroupId,(pendingByGroup.get(mother.originGroupId)??0)+1)
-      const key=JSON.stringify([ctx.year,m.marriageId,father.personId,mother.personId])
+      const commandSource=[ctx.year,m.marriageId,father.personId,mother.personId] as const
+      const commandId=stableGeneratedId(GENERATED_ID_DOMAINS.B002_COMMAND,commandSource)
+      const requestId=stableGeneratedId(GENERATED_ID_DOMAINS.B002_REQUEST,commandSource)
+      recordGeneratedIdSource(seenGeneratedIds,commandId,commandSource)
+      recordGeneratedIdSource(seenGeneratedIds,requestId,commandSource)
       commands.push({
         type:'PERSON_BIRTH',
-        commandId:'cmd:b002:auto:'+key,
-        source:{requestId:'req:b002:auto:'+key,year:ctx.year,phase:ctx.phase,sourceRuleId:'B-002',
+        commandId,
+        source:{requestId,year:ctx.year,phase:ctx.phase,sourceRuleId:'B-002',
           sourceTraceId:ctx.traceId(index),sourceIntentId:m.marriageId},
         cohortGroupId:mother.originGroupId,cohortYear:ctx.year,
         person:{
           personId:id,
-          name:'試験用自律児 '+ctx.year+' ('+m.marriageId+')',
+          name:'試験用自律児 '+ctx.year,
           sex:childSex,birthYear:ctx.year,alive:true,
           originGroupId:mother.originGroupId,houseId:mother.houseId,
           fatherId:father.personId,motherId:mother.personId,
