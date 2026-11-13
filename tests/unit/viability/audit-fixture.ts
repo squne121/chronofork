@@ -128,19 +128,20 @@ export function auditApprovedTransfers(
   const transfers = events.filter(e => e.eventType.split('+').includes('LEGAL_TITLE_TRANSFER'))
   for (const title of after.titles) {
     if (title.holder.status !== 'HELD') continue
+    const successorId = title.holder.personId
     const previous = beforeTitles.get(title.titleId)
     if (!previous || previous.holder.status === 'HELD' &&
-      previous.holder.personId === title.holder.personId) continue
+      previous.holder.personId === successorId) continue
     const approved = after.legal.cases.some(c => c.kind === 'SUCCESSION' &&
       c.titleId === title.titleId && c.status === 'APPROVED' &&
-      c.candidatePersonIds.includes(title.holder.personId))
+      c.candidatePersonIds.includes(successorId))
     if (!approved) issues.push(finding(after.year, 'HELD_TRANSFER_WITHOUT_APPROVED_CASE',
-      title.titleId, title.holder.personId))
+      title.titleId, successorId))
     const observed = transfers.some(e =>
       e.involvedRefs.some(r => r.kind === 'REGION' && r.id === title.regionId) &&
-      e.involvedRefs.some(r => r.kind === 'PERSON' && r.id === title.holder.personId))
+      e.involvedRefs.some(r => r.kind === 'PERSON' && r.id === successorId))
     if (!observed) issues.push(finding(after.year, 'HELD_TRANSFER_WITHOUT_EVENT',
-      title.titleId, title.holder.personId))
+      title.titleId, successorId))
   }
   return issues
 }
