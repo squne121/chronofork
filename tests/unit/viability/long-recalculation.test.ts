@@ -59,8 +59,8 @@ function auditHistory(history: History) {
   console.info('CHRONOFORK_SESSION_C_100Y ' + JSON.stringify(metrics))
   expect(history.snapshots).toHaveLength(101)
   expect(final.year).toBe(1350)
-  expect(errors, JSON.stringify(metrics)).toEqual([])
-  return goal
+  // Do not abort before observing the A1 branch when A0 contains a known defect.
+  return { goal, errors, metrics }
 }
 
 describe('Session C: 1250-1350 A0/A1 strict viability evidence (opt-in)', () => {
@@ -95,11 +95,11 @@ describe('Session C: 1250-1350 A0/A1 strict viability evidence (opt-in)', () => 
         t => t.modifierIds.includes(INTEGRATED_TRUST_REDUCTION.modifierId))
       expect(interventionTraces.length).toBeGreaterThan(0)
 
-      const a0Goal = auditHistory({
+      const a0Audit = auditHistory({
         branch: 'A0', snapshots: a0.snapshots,
         eventLog: a0.eventLog, decisionTraces: a0.decisionTraces,
       })
-      const a1Goal = auditHistory({
+      const a1Audit = auditHistory({
         branch: 'A1', snapshots: fork.branch.snapshots,
         eventLog: fork.branch.eventLog, decisionTraces: fork.branch.decisionTraces,
       })
@@ -118,11 +118,13 @@ describe('Session C: 1250-1350 A0/A1 strict viability evidence (opt-in)', () => 
       console.info('CHRONOFORK_SESSION_C_GOAL_WITNESS ' + JSON.stringify({
         seed: INTEGRATED_SEED,
         intervention: INTEGRATED_TRUST_REDUCTION,
-        A0: a0Goal.status, A1: a1Goal.status,
+        A0: a0Audit.goal.status, A1: a1Audit.goal.status,
         officialGoalPublished: false,
-        a1VictoryDemonstrated: a1Goal.status === 'ACHIEVED',
+        a1VictoryDemonstrated: a1Audit.goal.status === 'ACHIEVED',
         witnessScope: 'ONE_CALIBRATION_ONLY_A1_NOT_A_GLOBAL_SEARCH',
       }))
-      expect(a0Goal.status).toBe('NOT_ACHIEVED')
+      expect(a0Audit.goal.status).toBe('NOT_ACHIEVED')
+      expect(a0Audit.errors.length, JSON.stringify(a0Audit.metrics)).toBe(0)
+      expect(a1Audit.errors.length, JSON.stringify(a1Audit.metrics)).toBe(0)
     }, 300000)
 })
