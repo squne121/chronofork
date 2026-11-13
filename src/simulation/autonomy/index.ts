@@ -11,6 +11,7 @@ import { createReviewedLegalEvaluators, createALeg01OrdinaryEvaluator, createALe
 import type { NextgenMarriageInput } from '../rules/a/index.ts'
 import type { OrdinaryMarriageInput } from '../rules/a/index.ts'
 import type { ReviewedLegalInput } from '../rules/a/index.ts'
+import { createCrownSuccessionEvaluators } from '../rules/a/crown-succession.ts'
 import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB005NextgenEvaluator, createB009WorldStateEvaluator, createB001PromotionEvaluator } from '../rules/b/index.ts'
 import type { B009Calibration, B001PromotionInput, B001SupportingInput } from '../rules/b/index.ts'
 import { createB001SupportingMarriageEvaluator } from '../rules/b/index.ts'
@@ -101,6 +102,11 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   else if (supporting?.ok) b001=supporting.evaluator
   const reviewed=input.reviewedLegal?createReviewedLegalEvaluators(input.reviewedLegal):undefined
   if(reviewed&&!reviewed.ok)return {ok:false,issues:[...reviewed.issues]}
+  const crown=createCrownSuccessionEvaluators(
+    reviewed?.ok ? reviewed.evaluators['A-SUC-04']! : createASuc04WorldStateEvaluator(),
+    reviewed?.ok ? reviewed.evaluators['A-TIT-07']! : createATit07EvidenceEvaluator(),
+    {book:input.reviewedLegal?.book,laws:input.reviewedLegal?.ordinaryLaws},
+  )
   const evaluators:EvaluatorMap={
     ...createCalibrationEvaluators(input.tuning??EXPERIMENTAL_TUNING),
     'B-003':createB003WorldStateEvaluator(autonomy),
@@ -114,9 +120,9 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
         input.nextgenMarriage.supportingKinshipClearances)
       :createB005CalibrationEvaluator(),
     'A-LEG-01':marriageEvaluator,
-    'A-SUC-04':createASuc04WorldStateEvaluator(),
-    'A-TIT-07':createATit07EvidenceEvaluator(),
     ...(reviewed?.ok?reviewed.evaluators:{}),
+    'A-SUC-04':crown.succession,
+    'A-TIT-07':crown.titleTransfer,
   }
   return {ok:true,evaluators}
 }
