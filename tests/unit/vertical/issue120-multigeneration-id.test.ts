@@ -57,7 +57,7 @@ function replay(branchId:string){
     if(i<YEARS.length-1){
       const mate:Person={
         personId:'fixture:unrelated-mate:'+i,name:'試験用配偶者 '+i,
-        sex:child.sex==='MALE'?'FEMALE':'MALE',birthYear:year-25,
+        sex:child.sex==='MALE'?'FEMALE':'MALE',birthYear:YEARS[i+1]!-25,
         alive:true,originGroupId:mother.originGroupId,houseId:mother.houseId,
         legalDynasty:{status:'UNDETERMINED',reasonCodes:['CALIBRATION_ONLY']},
       }
