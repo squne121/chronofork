@@ -47,6 +47,7 @@ describe('Session C / GAME-02: actual world and causality smoke audit', () => {
         withModifier ? [INTEGRATED_TRUST_REDUCTION] : []),
     })
     const a0 = execute(false), a1 = execute(true)
+    expect(execute(true)).toEqual(a1) // same seed + same legal numeric intervention
     expect(a0.status).toBe('COMPLETED')
     expect(a1.status).toBe('COMPLETED')
     if (a0.status !== 'COMPLETED' || a1.status !== 'COMPLETED') return
