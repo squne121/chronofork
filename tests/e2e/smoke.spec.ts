@@ -240,7 +240,10 @@ for (const width of [1280, 960]) {
     test.setTimeout(90000)
     await page.setViewportSize({ width, height: 900 })
     await page.goto('/?entry=legacy')
-    // 初期表示: 目標・観測年・歴史・正式勝敗未成立・CALIBRATION_ONLY が先に読める。内部診断は折りたたみ。
+    // 新UXでは詳細な試験説明を折りたたむ。操作で開き内容を確認できることを検証する。
+    await expect(page.getByTestId('trial-guide-details')).not.toHaveAttribute('open', '')
+    await expect(page.getByTestId('trial-guide')).toBeHidden()
+    await page.getByTestId('trial-guide-details').locator('summary').click()
     await expect(page.getByTestId('trial-guide')).toBeVisible()
     await expect(page.getByTestId('experimental-banner')).toContainText('CALIBRATION_ONLY')
     await expect(page.getByTestId('goal-status')).toBeVisible()
