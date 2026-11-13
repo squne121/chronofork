@@ -40,6 +40,9 @@ function refsOfCommand(c: DomainCommand, world: WorldState): TargetRef[] {
       return regionOfTitle(c.titleId)
     case 'LEGAL_CASE_SET':
       return regionOfTitle(c.legalCase.titleId)
+    case 'COUNTRY_RULER_SET':
+      return [{ kind: 'COUNTRY', id: c.countryId }, ...regionOfTitle(c.crownTitleId),
+        ...(c.toRulerPersonId ? [{ kind: 'PERSON' as const, id: c.toRulerPersonId }] : [])]
     case 'CONTROL_MANDATE_SET':
     case 'TAX_MANDATE_SET':
       return [{ kind: 'REGION', id: c.mandate.regionId }]
