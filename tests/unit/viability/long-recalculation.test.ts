@@ -46,8 +46,11 @@ function auditHistory(history: History) {
     deathEvents: history.eventLog.filter(e => e.eventType.includes('PERSON_DEATH')).length,
     successionCaseEvents: history.eventLog.filter(e => e.eventType.includes('LEGAL_CASE_SET')).length,
     titleTransferEvents: history.eventLog.filter(e => e.eventType.includes('LEGAL_TITLE_TRANSFER')).length,
-    crownHeldByDead: final.titles.filter(t => t.kind === 'CROWN' && t.holder.status === 'HELD' &&
-      !final.persons.find(p => p.personId === t.holder.personId)?.alive).map(t => t.titleId),
+    crownHeldByDead: final.titles.filter(t => {
+      if (t.kind !== 'CROWN' || t.holder.status !== 'HELD') return false
+      const holderId = t.holder.personId
+      return !final.persons.find(p => p.personId === holderId)?.alive
+    }).map(t => t.titleId),
     maximumPersonIdLength: final.persons.reduce((n, p) => Math.max(n, p.personId.length), 0),
     maximumDisplayNameLength: final.persons.reduce((n, p) => Math.max(n, p.name.length), 0),
     technicalGoal: goal.status, officialGoal: null,
