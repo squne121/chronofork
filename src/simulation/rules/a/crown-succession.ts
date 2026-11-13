@@ -205,7 +205,7 @@ function titleTransfer(base: RuleEvaluator): RuleEvaluator {
       const cid = candidate?.inputs.caseId
       if (!hasId(titleId) || !hasId(predecessorId)) continue
       const title = world.titles.find(t => t.titleId === titleId && t.kind === 'CROWN')
-      if (!title || !title.valid) continue
+      if (!title) continue
       const deceased = world.persons.find(p => p.personId === predecessorId)
       const deadHolder = title.holder.status === 'HELD' &&
         title.holder.personId === predecessorId && deceased && !deceased.alive
