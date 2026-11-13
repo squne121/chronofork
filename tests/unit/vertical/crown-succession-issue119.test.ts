@@ -19,7 +19,10 @@ const HEIR='person-exp-02'
 const COUNTRY='country-eldia'
 const start=():WorldState=>{
   const w=createExperimentalWorld()
-  return {...w,year:1285}
+  // B-003の実死亡はC-004の当年死亡枠がなければ成立しない。テスト内にだけ明示する。
+  return {...w,year:1285,demographics:{...w.demographics,cohortSlots:[{
+    groupId:'group-central-elite',year:1285,birthSlots:0,deathSlots:1,claimedBirths:0,claimedDeaths:0,
+  }]}}
 }
 const legal=()=>createExperimentalOrdinaryLegalTrial()
 const title=(w:WorldState,id:string)=>w.titles.find(x=>x.titleId===id)!
@@ -136,7 +139,8 @@ describe('Issue #119: 採用済みGAME-02 王位継承の法制審査',()=>{
 
   it('死者の王冠HELDを年初監査で検出し、死亡当年のフェーズ途中と区別する',()=>{
     const w=start()
-    const dead:WorldState={...w,year:1286,persons:w.persons.map(p=>
+    const dead:WorldState={...w,year:1286,
+      demographics:{...w.demographics,cohortSlots:[]},persons:w.persons.map(p=>
       p.personId===PRE?{...p,alive:false,deathYear:1285}:p)}
     const errors=checkWorldIntegrity(dead)
     expect(errors.filter(x=>x.code==='DEAD_CROWN_HOLDER')).toHaveLength(1)
