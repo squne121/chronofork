@@ -6,7 +6,7 @@ export type TitleHoldingInterval = Readonly<{
   fromYear:number
   throughYear:number
   holder:
-    |Readonly<{status:'HELD';personId:Id;personName:string}>
+    |Readonly<{status:'HELD';personId:Id;personName:string;life:'ALIVE'|'DEAD'|'UNKNOWN';deathYear?:number}>
     |Readonly<{status:'UNDETERMINED'}>
     |Readonly<{status:'NOT_RECORDED'}>
 }>
@@ -42,13 +42,19 @@ export function buildTitleHoldingHistories(
     for(const world of worlds){
       const t=world.titles.find(x=>x.titleId===titleId)
       const currentHolder=t?.holder
+      const person=currentHolder?.status==='HELD'?
+        world.persons.find(p=>p.personId===currentHolder.personId):undefined
       const holder:TitleHoldingInterval['holder']=currentHolder?.status==='HELD'
         ?{status:'HELD',personId:currentHolder.personId,
-          personName:world.persons.find(p=>p.personId===currentHolder.personId)?.name??'参照先の人物名を確認できない'}
+          personName:person?.name??'参照先の人物名を確認できない',
+          life:person===undefined?'UNKNOWN':person.alive?'ALIVE':'DEAD',
+          ...(person?.deathYear===undefined?{}:{deathYear:person.deathYear})}
         :{status:t?'UNDETERMINED':'NOT_RECORDED'}
       const last=intervals.at(-1)
+      // 同一人物でも死亡した後の名義を、生存中の在位と一つの期間にまとめない。
       const same=last?.holder.status===holder.status &&
-        (holder.status!=='HELD'||last?.holder.status==='HELD'&&last.holder.personId===holder.personId)
+        (holder.status!=='HELD'||last?.holder.status==='HELD'&&
+          last.holder.personId===holder.personId&&last.holder.life===holder.life)
       if(last&&same&&last.throughYear+1===world.year)
         intervals[intervals.length-1]={...last,throughYear:world.year}
       else intervals.push({fromYear:world.year,throughYear:world.year,holder})

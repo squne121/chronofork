@@ -313,7 +313,9 @@ export function ObservationPanel(p:Props){
               <ol>{titleHistory.intervals.map((period,i)=><li key={period.fromYear+'-'+i}>
                 <strong>{period.fromYear}{period.throughYear>period.fromYear?'〜'+period.throughYear:''}年初：</strong>
                 {period.holder.status==='HELD'
-                  ?<span>{shortPersonName(period.holder.personName)}（記録上の保持者）</span>
+                  ?<span>{shortPersonName(period.holder.personName)}（{period.holder.life==='DEAD'
+                    ?'故人の名義が残る・継承未確認'+(period.holder.deathYear===undefined?'':'／'+period.holder.deathYear+'年没')
+                    :period.holder.life==='UNKNOWN'?'人物の生死を確認できない':'記録上の保持者'}）</span>
                   :period.holder.status==='UNDETERMINED'?'保持者未確定（相続等は別途確認）':'当年初の称号記録なし'}
                 <button type="button" data-testid={'obs-holder-year-'+period.fromYear}
                   disabled={p.loading||!seedMatches} onClick={()=>yearChange(period.fromYear)}>その年へ</button>

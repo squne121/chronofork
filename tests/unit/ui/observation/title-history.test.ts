@@ -27,6 +27,18 @@ describe('Titleの歴代保持者記録',()=>{
     expect(h.intervals[1]?.holder).toMatchObject({personId:'person-exp-02'})
     expect(h.transfers).toHaveLength(0)
   })
+  it('CROWNに死亡者名義が残る場合、生存中と死後の保持記録を分割し、架空の移転Eventを作らない',()=>{
+    const initialCrown=initial.titles.find(x=>x.titleId==='title-exp-crown-eldia')!
+    const before={...initial,year:1268}
+    const dead={...initial,year:1269,persons:initial.persons.map(p=>p.personId==='person-exp-01'
+      ?{...p,alive:false,deathYear:1268}:p)}
+    const history=buildTitleHoldingHistories([before,dead],[])
+      .find(x=>x.titleId===initialCrown.titleId)!
+    expect(history.intervals).toHaveLength(2)
+    expect(history.intervals[0]?.holder).toMatchObject({status:'HELD',life:'ALIVE'})
+    expect(history.intervals[1]?.holder).toMatchObject({status:'HELD',life:'DEAD',deathYear:1268})
+    expect(history.transfers).toHaveLength(0)
+  })
   it('確認済みのTitle保持差分に対応するEventだけを出典として結びつける',()=>{
     const transfer={eventId:'e-title',eventType:'LEGAL_TITLE_TRANSFER',year:1250,
       stateChanges:[{path:'$.titles[title-exp-central].holder.personId',before:'person-exp-01',after:'person-exp-02'}]} as unknown as EventLogEntry

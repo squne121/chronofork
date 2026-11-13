@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react'
 import type { Id, WorldState } from '../../simulation/contracts/index.ts'
 import { titleLabel } from './title-history.ts'
+import { shortPersonName } from '../event-summary.ts'
 import {
   buildFamilyTreeModel,
   type AffiliationView,
@@ -22,6 +23,10 @@ export type FamilyTreeProps = Readonly<{
   onSelectTitle?: (titleId: Id) => void
 }>
 
+/** 身元IDを含むCALIBRATION_ONLYの仮名だけ短くする。正式名・WorldStateは一切変更しない。 */
+const displayPersonName = (name:string) => name.startsWith('試験用自律児 ')
+  ? shortPersonName(name) : name
+
 const lifeText = (l: LifeState): string =>
   l.kind === 'ALIVE' ? '存命' : l.deathYear === undefined ? '死亡（没年は記録なし）' : `死亡（${l.deathYear}年）`
 
@@ -36,7 +41,7 @@ function PersonButton({ node, role, onSelect }: { node: PersonNode; role: string
   const inner = (
     <>
       <span className="ft-role">{role}</span>
-      <span className="ft-name">{node.name}</span>
+      <span className="ft-name">{displayPersonName(node.name)}</span>
       <span className="ft-sub">
         {node.birthYear}年生・{lifeText(node.life)}
       </span>
@@ -44,7 +49,7 @@ function PersonButton({ node, role, onSelect }: { node: PersonNode; role: string
   )
   const cls = `ft-node${dead ? ' ft-dead' : ''}`
   return onSelect ? (
-    <button type="button" className={cls} data-testid={`family-node-${node.personId}`} aria-label={`${role} ${node.name} ${node.birthYear}年生・${lifeText(node.life)} を選択`} onClick={() => onSelect(node.personId)}>
+    <button type="button" className={cls} data-testid={`family-node-${node.personId}`} aria-label={`${role} ${displayPersonName(node.name)} ${node.birthYear}年生・${lifeText(node.life)} を選択`} onClick={() => onSelect(node.personId)}>
       {inner}
     </button>
   ) : (
@@ -122,9 +127,9 @@ export function FamilyTree({ world, personId, onSelectPerson, onSelectTitle }: F
   const { self, father, mother, spouses, children, affiliation, titles } = model
   const sel = onSelectPerson
   const summary =
-    `${self.name}（${model.year}年初、${lifeText(self.life)}）。` +
-    `父: ${father.kind === 'PERSON' ? father.name : father.kind === 'NO_RECORD' ? '記録なし' : '未確認'}、` +
-    `母: ${mother.kind === 'PERSON' ? mother.name : mother.kind === 'NO_RECORD' ? '記録なし' : '未確認'}、` +
+    `${displayPersonName(self.name)}（${model.year}年初、${lifeText(self.life)}）。` +
+    `父: ${father.kind === 'PERSON' ? displayPersonName(father.name) : father.kind === 'NO_RECORD' ? '記録なし' : '未確認'}、` +
+    `母: ${mother.kind === 'PERSON' ? displayPersonName(mother.name) : mother.kind === 'NO_RECORD' ? '記録なし' : '未確認'}、` +
     `有効な婚姻の配偶者 ${spouses.length}人、確認できる子 ${children.length}人、Title ${titles.length}件。`
 
   return (
@@ -145,7 +150,7 @@ export function FamilyTree({ world, personId, onSelectPerson, onSelectTitle }: F
           <li>
             <span className="ft-node ft-self" aria-current="true" data-testid={`family-node-${self.personId}`}>
               <span className="ft-role">選択中</span>
-              <span className="ft-name">{self.name}</span>
+              <span className="ft-name">{displayPersonName(self.name)}</span>
               <span className="ft-sub">
                 {self.birthYear}年生・{lifeText(self.life)}
               </span>
