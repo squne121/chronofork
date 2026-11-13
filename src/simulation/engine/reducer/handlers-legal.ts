@@ -82,7 +82,11 @@ export const legalTitleTransfer: Handler<LegalTitleTransferCommand> = (d, c) => 
   const w = d.world
   const title = findTitle(w, c.titleId)
   if (!title) return fail('NOT_FOUND', `Title ${c.titleId} が存在しません`, [c.titleId])
-  if (!title.valid) return fail('TITLE_INVALID', `Title ${c.titleId} は無効です`, [c.titleId])
+  // CROWNが失効済みでも、死亡した保持者をHELDに残すことはできない。
+  // 継承承認（HELDへの移転）は従来どおり有効Titleに限定する。
+  const cleanupDeadCrown = title.kind === 'CROWN' && c.toHolder.status === 'UNDETERMINED' &&
+    title.holder.status === 'HELD' && w.persons.some(p => p.personId === title.holder.personId && !p.alive)
+  if (!title.valid && !cleanupDeadCrown) return fail('TITLE_INVALID', `Title ${c.titleId} は無効です`, [c.titleId])
   // 存命の保持者からの移転（授与・剥奪・譲渡）は A-TIT-06/08 の判断が必要で、本 reducer では適用しない。
   if (title.holder.status === 'HELD') {
     const cur = findPerson(w, title.holder.personId)
