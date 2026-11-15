@@ -321,12 +321,14 @@ export function InterventionComparePanel(p:Props){
           <li data-testid="headline-focused">選んだ2人とその子のEvent差分（{p.year}年・{focused.length}件）: {focused.length===0?'なし':byType(focused).join(' ／ ')}</li>
           <li data-testid="headline-other">その他の人物・集団のEvent差分（{p.year}年・{other.length}件）: {other.length===0?'なし':tally(other)}</li>
         </ul>
+        <p data-testid="trial-goal-jump">1350年の試験判定（技術検証）: A0 {trialGoalStatus(p.comparison.a0.result.technicalGoal)} ／ A1 {trialGoalStatus(p.comparison.a1.result.technicalGoal)}{' '}
+          <button type="button" onClick={()=>document.getElementById('trial-goal-summary')?.scrollIntoView({block:'start'})}>判定の詳細へ移動</button></p>
         <p className="note">「A1にだけ記録」は、介入ありの歴史にだけ確定したEventです（A0にだけ記録はその逆）。</p>
         <p className="note">正式勝敗: 未成立。これは試験版の差分であり、単独原因の断定ではありません。</p>
       </div>
       {p.comparison.mode==='INTEGRATED_EXPERIMENTAL'&&<IntegratedOverview view={p.comparison} calc={p.calc}
         personLabel={personName} onInspectEvent={p.onInspectEvent} onInspectTrace={p.onInspectTrace}/>}
-      <div className="headline" data-testid="trial-goal-summary">
+      <div className="headline" id="trial-goal-summary" data-testid="trial-goal-summary">
         <h4>1350年のナルヴェン王朝存続条件（試験判定）</h4>
         <p data-testid="trial-goal-mode">試験方式：{playModeLabel(p.comparison.mode)}</p>
         <p data-testid="trial-goal-a0">A0（介入なし）: {trialGoalStatus(p.comparison.a0.result.technicalGoal)}</p>
