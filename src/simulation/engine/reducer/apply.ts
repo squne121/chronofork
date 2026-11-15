@@ -9,6 +9,8 @@ import type { Draft, Handler } from './draft.ts'
 import { fail } from './draft.ts'
 import {
   controlMandateSet,
+  countryRulerSet,
+  countryRulerVacate,
   legalCaseSet,
   legalDynastySet,
   legalTitleTransfer,
@@ -43,6 +45,8 @@ const HANDLERS: HandlerMap = {
   LEGAL_TITLE_TRANSFER: legalTitleTransfer,
   TITLE_RECOGNITION_SET: titleRecognitionSet,
   LEGAL_CASE_SET: legalCaseSet,
+  COUNTRY_RULER_SET: countryRulerSet,
+  COUNTRY_RULER_VACATE: countryRulerVacate,
   CONTROL_MANDATE_SET: controlMandateSet,
   TAX_MANDATE_SET: taxMandateSet,
   PERSON_BIRTH: personBirth,

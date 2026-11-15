@@ -18,6 +18,7 @@ const basic=(id:string,action:OrdinaryLaw['action']):OrdinaryLaw=>({
 export const EXPERIMENTAL_ORDINARY_LAWS:readonly OrdinaryLaw[]=Object.freeze([
   basic('exp-law-domestic-marriage','NORMAL_MARRIAGE'),
   basic('exp-law-land-succession','NORMAL_LAND_SUCCESSION'),
+  basic('exp-law-crown-succession','CROWN_SUCCESSION'),
   {...basic('exp-law-central-new-mandate','NEW_CONTROL_MANDATE'),
     regionId:'region-eldia-central',titleId:'title-exp-central',grantBasisId:'exp-basis-central'},
 ])
@@ -44,6 +45,8 @@ export function createExperimentalOrdinaryLegalTrial():Readonly<{
         holderRef:eldia,sovereignCountryId:eldia.id,provenance:'CALIBRATION_ONLY'},
       {authorityBasisId:'exp-law-land-succession',action:'NORMAL_LAND_SUCCESSION',
         holderRef:eldia,sovereignCountryId:eldia.id,provenance:'CALIBRATION_ONLY'},
+      {authorityBasisId:'exp-law-crown-succession',action:'CROWN_SUCCESSION',
+        holderRef:eldia,sovereignCountryId:eldia.id,provenance:'CALIBRATION_ONLY'},
     ]},
     laws:structuredClone(EXPERIMENTAL_ORDINARY_LAWS),
     marriageReviews:structuredClone(EXPERIMENTAL_ORDINARY_MARRIAGE_REVIEWS),
@@ -53,6 +56,9 @@ export const EXPERIMENTAL_ORDINARY_LEGAL_PROVENANCE:readonly ProvenanceEntry[]=O
   {subject:'国内通常婚姻・世襲土地相続・中央新委任の仮の授権法令',
     origin:'PLACEHOLDER',source:'docs/spec/mvp-spec.md §8 (DEC-057)',
     note:'CALIBRATION_ONLY。権限者の方針のみ正式。法令ID・年月・発行可否は試験値で、未来の成立イベントを予約しない。'},
+  {subject:'エルディア王位の独立した通常継承法令・授権（試験設定）',
+    origin:'PLACEHOLDER',source:'https://github.com/squne121/chronofork/issues/119#issuecomment-6843021884',
+    note:'CALIBRATION_ONLY。特定の相続結果・判定年・後継者は設定せず、各年の実際の証拠と存命順位で審査する。'},
   {subject:'P4/P5の通常婚姻適格性・無特約の試験認定',
     origin:'PLACEHOLDER',source:'docs/spec/pending-approvals.md GAME-02',
     note:'P2/P5の複数婚姻契約を勝手に選ばない。生まれる子の法的王朝は無条項ならUNDETERMINED。'},

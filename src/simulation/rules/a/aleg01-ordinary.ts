@@ -7,12 +7,15 @@ import type {
 } from '../../contracts/index.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
+import { GENERATED_ID_DOMAINS, recordGeneratedIdSource, stableGeneratedId } from '../../engine/stable-generated-id.ts'
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
 import type { OrdinaryLaw } from '../../legal/ordinary-authority.ts'
 import { reviewOrdinaryAuthority, validateOrdinaryLaws } from '../../legal/ordinary-authority.ts'
-import { pairKey } from '../../intervention/index.ts'
 
 export const ORDINARY_MARRIAGE_VERSION = 'aleg01-domestic-authority-0:CALIBRATION_ONLY'
+/** 正規化済みの personIds の意味的同一性から、世代数に依存しない婚姻IDを生成する。 */
+export const ordinaryMarriageIdForPairYear=(year:Year,pair:readonly [Id,Id]):Id=>
+  stableGeneratedId(GENERATED_ID_DOMAINS.ALEG01_MARRIAGE,[year,pair[0],pair[1]])
 /** 当事者ペアについて法的適格性・合意した契約候補を確認した個別の審査記録。
  * 実際の婚姻の意思・成立はB-005当年照会が起こるまで生じない。
  * 候補なし（contractCandidateId:null）は明示的な無条項婚姻。子の王朝所属は未確定。
@@ -69,6 +72,7 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
     const commands:MarriageRegisterCommand[]=[]
     const responses:CrossDomainResponse[]=[]
     const traceDrafts:DecisionTraceDraft[]=[]
+    const seenGeneratedIds=new Map<Id,string>()
     const queries=ctx.marriageQueries??[]
     const simultaneous=new Map<Id,number>()
     // 同年に複数の交渉意思が同一人物へ集中する場合、ID順で配偶者を決定しない。
@@ -119,8 +123,9 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
         !present(contract.contractId)||!present(contract.evidenceId)))why='CONTRACT_INVALID'
       else {status='ACCEPT';why='DOMESTIC_MARRIAGE_AUTHORITY_AND_CONSENT_VERIFIED'}
       const index=traceDrafts.length
-      const key=pairKey(pair)
-      const candidateId='aleg01:normal:'+JSON.stringify([ctx.year,key])
+      const sourceTuple=[ctx.year,pair[0],pair[1]] as const
+      const candidateId=stableGeneratedId(GENERATED_ID_DOMAINS.ALEG01_CANDIDATE,sourceTuple)
+      recordGeneratedIdSource(seenGeneratedIds,candidateId,sourceTuple)
       traceDrafts.push({
         year:ctx.year,phase:ctx.phase,ruleId:ctx.ruleId,
         actorRef:{kind:'PERSON_PAIR',ids:pair},
@@ -136,13 +141,17 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
       responses.push({requestId:q.source.requestId,status,reasonCodes:['CALIBRATION_ONLY',why]})
       if(status!=='ACCEPT')continue
       reserved.add(pair[0]);reserved.add(pair[1])
+      const commandId=stableGeneratedId(GENERATED_ID_DOMAINS.ALEG01_COMMAND,sourceTuple)
+      const marriageId=ordinaryMarriageIdForPairYear(ctx.year,pair)
+      recordGeneratedIdSource(seenGeneratedIds,commandId,sourceTuple)
+      recordGeneratedIdSource(seenGeneratedIds,marriageId,sourceTuple)
       commands.push({
         type:'MARRIAGE_REGISTER',
-        commandId:'cmd:aleg01:normal:'+JSON.stringify([ctx.year,key]),
+        commandId,
         source:{requestId:q.source.requestId,year:ctx.year,phase:ctx.phase,
           sourceRuleId:'A-LEG-01',sourceTraceId:ctx.traceId(index),
           sourceIntentId:q.source.sourceTraceId},
-        marriage:{marriageId:'marriage:normal:'+JSON.stringify([ctx.year,key]),personIds:pair,
+        marriage:{marriageId,personIds:pair,
           registeredYear:ctx.year,status:'ACTIVE',...(contract?{contract}:{} )},
       })
     }

@@ -46,7 +46,7 @@ export type TaxBasisRecord = Readonly<{
   provenance: EvidenceProvenance
 }>
 
-export type ApprovalAction = 'NORMAL_MARRIAGE' | 'NORMAL_LAND_SUCCESSION'
+export type ApprovalAction = 'NORMAL_MARRIAGE' | 'NORMAL_LAND_SUCCESSION' | 'CROWN_SUCCESSION'
 
 /** 法的承認の権限記録（GAME-02）。発行者が存在するだけでは権限とみなさない。 */
 export type ApprovalAuthorityRecord = Readonly<{

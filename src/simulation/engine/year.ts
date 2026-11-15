@@ -167,6 +167,35 @@ function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[]
   return null
 }
 
+/**
+ * COUNTRY_RULER_VACATE の死亡証拠を、年内に実際に確定した B-003 の Event/Trace と照合する。
+ * Command の自己申告ID文字列だけでは通さない。偽の証拠は補完・生成しない。
+ */
+function rulerVacateEvidenceError(o: RuleOutcome, year: number, events: readonly EventLogEntry[],
+  priorTraces: readonly DecisionTrace[]): string | null {
+  for (const c of o.commands) {
+    if (c?.type !== 'COUNTRY_RULER_VACATE') continue
+    const who = c.deceasedPersonId
+    if (c.source.sourceIntentId !== c.sourceDeathEventId) {
+      return `統治者未確定化 ${c.commandId}: sourceIntentId と sourceDeathEventId が一致しません`
+    }
+    const personDeaths = events.filter(e => e.eventType === 'PERSON_DEATH' && e.year === year &&
+      e.involvedRefs.some(r => r.kind === 'PERSON' && r.id === who))
+    const death = personDeaths.filter(e => e.eventId === c.sourceDeathEventId)
+    if (personDeaths.length !== 1 || death.length !== 1) {
+      return `統治者未確定化 ${c.commandId}: 当年のB-003確定死亡Eventが一意に存在しません`
+    }
+    const proof = priorTraces.filter(t => t.ruleId === 'B-003' && t.year === year && t.status === 'ACCEPT' &&
+      t.actorRef.kind === 'PERSON' && t.actorRef.id === who &&
+      t.eventIds.length === 1 && t.eventIds[0] === c.sourceDeathEventId &&
+      death[0]!.sourceTraceIds.includes(t.traceId))
+    if (proof.length !== 1) {
+      return `統治者未確定化 ${c.commandId}: 対応するB-003 ACCEPT Traceが一意に存在しません`
+    }
+  }
+  return null
+}
+
 function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions, priorTraces: readonly DecisionTrace[], marriageQueries: readonly MarriageQuery[]): EvaluationContext {
   const year = world.year
   return {
@@ -305,6 +334,10 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
         }
       } else if ((outcome.responses?.length ?? 0) > 0) {
         return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: 'A-LEG-01以外からの法的婚姻応答は禁止します' })
+      }
+      const vacateBad = rulerVacateEvidenceError(outcome, t, events, traces)
+      if (vacateBad !== null) {
+        return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: vacateBad })
       }
       const r = applyOutcome(world, outcome, { transaction: tx })
       if (r.status !== 'APPLIED' && r.status !== 'NO_OP' && r.status !== 'DUPLICATE') {

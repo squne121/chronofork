@@ -37,6 +37,7 @@ export type DiagnosticCode =
   | 'FORCE_POOL_DUPLICATE' // 集団ごとに物理 Pool は 1 つ
   | 'FORCE_POOL_EXCEEDS_POPULATION' // 兵源は人口を超えない（二重計上防止）
   // 法制・税権
+  | 'DEAD_CROWN_HOLDER'
   | 'DUPLICATE_EXCLUSIVE_TITLE'
   | 'RECOGNITION_EVIDENCE_MISSING'
   | 'MANDATE_TITLE_REGION_MISMATCH'

@@ -242,7 +242,18 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
     const p = `$.titles[${i}]`
     const o = { kind: 'TITLE', id: t.titleId }
     ref('REGION', t.regionId, `${p}.regionId`, o)
-    if (t.holder.status === 'HELD') ref('PERSON', t.holder.personId, `${p}.holder.personId`, o)
+    if (t.holder.status === 'HELD') {
+      if (ref('PERSON', t.holder.personId, `${p}.holder.personId`, o) && t.kind === 'CROWN') {
+        const person = personById.get(t.holder.personId)
+        // B-003死亡の直後・A-SUC-04/A-TIT-07より前の当年中間状態は合法的なフェーズ過渡。
+        // 年初WorldStateで死亡年より後まで故人HELDが残れば監査対象（ERRORで計算自体を止めない）。
+        if (person && !person.alive && person.deathYear !== undefined && person.deathYear < world.year) {
+          add('DEAD_CROWN_HOLDER', `${p}.holder.personId`,
+            `死亡年 ${person.deathYear} の故人が ${world.year} 年のCROWN保持者のままです`,
+            o, [person.personId], 'WARNING')
+        }
+      }
+    }
     else if (t.holder.legalCaseId !== undefined) ref('LEGAL_CASE', t.holder.legalCaseId, `${p}.holder.legalCaseId`, o)
     const rec = t.recognition
     if (rec.authority !== undefined) ref(controllerKind(rec.authority.kind), rec.authority.id, `${p}.recognition.authority`, o)

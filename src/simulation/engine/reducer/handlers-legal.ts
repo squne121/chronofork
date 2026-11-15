@@ -3,6 +3,8 @@
 // 根拠（approved case / 契約条項 / 承認証拠）が command と現状態から確認できない場合は拒否する。
 import type {
   ControlMandateSetCommand,
+  CountryRulerSetCommand,
+  CountryRulerVacateCommand,
   LegalCaseSetCommand,
   LegalDynastySetCommand,
   LegalTitleTransferCommand,
@@ -81,7 +83,12 @@ export const legalTitleTransfer: Handler<LegalTitleTransferCommand> = (d, c) => 
   const w = d.world
   const title = findTitle(w, c.titleId)
   if (!title) return fail('NOT_FOUND', `Title ${c.titleId} が存在しません`, [c.titleId])
-  if (!title.valid) return fail('TITLE_INVALID', `Title ${c.titleId} は無効です`, [c.titleId])
+  // CROWNが失効済みでも、死亡した保持者をHELDに残すことはできない。
+  // 継承承認（HELDへの移転）は従来どおり有効Titleに限定する。
+  const existingHolder = title.holder
+  const cleanupDeadCrown = title.kind === 'CROWN' && c.toHolder.status === 'UNDETERMINED' &&
+    existingHolder.status === 'HELD' && w.persons.some(p => p.personId === existingHolder.personId && !p.alive)
+  if (!title.valid && !cleanupDeadCrown) return fail('TITLE_INVALID', `Title ${c.titleId} は無効です`, [c.titleId])
   // 存命の保持者からの移転（授与・剥奪・譲渡）は A-TIT-06/08 の判断が必要で、本 reducer では適用しない。
   if (title.holder.status === 'HELD') {
     const cur = findPerson(w, title.holder.personId)
@@ -100,8 +107,87 @@ export const legalTitleTransfer: Handler<LegalTitleTransferCommand> = (d, c) => 
     if (!legalCase || legalCase.kind !== 'SUCCESSION' || legalCase.status !== 'APPROVED' || !legalCase.candidatePersonIds.includes(holderId)) {
       return fail('LEGAL_BASIS_MISSING', `Title ${c.titleId} を ${holderId} へ移す承認済み SUCCESSION ケースが確認できません`, [holderId])
     }
+    // CROWNは通常土地相続と別の明示的授権が必須。reducer単独でも王位専用の承認根拠を要求する。
+    if (title.kind === 'CROWN' && (legalCase.candidatePersonIds.length !== 1 ||
+        !legalCase.reasonCodes.includes('CROWN_SUCCESSION') ||
+        !legalCase.reasonCodes.some(x => x.startsWith('CROWN_APPROVAL_DECISION:')) ||
+        !legalCase.reasonCodes.some(x => x.startsWith('CROWN_AUTHORITY_BASIS:')))) {
+      return fail('LEGAL_BASIS_MISSING', `CROWN ${c.titleId} の継承に王位専用の承認決定・授権根拠が確認できません`, [holderId])
+    }
   }
   d.world = { ...w, titles: w.titles.map((t) => (t.titleId === c.titleId ? { ...t, holder: c.toHolder } : t)) }
+  return null
+}
+
+
+/** CROWNとCOUNTRYの一意な対応記録がある場合のみ統治者参照を更新する。
+ * 国王の交替は土地・実効支配・委任・税権に作用しない。 */
+export const countryRulerSet: Handler<CountryRulerSetCommand> = (d, c) => {
+  const w = d.world
+  const country = w.countries.find(x => x.countryId === c.countryId)
+  const title = findTitle(w, c.crownTitleId)
+  const legalCase = w.legal.cases.find(x => x.caseId === c.legalCaseId)
+  const predecessor = findPerson(w, c.predecessorPersonId)
+  if (!country || !title || !legalCase || !predecessor) {
+    return fail('LEGAL_BASIS_MISSING', '王位・国家・前保持者・LegalCaseの対応記録がありません')
+  }
+  if (title.kind !== 'CROWN' || title.recognition.sovereignCountryId !== c.countryId ||
+      !title.valid || !title.hereditary ||
+      w.titles.filter(t => t.kind === 'CROWN' && t.recognition.sovereignCountryId === c.countryId).length !== 1 ||
+      legalCase.titleId !== title.titleId || legalCase.kind !== 'SUCCESSION' ||
+      !legalCase.reasonCodes.includes('CROWN_SUCCESSION') ||
+      !legalCase.reasonCodes.includes('PREDECESSOR_ID:' + c.predecessorPersonId) ||
+      !legalCase.reasonCodes.includes('CROWN_RULER_COUNTRY:' + c.countryId) ||
+      predecessor.alive || predecessor.deathYear === undefined || predecessor.deathYear > w.year) {
+    return fail('LEGAL_BASIS_MISSING', '王位継承と国家統治者の明示的対応が未確認です')
+  }
+  if (country.rulerPersonId !== undefined && country.rulerPersonId !== c.predecessorPersonId) {
+    return fail('LEGAL_BASIS_MISSING', '既存国家統治者が対象の前保持者と一致しません')
+  }
+  if (c.toRulerPersonId !== undefined) {
+    const living = requireAlivePerson(w, c.toRulerPersonId)
+    if (living) return living
+    if (legalCase.status !== 'APPROVED' || legalCase.candidatePersonIds.length !== 1 ||
+        legalCase.candidatePersonIds[0] !== c.toRulerPersonId ||
+        title.holder.status !== 'HELD' || title.holder.personId !== c.toRulerPersonId ||
+        !legalCase.reasonCodes.some(x => x.startsWith('CROWN_APPROVAL_DECISION:')) ||
+        !legalCase.reasonCodes.some(x => x.startsWith('CROWN_AUTHORITY_BASIS:'))) {
+      return fail('LEGAL_BASIS_MISSING', '王位と整合する承認済みの唯一の後継者がいません')
+    }
+  } else {
+    if (country.rulerPersonId !== c.predecessorPersonId ||
+        legalCase.status !== 'PENDING' || title.holder.status !== 'UNDETERMINED') {
+      return fail('LEGAL_BASIS_MISSING', '未確定の王位と統治者記録の清算条件が一致しません')
+    }
+  }
+  d.world = { ...w, countries: w.countries.map(x => {
+    if (x.countryId !== c.countryId) return x
+    if (c.toRulerPersonId !== undefined) return { ...x, rulerPersonId: c.toRulerPersonId }
+    const { rulerPersonId: _former, ...withoutRuler } = x
+    void _former
+    return withoutRuler
+  }) }
+  return null
+}
+
+/** 後継統治者を推測せず、死亡Eventの当年だけCountryの旧統治者参照を解除する。 */
+export const countryRulerVacate: Handler<CountryRulerVacateCommand> = (d, c) => {
+  const w = d.world
+  const country = w.countries.find(x => x.countryId === c.countryId)
+  const deceased = w.persons.find(p => p.personId === c.deceasedPersonId)
+  if (!country || country.rulerPersonId !== c.deceasedPersonId ||
+      !deceased || deceased.alive || deceased.deathYear !== w.year) {
+    return fail('LEGAL_BASIS_MISSING', '当年死亡した現行国家統治者の根拠がありません')
+  }
+  if (!nonEmpty(c.sourceDeathEventId) || c.source.sourceIntentId !== c.sourceDeathEventId) {
+    return fail('LEGAL_BASIS_MISSING', 'B-003確定死亡Eventとの対応が必要です')
+  }
+  d.world = { ...w, countries: w.countries.map(x => {
+    if (x.countryId !== c.countryId) return x
+    const { rulerPersonId: _former, ...withoutRuler } = x
+    void _former
+    return withoutRuler
+  }) }
   return null
 }
 
