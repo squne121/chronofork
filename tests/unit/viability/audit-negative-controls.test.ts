@@ -195,9 +195,12 @@ describe('Session C negative controls on real transitions', () => {
   describe.each(heldTransfers)('Title-specific transfer evidence ($kind transfer)', ({ t, transfer, titleId, kind }) => {
     const change = transfer.stateChanges.find(c => c.path.endsWith('.holder.personId'))!
     const target = t.after.titles.find(ti => ti.titleId === titleId)!
-    // A different Title in the same region (the opposite kind when one exists), whose holder must not be changeable on this evidence.
-    const other = t.after.titles.find(ti => ti.titleId !== titleId && ti.regionId === target.regionId && ti.kind !== kind) ??
-      t.after.titles.find(ti => ti.titleId !== titleId && ti.regionId === target.regionId)!
+    // A different Title that no Event of this year touches (same region / opposite kind preferred): its holder must not be
+    // changeable on the strength of another Title's transfer Event or case.
+    const untouched = t.after.titles.filter(ti => ti.titleId !== titleId && ti.holder.status === 'HELD' &&
+      !t.events.some(e => e.stateChanges.some(c => c.path.includes('[' + ti.titleId + ']'))))
+    const other = untouched.find(ti => ti.regionId === target.regionId && ti.kind !== kind) ??
+      untouched.find(ti => ti.regionId === target.regionId) ?? untouched[0]!
     const approvedCases = t.after.legal.cases.filter(c => c.titleId === titleId && c.kind === 'SUCCESSION' && c.status === 'APPROVED')
 
     it('baseline: the real transfer has an approved case, matching Title path and A-TIT-07 Trace', () => {
@@ -206,8 +209,11 @@ describe('Session C negative controls on real transitions', () => {
       expect(auditApprovedTransfers(t.before, t.after, t.events, t.traces)).toEqual([])
     })
     it('a transfer Event for one Title cannot vouch for a holder change of another Title in the same region', () => {
-      expect(other, 'a second Title must share the region for this control').toBeDefined()
-      const successor = String(change.after)
+      expect(other, 'an untouched second Title is required for this control').toBeDefined()
+      const otherHolder = other.holder.status === 'HELD' ? other.holder.personId : ''
+      // The forged holder must really differ from the current one, otherwise nothing changed and nothing could be detected.
+      const successor = String(change.after) !== otherHolder ? String(change.after)
+        : t.after.persons.find(p => p.alive && p.personId !== otherHolder)!.personId
       const after = {
         ...t.after,
         titles: t.after.titles.map(ti => ti.titleId === other.titleId ? { ...ti, holder: { status: 'HELD' as const, personId: successor } } : ti),
