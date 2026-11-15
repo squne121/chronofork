@@ -55,6 +55,10 @@ export type CountryRulerSetCommand = CommandOf<'COUNTRY_RULER_SET', {
   countryId: Id; crownTitleId: Id; predecessorPersonId: Id;
   legalCaseId: Id; toRulerPersonId?: Id
 }>
+/** 確定死亡Event後、合法後継のいない国家の統治者参照だけを未確定化する。 */
+export type CountryRulerVacateCommand = CommandOf<'COUNTRY_RULER_VACATE', {
+  countryId: Id; deceasedPersonId: Id; sourceDeathEventId: Id
+}>
 export type ControlMandateSetCommand = CommandOf<
   'CONTROL_MANDATE_SET',
   { mandate: ControlMandate }
@@ -121,6 +125,7 @@ export type DomainCommand =
   | TitleRecognitionSetCommand
   | LegalCaseSetCommand
   | CountryRulerSetCommand
+  | CountryRulerVacateCommand
   | ControlMandateSetCommand
   | TaxMandateSetCommand
   | PersonBirthCommand
@@ -154,6 +159,7 @@ export const COMMAND_WRITE_OWNER: Readonly<Record<CommandType, WriteOwner>> = {
   TITLE_RECOGNITION_SET: 'A_LEGAL',
   LEGAL_CASE_SET: 'A_LEGAL',
   COUNTRY_RULER_SET: 'A_LEGAL',
+  COUNTRY_RULER_VACATE: 'A_LEGAL',
   CONTROL_MANDATE_SET: 'A_LEGAL',
   // 徴税権の法的確定は A（権原）＋D（支配事実）。ResourceLedger は確定済み mandate を参照して
   // 現金取引（RESOURCE_TRANSACTION）を行うのみで、mandate 自体の書込 owner ではない（契約 §2.1/§5）。
