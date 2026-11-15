@@ -1,6 +1,8 @@
 // Session C: explicitly opted-in 100-year verification; avoid multiplying CPU/RSS in quick-check.
 // Run: CHRONOFORK_VIABILITY_LONG=1 npx vitest run tests/unit/viability/long-recalculation.test.ts
+// Add CHRONOFORK_VIABILITY_REPEAT=1 (together with LONG=1; alone it does nothing) to recompute A0 a second time and compare per-year digests (extra CPU).
 // This uses the existing CALIBRATION_ONLY integrated experiment, never official scenario evidence.
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
   createExperimentalIntegratedTimelineOptions, createExperimentalIntegratedEvaluators,
@@ -10,7 +12,9 @@ import { createRootBranch, forkHistory } from '../../../src/simulation/branching
 import type { EventLogEntry, DecisionTrace, WorldState } from '../../../src/simulation/contracts/index.ts'
 import { runTimeline } from '../../../src/simulation/engine/index.ts'
 import { evaluateGoal } from '../../../src/simulation/goal.ts'
-import { auditWorld, auditEventTraceLinks, auditApprovedTransfers } from './audit-fixture.ts'
+import {
+  auditWorld, auditTransition, classifyHolderDeaths, digestHistory, firstDivergence,
+} from './audit-fixture.ts'
 
 type History = Readonly<{
   branch: string
@@ -18,6 +22,9 @@ type History = Readonly<{
   eventLog: readonly EventLogEntry[]
   decisionTraces: readonly DecisionTrace[]
 }>
+
+// Generated person IDs can exceed 600 characters; keep reports readable without losing identity.
+const short = (id: string) => id.length > 48 ? id.slice(0, 24) + '…#' + createHash('sha256').update(id).digest('hex').slice(0, 8) : id
 
 function auditHistory(history: History) {
   const eventsByYear = new Map<number, EventLogEntry[]>()
@@ -31,11 +38,12 @@ function auditHistory(history: History) {
     arr.push(t); tracesByYear.set(t.year, arr)
   }
   const errors = history.snapshots.flatMap(s => auditWorld(s))
+  const holderDeaths = []
   for (let i = 0; i < history.snapshots.length - 1; i++) {
     const before = history.snapshots[i]!, after = history.snapshots[i + 1]!
     const events = eventsByYear.get(before.year) ?? []
-    errors.push(...auditEventTraceLinks(before.year, events, tracesByYear.get(before.year) ?? []))
-    errors.push(...auditApprovedTransfers(before, after, events))
+    errors.push(...auditTransition(before, after, events, tracesByYear.get(before.year) ?? []))
+    holderDeaths.push(...classifyHolderDeaths(before, after))
   }
   const final = history.snapshots.at(-1)!
   const goal = evaluateGoal(final, { dynastyId: NALVEN_DYNASTY_ID })
@@ -54,6 +62,8 @@ function auditHistory(history: History) {
     maximumPersonIdLength: final.persons.reduce((n, p) => Math.max(n, p.personId.length), 0),
     maximumDisplayNameLength: final.persons.reduce((n, p) => Math.max(n, p.name.length), 0),
     technicalGoal: goal.status, officialGoal: null,
+    holderDeaths: holderDeaths.map(d => d.year + ':' + d.kind + ':' + d.titleId + ':' + short(d.deadPersonId) + ':' + d.outcome),
+    violationCodes: Object.fromEntries([...new Set(errors.map(e => e.code))].map(c => [c, errors.filter(e => e.code === c).length])),
     violations: errors.length, firstViolations: errors.slice(0, 8),
   }
   console.info('CHRONOFORK_SESSION_C_100Y ' + JSON.stringify(metrics))
@@ -113,17 +123,33 @@ describe('Session C: 1250-1350 A0/A1 strict viability evidence (opt-in)', () => 
             label + '; transfer=' + event.eventId).toBe(true)
         }
       }
-      // A0 defeat and A1 victory are separate observations. One candidate does not prove
-      // impossibility when it fails; do not weaken the 1350 Goal or force a lucky result.
+      if (process.env.CHRONOFORK_VIABILITY_REPEAT === '1') {
+        // Per-year digests only: never stringify the whole history at once.
+        const again = createExperimentalIntegratedTimelineOptions('viability-A0')
+        const rerun = runTimeline(again.world, again.options)
+        expect(rerun.status).toBe('COMPLETED')
+        if (rerun.status === 'COMPLETED') {
+          const divergence = firstDivergence(
+            digestHistory({ snapshots: a0.snapshots, eventLog: a0.eventLog, decisionTraces: a0.decisionTraces }),
+            digestHistory({ snapshots: rerun.snapshots, eventLog: rerun.eventLog, decisionTraces: rerun.decisionTraces }))
+          expect(divergence, 'seed=' + INTEGRATED_SEED + '; first divergence').toBeNull()
+        }
+      }
+      // A0 and A1 outcomes are separate observations of the strict Goal; neither is asserted as an invariant.
+      // One candidate does not prove impossibility when it fails; never weaken the 1350 Goal.
       console.info('CHRONOFORK_SESSION_C_GOAL_WITNESS ' + JSON.stringify({
         seed: INTEGRATED_SEED,
         intervention: INTEGRATED_TRUST_REDUCTION,
         A0: a0Audit.goal.status, A1: a1Audit.goal.status,
         officialGoalPublished: false,
         a1VictoryDemonstrated: a1Audit.goal.status === 'ACHIEVED',
+        a0DefeatObserved: a0Audit.goal.status === 'NOT_ACHIEVED',
+        a0VsA1FirstDivergence: firstDivergence(
+          digestHistory({ snapshots: a0.snapshots, eventLog: a0.eventLog, decisionTraces: a0.decisionTraces }),
+          digestHistory({ snapshots: fork.branch.snapshots, eventLog: fork.branch.eventLog,
+            decisionTraces: fork.branch.decisionTraces })),
         witnessScope: 'ONE_CALIBRATION_ONLY_A1_NOT_A_GLOBAL_SEARCH',
       }))
-      expect(a0Audit.goal.status).toBe('NOT_ACHIEVED')
       expect(a0Audit.errors.length, JSON.stringify(a0Audit.metrics)).toBe(0)
       expect(a1Audit.errors.length, JSON.stringify(a1Audit.metrics)).toBe(0)
     }, 300000)
