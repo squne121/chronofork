@@ -5,8 +5,9 @@ import {
   createExperimentalIntegratedWorld, createExperimentalIntegratedEvaluators, INTEGRATED_SEED,
 } from '../../../src/scenario/experimental/integrated-run.ts'
 import { createExperimentalOrdinaryLegalTrial } from '../../../src/scenario/experimental/ordinary-legal-trial.ts'
-import type { CountryRulerVacateCommand, WorldState } from '../../../src/simulation/contracts/index.ts'
+import type { CountryRulerVacateCommand, DecisionTraceDraft, WorldState } from '../../../src/simulation/contracts/index.ts'
 import { runYear } from '../../../src/simulation/engine/index.ts'
+import type { RuleEvaluator } from '../../../src/simulation/engine/evaluators.ts'
 import { countryRulerVacate } from '../../../src/simulation/engine/reducer/handlers-legal.ts'
 import { createB003CalibrationEvaluator } from '../../../src/simulation/rules/b/index.ts'
 import { createASuc04WorldStateEvaluator, createATit07EvidenceEvaluator } from '../../../src/simulation/rules/a/index.ts'
@@ -102,6 +103,78 @@ describe('DEC-079: 確定死亡による国家統治者未確定化',()=>{
     expect(result.events.some(e=>e.eventType==='COUNTRY_RULER_VACATE')).toBe(false)
     const direct=play(w,null)
     expect(complete(direct).events.some(e=>e.eventType==='COUNTRY_RULER_VACATE')).toBe(false)
+  })
+
+  /** 偽造: 評価器が自己申告のEvent IDで未確定化を試みる。runYear（エンジン）で拒否される必要がある。 */
+  function forgedVacate(eventIdOf:(real:string|undefined)=>string,deceased=P8):RuleEvaluator {
+    const trial=createExperimentalOrdinaryLegalTrial()
+    const crownRules=createCrownSuccessionEvaluators(
+      createASuc04WorldStateEvaluator(),createATit07EvidenceEvaluator(),
+      {book:trial.book,laws:trial.laws},
+    )
+    return (world,ctx)=>{
+      const o=crownRules.titleTransfer(world,ctx)
+      const real=(ctx.priorTraces??[]).find(t=>t.ruleId==='B-003')?.eventIds[0]
+      const fake=eventIdOf(real)
+      const draft:DecisionTraceDraft={
+        year:ctx.year,phase:ctx.phase,ruleId:ctx.ruleId,
+        actorRef:{kind:'COUNTRY',id:MG},
+        candidates:[{candidateId:'forged',eligible:true,inputs:{},reasonCodes:['FORGED']}],
+        selectedCandidateId:'forged',status:'ACCEPT',reasonCodes:['FORGED'],
+        modifierIds:[],ruleVersion:'forged',
+      }
+      return {...o,traceDrafts:[...o.traceDrafts,draft],commands:[...o.commands,{
+        type:'COUNTRY_RULER_VACATE',commandId:'cmd:forged',
+        source:{requestId:'req:forged',year:ctx.year,phase:ctx.phase,sourceRuleId:'A-TIT-07',
+          sourceTraceId:ctx.traceId(o.traceDrafts.length),sourceIntentId:fake},
+        countryId:MG,deceasedPersonId:deceased,sourceDeathEventId:fake,
+      }]}
+    }
+  }
+  const deadMargald=():WorldState=>{
+    const w=testWorld(P8)
+    return {...w,persons:w.persons.map(p=>p.personId===P8?{...p,alive:false,deathYear:1285}:p)}
+  }
+
+  it('死亡済み・現統治者・死亡年一致・intent==deathEventIdでも、B-003 Eventが無い偽造IDはrunYearで拒否する',()=>{
+    const before=deadMargald()
+    const result=runYear(before,{seed:1,branchId:'dec077',
+      evaluators:{'A-TIT-07':forgedVacate(()=>'forged:death-event')}})
+    expect(result.status).toBe('HALTED')
+    if(result.status!=='HALTED')return
+    expect(result.halt.code).toBe('INVALID_OUTCOME')
+    expect(result.halt.ruleId).toBe('A-TIT-07')
+    expect(result.halt.message).toContain('B-003確定死亡Event')
+    // MINOR-3: 拒否時は年全体が停止し、入力世界のまま部分確定しない。
+    expect(result.world).toBe(before)
+  })
+
+  it('B-003死亡Eventがあっても、別のEvent ID・別人物を指す偽造は拒否する',()=>{
+    const w=testWorld(P8)
+    const mortality=createB003CalibrationEvaluator([{
+      evidenceId:'test:dec077:death:'+P8,personId:P8,deathYear:1285,provenance:'CALIBRATION_ONLY',
+    }])
+    if(!mortality.ok)throw new Error('b003')
+    const run=(ev:RuleEvaluator)=>runYear(w,{seed:1,branchId:'dec077',
+      evaluators:{'B-003':mortality.evaluator,'A-TIT-07':ev}})
+    const wrongId=run(forgedVacate(()=>'forged:other-event'))
+    expect(wrongId.status).toBe('HALTED')
+    const wrongPerson=run(forgedVacate(real=>real!,P1))
+    expect(wrongPerson.status).toBe('HALTED')
+    // 同じ実Event IDを使う正当な形でも、人物がP8でなければ（P1は死亡していない）通らない。
+    if(wrongId.status==='HALTED')expect(wrongId.halt.code).toBe('INVALID_OUTCOME')
+  })
+
+  it('B-003のEventが実在し一致する場合は偽造評価器経由でも整合した証拠として通る',()=>{
+    const w=testWorld(P8)
+    const mortality=createB003CalibrationEvaluator([{
+      evidenceId:'test:dec077:death:'+P8,personId:P8,deathYear:1285,provenance:'CALIBRATION_ONLY',
+    }])
+    if(!mortality.ok)throw new Error('b003')
+    const result=runYear(w,{seed:1,branchId:'dec077',
+      evaluators:{'B-003':mortality.evaluator,'A-TIT-07':forgedVacate(real=>real!)}})
+    expect(result.status).toBe('COMPLETED')
+    if(result.status==='COMPLETED')expect(ruler(result.world,MG)).toBeUndefined()
   })
 
   it('reducer単独でも人物生存・死亡年・対象国・実死亡Event参照が不正なら拒否する',()=>{
