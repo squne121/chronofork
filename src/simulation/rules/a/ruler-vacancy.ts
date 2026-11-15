@@ -1,7 +1,7 @@
-// DEC-077（MVP限定）: 国家統治者の確定死亡後、後継が未承認なら参照のみ未確定へ。
+// DEC-079（MVP限定）: 国家統治者の確定死亡後、後継が未承認なら参照のみ未確定へ。
 // 国家存続・王位/領地・実効支配・委任・徴税権は変更しない。B-003の実Eventを必須とする。
 import type {
-  CountryRulerVacateCommand, DecisionTraceDraft, DomainCommand, WorldState,
+  CountryRulerVacateCommand, DecisionTraceDraft, DomainCommand,
 } from '../../contracts/index.ts'
 import type { RuleEvaluator } from '../../engine/evaluators.ts'
 
