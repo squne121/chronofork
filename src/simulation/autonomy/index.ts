@@ -12,6 +12,7 @@ import type { NextgenMarriageInput } from '../rules/a/index.ts'
 import type { OrdinaryMarriageInput } from '../rules/a/index.ts'
 import type { ReviewedLegalInput } from '../rules/a/index.ts'
 import { createCrownSuccessionEvaluators } from '../rules/a/crown-succession.ts'
+import { withCountryRulerVacancy } from '../rules/a/ruler-vacancy.ts'
 import { createB002WorldStateEvaluator, createB003WorldStateEvaluator, createB004WorldStateEvaluator, createB005CalibrationEvaluator, createB005NextgenEvaluator, createB009WorldStateEvaluator, createB001PromotionEvaluator } from '../rules/b/index.ts'
 import type { B009Calibration, B001PromotionInput, B001SupportingInput } from '../rules/b/index.ts'
 import { createB001SupportingMarriageEvaluator } from '../rules/b/index.ts'
@@ -122,7 +123,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     'A-LEG-01':marriageEvaluator,
     ...(reviewed?.ok?reviewed.evaluators:{}),
     'A-SUC-04':crown.succession,
-    'A-TIT-07':crown.titleTransfer,
+    'A-TIT-07':withCountryRulerVacancy(crown.titleTransfer),
   }
   return {ok:true,evaluators}
 }
