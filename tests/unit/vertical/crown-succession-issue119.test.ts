@@ -8,6 +8,7 @@ import { evaluateGoal } from '../../../src/simulation/goal.ts'
 import { createB003CalibrationEvaluator } from '../../../src/simulation/rules/b/index.ts'
 import { createASuc04WorldStateEvaluator, createATit07EvidenceEvaluator } from '../../../src/simulation/rules/a/index.ts'
 import { createCrownSuccessionEvaluators } from '../../../src/simulation/rules/a/crown-succession.ts'
+import { legalTitleTransfer } from '../../../src/simulation/engine/reducer/handlers-legal.ts'
 import { checkWorldIntegrity } from '../../../src/simulation/validation/integrity.ts'
 import type { LegalEvidenceBook } from '../../../src/simulation/legal/evidence.ts'
 import type { OrdinaryLaw } from '../../../src/simulation/legal/ordinary-authority.ts'
@@ -171,5 +172,20 @@ describe('Issue #119: 採用済みGAME-02 王位継承の法制審査',()=>{
     expect(r.traces.some(t=>t.reasonCodes.includes('LEGAL_DYNASTY_UNDETERMINED'))).toBe(true)
     expect(r.world.regions).toEqual(unresolved.regions)
     expect(r.world.legal.taxMandates).toEqual(unresolved.legal.taxMandates)
+  })
+  it('reducer単独でも、王位専用の承認根拠がない承認済みケースではCROWN HELD移転を拒否する',()=>{
+    const w=start()
+    const dead:WorldState={...w,
+      persons:w.persons.map(p=>p.personId===PRE?{...p,alive:false,deathYear:1285}:p),
+      titles:w.titles.map(t=>t.titleId===CROWN?{...t,holder:{status:'UNDETERMINED' as const}}:t),
+      legal:{...w.legal,cases:[...w.legal.cases,{
+        caseId:'case:forged',kind:'SUCCESSION' as const,status:'APPROVED' as const,titleId:CROWN,
+        candidatePersonIds:[HEIR],reasonCodes:['CALIBRATION_ONLY'],
+      }]}}
+    const draft={world:dead,casualties:new Map(),touchedCasualties:new Set<string>()}
+    const rejection=legalTitleTransfer(draft,{type:'LEGAL_TITLE_TRANSFER',
+      titleId:CROWN,toHolder:{status:'HELD',personId:HEIR},legalCaseId:'case:forged'} as never)
+    expect(rejection?.code).toBe('LEGAL_BASIS_MISSING')
+    expect(title(draft.world,CROWN).holder.status).toBe('UNDETERMINED')
   })
 })

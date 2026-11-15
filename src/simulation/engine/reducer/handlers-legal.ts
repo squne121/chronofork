@@ -106,6 +106,13 @@ export const legalTitleTransfer: Handler<LegalTitleTransferCommand> = (d, c) => 
     if (!legalCase || legalCase.kind !== 'SUCCESSION' || legalCase.status !== 'APPROVED' || !legalCase.candidatePersonIds.includes(holderId)) {
       return fail('LEGAL_BASIS_MISSING', `Title ${c.titleId} を ${holderId} へ移す承認済み SUCCESSION ケースが確認できません`, [holderId])
     }
+    // CROWNは通常土地相続と別の明示的授権が必須。reducer単独でも王位専用の承認根拠を要求する。
+    if (title.kind === 'CROWN' && (legalCase.candidatePersonIds.length !== 1 ||
+        !legalCase.reasonCodes.includes('CROWN_SUCCESSION') ||
+        !legalCase.reasonCodes.some(x => x.startsWith('CROWN_APPROVAL_DECISION:')) ||
+        !legalCase.reasonCodes.some(x => x.startsWith('CROWN_AUTHORITY_BASIS:')))) {
+      return fail('LEGAL_BASIS_MISSING', `CROWN ${c.titleId} の継承に王位専用の承認決定・授権根拠が確認できません`, [holderId])
+    }
   }
   d.world = { ...w, titles: w.titles.map((t) => (t.titleId === c.titleId ? { ...t, holder: c.toHolder } : t)) }
   return null
