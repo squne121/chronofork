@@ -4,6 +4,7 @@
 import type {
   ControlMandateSetCommand,
   CountryRulerSetCommand,
+  CountryRulerVacateCommand,
   LegalCaseSetCommand,
   LegalDynastySetCommand,
   LegalTitleTransferCommand,
@@ -162,6 +163,27 @@ export const countryRulerSet: Handler<CountryRulerSetCommand> = (d, c) => {
   d.world = { ...w, countries: w.countries.map(x => {
     if (x.countryId !== c.countryId) return x
     if (c.toRulerPersonId !== undefined) return { ...x, rulerPersonId: c.toRulerPersonId }
+    const { rulerPersonId: _former, ...withoutRuler } = x
+    void _former
+    return withoutRuler
+  }) }
+  return null
+}
+
+/** 後継統治者を推測せず、死亡Eventの当年だけCountryの旧統治者参照を解除する。 */
+export const countryRulerVacate: Handler<CountryRulerVacateCommand> = (d, c) => {
+  const w = d.world
+  const country = w.countries.find(x => x.countryId === c.countryId)
+  const deceased = w.persons.find(p => p.personId === c.deceasedPersonId)
+  if (!country || country.rulerPersonId !== c.deceasedPersonId ||
+      !deceased || deceased.alive || deceased.deathYear !== w.year) {
+    return fail('LEGAL_BASIS_MISSING', '当年死亡した現行国家統治者の根拠がありません')
+  }
+  if (!nonEmpty(c.sourceDeathEventId) || c.source.sourceIntentId !== c.sourceDeathEventId) {
+    return fail('LEGAL_BASIS_MISSING', 'B-003確定死亡Eventとの対応が必要です')
+  }
+  d.world = { ...w, countries: w.countries.map(x => {
+    if (x.countryId !== c.countryId) return x
     const { rulerPersonId: _former, ...withoutRuler } = x
     void _former
     return withoutRuler
