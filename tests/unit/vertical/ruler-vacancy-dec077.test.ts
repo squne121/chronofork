@@ -1,4 +1,4 @@
-// DEC-077: 国家統治者の死亡後は証拠付きで未確定化し、王位/土地/税権を移さない。
+// DEC-079: 国家統治者の死亡後は証拠付きで未確定化し、王位/土地/税権を移さない。
 import { describe, expect, it } from 'vitest'
 import { createExperimentalWorld } from '../../../src/scenario/experimental/world-1250.ts'
 import {
@@ -51,7 +51,7 @@ function complete(result:ReturnType<typeof runYear>) {
 }
 const ruler=(world:WorldState,id:string)=>world.countries.find(c=>c.countryId===id)?.rulerPersonId
 
-describe('DEC-077: 確定死亡による国家統治者未確定化',()=>{
+describe('DEC-079: 確定死亡による国家統治者未確定化',()=>{
   it('CROWNのないマルガルドでもB-003死亡からEvent/Trace付きで参照のみ解除する',()=>{
     const before=testWorld(P8)
     const result=complete(play(before,P8))
