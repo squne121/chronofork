@@ -174,37 +174,62 @@ describe('Session C negative controls on real transitions', () => {
     })
   })
 
-  describe('Title-specific transfer evidence', () => {
-    const toHeld = (e: EventLogEntry) => has(e, 'LEGAL_TITLE_TRANSFER') &&
-      e.stateChanges.some(c => c.path.endsWith('.holder.personId') && typeof c.after === 'string')
-    const t = find(x => x.events.some(toHeld))
-    const transfer = t.events.find(toHeld)!
+  // Real HELD transfers, one per Title kind that actually occurs in 1250..1273. Which kind transfers first depends on
+  // the integrated rules (CROWN succession vs TERRITORIAL), so no kind is assumed: every real kind is exercised.
+  const toHeld = (e: EventLogEntry) => has(e, 'LEGAL_TITLE_TRANSFER') &&
+    e.stateChanges.some(c => c.path.endsWith('.holder.personId') && typeof c.after === 'string')
+  const heldTransfers = (() => {
+    const byKind = new Map<string, { t: Transition; transfer: EventLogEntry; titleId: string; kind: string }>()
+    for (const t of transitions) for (const transfer of t.events.filter(toHeld)) {
+      const change = transfer.stateChanges.find(c => c.path.endsWith('.holder.personId'))!
+      const titleId = /^\$\.titles\[(.*)\]\.holder\.personId$/.exec(change.path)![1]!
+      const kind = t.after.titles.find(ti => ti.titleId === titleId)!.kind
+      if (!byKind.has(kind)) byKind.set(kind, { t, transfer, titleId, kind })
+    }
+    if (byKind.size === 0) throw new Error('no real HELD Title transfer; control cannot be exercised')
+    return [...byKind.values()]
+  })()
+  const approvalChanges = (caseId: string) => (c: { path: string }) =>
+    c.path === '$.legal.cases[' + caseId + ']' || c.path === '$.legal.cases[' + caseId + '].status'
+
+  describe.each(heldTransfers)('Title-specific transfer evidence ($kind transfer)', ({ t, transfer, titleId, kind }) => {
     const change = transfer.stateChanges.find(c => c.path.endsWith('.holder.personId'))!
-    const titleId = /^\$\.titles\[(.*)\]\.holder\.personId$/.exec(change.path)![1]!
-    const territorial = t.after.titles.find(ti => ti.titleId === titleId)!
-    const crown = t.after.titles.find(ti => ti.kind === 'CROWN' && ti.regionId === territorial.regionId)!
+    const target = t.after.titles.find(ti => ti.titleId === titleId)!
+    // A different Title in the same region (the opposite kind when one exists), whose holder must not be changeable on this evidence.
+    const other = t.after.titles.find(ti => ti.titleId !== titleId && ti.regionId === target.regionId && ti.kind !== kind) ??
+      t.after.titles.find(ti => ti.titleId !== titleId && ti.regionId === target.regionId)!
+    const approvedCases = t.after.legal.cases.filter(c => c.titleId === titleId && c.kind === 'SUCCESSION' && c.status === 'APPROVED')
 
     it('baseline: the real transfer has an approved case, matching Title path and A-TIT-07 Trace', () => {
-      expect(territorial.kind).toBe('TERRITORIAL')
+      expect(target.holder.status).toBe('HELD')
+      expect(approvedCases.length).toBeGreaterThan(0)
       expect(auditApprovedTransfers(t.before, t.after, t.events, t.traces)).toEqual([])
     })
-    it('a TERRITORIAL transfer Event in the same region cannot vouch for a CROWN holder change', () => {
+    it('a transfer Event for one Title cannot vouch for a holder change of another Title in the same region', () => {
+      expect(other, 'a second Title must share the region for this control').toBeDefined()
       const successor = String(change.after)
       const after = {
         ...t.after,
-        titles: t.after.titles.map(ti => ti.titleId === crown.titleId ? { ...ti, holder: { status: 'HELD' as const, personId: successor } } : ti),
+        titles: t.after.titles.map(ti => ti.titleId === other.titleId ? { ...ti, holder: { status: 'HELD' as const, personId: successor } } : ti),
         legal: { ...t.after.legal, cases: [...t.after.legal.cases, {
-          caseId: 'case-forged-crown', titleId: crown.titleId, kind: 'SUCCESSION' as const, status: 'APPROVED' as const,
+          caseId: 'case-forged-other', titleId: other.titleId, kind: 'SUCCESSION' as const, status: 'APPROVED' as const,
           candidatePersonIds: [successor], reasonCodes: [] }] },
       }
       const issues = auditApprovedTransfers(t.before, after, t.events, t.traces)
-      expect(codes(issues.filter(i => i.subjectId === crown.titleId))).toEqual(
+      expect(codes(issues.filter(i => i.subjectId === other.titleId))).toEqual(
         expect.arrayContaining(['HELD_TRANSFER_WITHOUT_EVENT', 'TITLE_HOLDER_CHANGED_WITHOUT_TRANSFER_EVENT']))
-      expect(issues.filter(i => i.subjectId === titleId)).toEqual([]) // the genuine TERRITORIAL transfer stays clean
+      expect(issues.filter(i => i.subjectId === titleId)).toEqual([]) // the genuine transfer stays clean
     })
     it('rejects a transfer justified only by a case approved in an earlier year', () => {
-      // Pretend the approving Event happened last year: no Event of this year touches the case status.
-      const events = t.events.map(e => ({ ...e, stateChanges: e.stateChanges.filter(c => !/^\$\.legal\.cases\[.*\]\.status$/.test(c.path)) }))
+      // Pretend the approving Event happened last year: no Event of this year records the case approval, whether it was
+      // written as a `.status` update of an existing case or as the creation of an already-APPROVED case.
+      const removed: string[] = []
+      const events = t.events.map(e => ({ ...e, stateChanges: e.stateChanges.filter(c => {
+        const hit = approvedCases.some(ac => approvalChanges(ac.caseId)(c))
+        if (hit) removed.push(c.path)
+        return !hit
+      }) }))
+      expect(removed.length, 'this year must contain the real approval change that the control removes').toBeGreaterThan(0)
       expect(codes(auditApprovedTransfers(t.before, t.after, events, t.traces))).toContain('HELD_TRANSFER_WITHOUT_APPROVED_CASE')
     })
     it('rejects an A-TIT-07 Trace that targets a different Title', () => {
@@ -215,6 +240,13 @@ describe('Session C negative controls on real transitions', () => {
       const after = { ...t.after, legal: { ...t.after.legal, cases: t.after.legal.cases.filter(c => c.titleId !== titleId) } }
       expect(codes(auditApprovedTransfers(t.before, after, t.events, t.traces))).toContain('HELD_TRANSFER_WITHOUT_APPROVED_CASE')
     })
+    it('detects a transfer Event whose Title path is not reflected in the world', () => {
+      const after = { ...t.after, titles: t.after.titles.map(ti => ti.titleId === titleId ? { ...ti, holder: { status: 'UNDETERMINED' as const } } : ti) }
+      expect(codes(auditApprovedTransfers(t.before, after, t.events, t.traces))).toContain('TRANSFER_EVENT_NOT_REFLECTED_IN_TITLE')
+    })
+  })
+
+  describe('Title-specific transfer evidence (HELD -> UNDETERMINED)', () => {
     it('detects HELD -> UNDETERMINED transfer Events that the world does not reflect', () => {
       const u = find(x => x.events.some(e => has(e, 'LEGAL_TITLE_TRANSFER') &&
         e.stateChanges.some(c => c.path.endsWith('.holder.status') && c.after === 'UNDETERMINED')))
@@ -224,10 +256,6 @@ describe('Session C negative controls on real transitions', () => {
       const after = { ...u.after, titles: u.after.titles.map(ti => ti.titleId === id ? pre : ti) }
       expect(codes(auditApprovedTransfers(u.before, after, u.events, u.traces))).toContain('TRANSFER_EVENT_NOT_REFLECTED_IN_TITLE')
       expect(auditApprovedTransfers(u.before, u.after, u.events, u.traces)).toEqual([])
-    })
-    it('detects a transfer Event whose Title path is not reflected in the world', () => {
-      const after = { ...t.after, titles: t.after.titles.map(ti => ti.titleId === titleId ? { ...ti, holder: { status: 'UNDETERMINED' as const } } : ti) }
-      expect(codes(auditApprovedTransfers(t.before, after, t.events, t.traces))).toContain('TRANSFER_EVENT_NOT_REFLECTED_IN_TITLE')
     })
   })
 
