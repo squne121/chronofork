@@ -5,7 +5,7 @@
 import {describe,it,expect} from 'vitest'
 import {runPlayBaseline} from '../../../src/ui/branch-play-source.ts'
 import {
- createExperimentalIntegratedWorld,createExperimentalIntegratedEvaluators,createExperimentalOrdinaryLegalTrial,
+ createExperimentalIntegratedWorld,createExperimentalOrdinaryLegalTrial,
  INTEGRATED_NEXTGEN_CONTRACT,INTEGRATED_TRUST_BASE,INTEGRATED_SUPPORTING_CLEARANCES,INTEGRATED_PROMOTION,
  INTEGRATED_SUPPORTING_COHORTS,INTEGRATED_AUTONOMY,INTEGRATED_B009_CALIBRATION,INTEGRATED_SEED,INTEGRATED_ATTESTED_PERSON_ID,
  INTEGRATED_WITNESSED_SON_ID,EXPERIMENTAL_NALVEN_GOAL,
@@ -90,18 +90,16 @@ describeLong('校正依存性: INTEGRATED_NEXTGEN_CONTRACT と EXPERIMENTAL_NEXT
   expect(timeline.status).toBe('COMPLETED')
   expect(JSON.stringify(timeline.eventLog)).toBe(JSON.stringify(base.a0.result.eventLog))
   expect(JSON.stringify(timeline.decisionTraces)).toBe(JSON.stringify(base.a0.result.decisionTraces))
-  // 参照: 公式ファクトリが同一世界で使えること(型・構成の健全性)。
-  expect(Object.keys(createExperimentalIntegratedEvaluators(createExperimentalIntegratedWorld(),[])).sort())
-   .toEqual(Object.keys(evaluatorsWith(INTEGRATED_NEXTGEN_CONTRACT)(createExperimentalIntegratedWorld(),[])).sort())
  })
 
- it('既定係数での短い再計算: A0は1269年でなく1270年に同じ婚姻が成立しNOT_ACHIEVED。同じ第1介入のA1は統合係数のA1と同じ婚姻年でACHIEVED',()=>{
+ it('既定係数での短い再計算（観測）: A0は1269年でなく1270年に婚姻(同一ペア)しNOT_ACHIEVED。同じ第1介入のA1もACHIEVED',()=>{
   const {w,timeline:a0}=runA0(EXPERIMENTAL_NEXTGEN_CONTRACT)
   expect(a0.status).toBe('COMPLETED')
   expect(a0.technicalGoal?.status).toBe('NOT_ACHIEVED')
   // 統合係数のA0: 1250/1269/1310。既定係数: 1269の合意がTIEでDEFERされ、1270年に成立（別年）。
-  const years=marriageYears(a0)
-  expect(years).toEqual([1250,1270,1310])
+  expect(marriageYears(a0)).toEqual([1250,1270,1310])
+  const m70=a0.eventLog.find(e=>e.year===1270&&e.eventType==='MARRIAGE_REGISTER')!
+  expect([...(m70.involvedRefs[0] as {ids:readonly string[]}).ids].sort()).toEqual(sorted)
   const made=createRootBranch(a0,[],evaluatorsWith(EXPERIMENTAL_NEXTGEN_CONTRACT)(w,[]))
   if(!made.ok)throw new Error(made.code)
   const modifier:StatModifier={

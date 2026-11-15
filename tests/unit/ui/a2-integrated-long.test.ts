@@ -80,7 +80,7 @@ describeLong('Issue #71: A0 NOT_ACHIEVED→A1 ACHIEVED（第1介入のみ）→A
   if(goal?.status!=='ACHIEVED')throw new Error('A1 technical goal not achieved')
   const central=goal.assessments.find(x=>x.titleId===CENTRAL)!
   expect(central).toMatchObject({qualifies:true,failures:[],basis:{kind:'CONTROL_MANDATE'}})
-  // 勝利に使われたのはcentralのみ。CROWN Titleは保持されていても根拠にならない。
+  // 勝利に使われたのはcentralのみ。CROWN Titleは根拠にならない（qualifies:false）。
   expect(goal.assessments.filter(x=>x.qualifies).map(x=>x.titleId)).toEqual([CENTRAL])
   expect(goal.assessments.find(x=>x.titleId===CROWN)).toMatchObject({qualifies:false})
   const w=A1.snapshots.at(-1)!
@@ -139,7 +139,7 @@ describeLong('Issue #71: A0 NOT_ACHIEVED→A1 ACHIEVED（第1介入のみ）→A
   const p72=pairRefs(m72[0]!)[0]!
   expect(p72).toContain(INTEGRATED_ATTESTED_PERSON_ID)
   expect(p72).not.toContain(first)
-  // 1278: 第1介入対象本人がSUPPORTING人物と婚姻（A0に当該婚姻なし）。
+  // 1278: 第1介入対象本人の婚姻（A0に当該婚姻なし）。
   const wed=(r:TimelineResult)=>marriages(r,1278).filter(e=>pairRefs(e).some(p=>p.includes(first)))
   expect(wed(A1)).toHaveLength(1)
   expect(wed(A0)).toHaveLength(0)
@@ -194,7 +194,7 @@ describeLong('Issue #71: A0 NOT_ACHIEVED→A1 ACHIEVED（第1介入のみ）→A
    expect(pairOf(t)).toBe(pairKey(secondPair))
    expect(t.modifierIds).toEqual([])
    expect(u.modifierIds).toEqual([m2])
-   // 変わるのはmodifierIdsと候補inputs(modifierIds/rawModifierSum)だけで、score・status・reasonCodesは同一。
+   // 比較するのはmodifierIds・status・reasonCodes・候補のscore/reasonCodes（inputs全体の等価は主張しない）。
    expect(u.status).toBe(t.status)
    expect(u.reasonCodes).toEqual(t.reasonCodes)
    expect(u.candidates.map(x=>x.score)).toEqual(t.candidates.map(x=>x.score))
@@ -204,7 +204,7 @@ describeLong('Issue #71: A0 NOT_ACHIEVED→A1 ACHIEVED（第1介入のみ）→A
   expect(A2.decisionTraces.filter(t=>t.modifierIds.includes(m2)).length).toBe(diff.length)
  })
 
- it('(2) 第2介入が効かない理由: 対象ペアの基礎信頼が下限-100で、-200を足しても実効信頼が-100のまま',()=>{
+ it('(2) 観測（本seed・本第2ペアのみ）: 対象ペアの基礎信頼が下限-100で、-200を足しても実効信頼は-100のまま',()=>{
   const traces=A2.decisionTraces.filter(t=>t.ruleId==='B-004'&&t.modifierIds.includes(m2))
   expect(traces.length).toBeGreaterThan(0)
   for(const t of traces){
