@@ -273,7 +273,6 @@ test.describe('統合モード: 同年・別ペアに追加介入してA2を作�
     await jump.getByRole('button',{name:'判定の詳細へ移動'}).click()
     const a1Goal=page.getByTestId('trial-goal-a1')
     await expect(a1Goal).toBeInViewport()
-    await expect(a1Goal).toBeInViewport()
     const box=(await page.getByTestId('trial-goal-summary').boundingBox())!
     const scrollY=await page.evaluate(()=>window.scrollY)
     console.info('CHRONOFORK_E2E_A1GOAL='+JSON.stringify({vh:page.viewportSize()!.height,summaryTopDocY:Math.round(box.y+scrollY),scrollYAfterReveal:scrollY}))

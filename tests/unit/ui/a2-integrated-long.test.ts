@@ -241,5 +241,6 @@ describeLong('Issue #71: A0 NOT_ACHIEVED→A1 ACHIEVED→A2 ACHIEVED維持（実
   const inp=sample.candidates[0]!.inputs as {baseTrust:number;rawModifierSum:number;effectiveTrust:number}
   expect(inp.rawModifierSum).toBe(-200)
   expect(inp.effectiveTrust).toBe(inp.baseTrust)
+  expect(inp.effectiveTrust).toBe(-100)
  },1200000)
 },1200000)
