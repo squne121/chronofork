@@ -241,7 +241,7 @@ test.describe('統合モード: 後出生KEY人物のGUI選択（Issue #104・�
 test.describe('統合モード: 同年・別ペアに追加介入してA2を作る（オプトイン）',()=>{
   test.skip(!heavy, 'CHRONOFORK_E2E_INTEGRATED=1 のときだけ実行する')
   test.setTimeout(30*60_000)
-  test('A0観測→A1第1介入→A2第2介入→1350年の厳格技術Goalと3枝の観測',async({page})=>{
+  test('A0観測→A1第1介入（単独で技術Goal成立）→A2第2介入→1350年の厳格技術Goalと3枝の観測',async({page})=>{
     await page.goto('/')
     await page.getByTestId('play-law-mode').selectOption('INTEGRATED_EXPERIMENTAL')
     await page.getByTestId('candidates-fetch').click()
@@ -257,6 +257,48 @@ test.describe('統合モード: 同年・別ペアに追加介入してA2を作�
     await page.getByTestId('branch-run').click()
     await expect(page.getByTestId('branch-results')).toBeVisible({timeout:20*60_000})
     await expect(page.getByTestId('a2-panel')).toBeVisible()
+    // A1完了直後（A2を作る前）: 第1介入だけで技術Goalが成立していることを確認する。
+    await expect(page.getByTestId('trial-goal-a0')).toContainText('条件に不一致（技術検証）')
+    await expect(page.getByTestId('trial-goal-a1')).toContainText('条件に一致（技術検証）')
+    await expect(page.getByTestId('a2-results')).toHaveCount(0)
+    await expect(page.getByTestId('goal-status')).toContainText('正式な勝敗は未成立')
+    await expect(page.getByTestId('branch-status')).toContainText('goal=null')
+    // 結果見出しの近くに判定の要約があり、押すと詳細へ移動する（視認性: 詳細は結果エリアの深い位置にある）。
+    const jump=page.getByTestId('trial-goal-jump')
+    await expect(jump).toContainText('A0 条件に不一致（技術検証）')
+    await expect(jump).toContainText('A1 条件に一致（技術検証）')
+    await expect(page.getByTestId('branch-headline')).toBeVisible()
+    await jump.scrollIntoViewIfNeeded()
+    await expect(jump).toBeInViewport()
+    await jump.getByRole('button',{name:'判定の詳細へ移動'}).click()
+    const a1Goal=page.getByTestId('trial-goal-a1')
+    await expect(a1Goal).toBeInViewport()
+    const box=(await page.getByTestId('trial-goal-summary').boundingBox())!
+    const scrollY=await page.evaluate(()=>window.scrollY)
+    console.info('CHRONOFORK_E2E_A1GOAL='+JSON.stringify({vh:page.viewportSize()!.height,summaryTopDocY:Math.round(box.y+scrollY),scrollYAfterReveal:scrollY}))
+    await page.getByTestId('trial-goal-summary').locator('summary',{hasText:'中央世襲所領'}).click()
+    await expect(page.getByTestId('trial-goal-reasons-a0')).toContainText('中央世襲所領:')
+    await expect(page.getByTestId('trial-goal-reasons-a1')).toContainText('中央世襲所領は条件に一致')
+    // A0/A1を切り替え、実Event（出生）からTraceへ辿れる。
+    await page.getByTestId('view-a0').click()
+    await expect(page.getByTestId('history-status')).toContainText('A0')
+    await page.getByTestId('view-a1').click()
+    await expect(page.getByTestId('history-status')).toContainText('A1')
+    // 婚姻・出生・Title・委任の各一覧から、A1にだけ記録された実Eventを開き、判断根拠(Trace)へ辿る。
+    for (const key of ['marriage', 'birth', 'title', 'mandate']) {
+      const list = page.getByTestId('integrated-list-' + key)
+      await list.scrollIntoViewIfNeeded()
+      await list.locator('summary').click()
+      const a1Only = list.locator('p', { hasText: 'A1で追加' }).locator('xpath=following-sibling::ul[1]').getByRole('button').first()
+      await expect(a1Only, key + ': A1だけのEventがある').toBeVisible()
+      await a1Only.click()
+      await expect(page.getByTestId('active-branch')).toContainText('A1')
+      await expect(page.getByTestId('event-detail')).toBeVisible()
+      await page.getByTestId('event-detail').getByRole('button', { name: /判断根拠を開く/ }).first().click()
+      await expect(page.getByTestId('trace-detail')).toBeVisible()
+      await expect(page.getByTestId('trace-detail')).toBeInViewport({ ratio: 0.01 })
+    }
+    await page.getByTestId('a2-panel').scrollIntoViewIfNeeded()
     const second=page.getByTestId('a2-person-one').locator('option',{hasText:'1252年生'})
     const secondId=await second.first().getAttribute('value')
     expect(secondId).toBeTruthy()
