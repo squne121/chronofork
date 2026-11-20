@@ -1,0 +1,359 @@
+{
+  "started": "2026-11-20T02:10:02.632Z",
+  "camera": {
+    "position": [
+      28,
+      32,
+      36
+    ],
+    "target": [
+      0,
+      1,
+      0
+    ],
+    "zoom": 1
+  },
+  "failures": [],
+  "pending": [],
+  "provenanceBefore": {
+    "head": "92be955a6716eead5e35c232fdc023840a15feae",
+    "status": " M experiments/graphics-city-pipeline/README.md\n M experiments/graphics-city-pipeline/STATUS.md\n M experiments/graphics-city-pipeline/public/a/parts.blend\n M experiments/graphics-city-pipeline/route-a/generate.py\n M experiments/graphics-city-pipeline/src/route-a.ts\n M experiments/graphics-city-pipeline/src/route-b.ts\n?? experiments/graphics-city-pipeline/C2-BENCHMARK.md\n?? experiments/graphics-city-pipeline/c2-after.png\n?? experiments/graphics-city-pipeline/c2-artifacts-2LlmPf/\n?? experiments/graphics-city-pipeline/c2-artifacts-8vJjvC/\n?? experiments/graphics-city-pipeline/c2-artifacts-i0lG5f/\n?? experiments/graphics-city-pipeline/c2-before.png\n?? experiments/graphics-city-pipeline/c2-results.json\n?? experiments/graphics-city-pipeline/c2-topology.mjs\n?? experiments/graphics-city-pipeline/inspect-c2.mjs\n?? experiments/graphics-city-pipeline/public/a/tiered.glb\n?? experiments/graphics-city-pipeline/test-c2-topology.mjs",
+    "hashes": {
+      "c2-topology.mjs": "be0d2b74f9615ed99078a4c676e2cba08d9ff6d6e86133df22a4a036d5158171",
+      "inspect-c2.mjs": "417073bdf8f67076041ae4b2401a9b63473d40a4f245ceadf7262a257a9d7c48",
+      "public/a/block.glb": "a0c143a6d89388a4b257cfdb8f4d39cc5a9530797deb0ee135642721bf887df7",
+      "public/a/parts.blend": "5ed8439c0392cda68062c5d8a05f5e9061f399036d36a20d738c4d9418608b87",
+      "public/a/taper.glb": "7671d77822dc839b567d8fdcfd2cce0eb94382a8eef0f0c675bec75acbfff701",
+      "public/a/tiered.glb": "daf3a711e4f38f210a1fcdac4ad41bfdf5b2f3e8c99c86b24a0c460214f69e9e",
+      "route-a/generate.py": "6d53f0a266f867641d53ba3613888f0c78a373faa481fff5bf9388344c1ec1f8",
+      "src/input.ts": "d3fbd265a738e858bfdb90550d8d2da5d6d7d6fb5987d5cbd9e95612e32f41e6",
+      "src/main.ts": "9a239a4f0697ad62d1471e231193d32ab6db86c2c0e48a689f603979400779e1",
+      "src/route-a.ts": "b996d70006c617ae2181c5534cb752db29057a21f32120c8c8930bc98a726edb",
+      "src/route-b.ts": "1b9aaf9deec5f1447ecfedbe5accb28d051a90823fa1af446519c6d047873fc4",
+      "src/style.css": "ad72086368d3e437fe0f8f24644cb7b1f63f4901223b514026badea3f640e789",
+      "test-c2-topology.mjs": "ec3d38f0dddde5025a9d4607f9e613eaf47e1e04227420e338690b9678252f01"
+    }
+  },
+  "target": {
+    "target": "center-1",
+    "originalKind": "taper"
+  },
+  "publicCameraBefore": {
+    "experiment": {
+      "position": [
+        28,
+        32,
+        36
+      ],
+      "target": [
+        0,
+        1,
+        0
+      ],
+      "zoom": 1
+    },
+    "a": {
+      "position": [
+        28.000000000000007,
+        32,
+        36.00000000000001
+      ],
+      "target": [
+        0,
+        1,
+        0
+      ],
+      "zoom": 1
+    },
+    "b": {
+      "position": [
+        28.000000000000007,
+        32,
+        36.00000000000001
+      ],
+      "target": [
+        0,
+        1,
+        0
+      ],
+      "zoom": 1
+    }
+  },
+  "cameraBefore": {
+    "a": {
+      "position": [
+        28.000000000000007,
+        32,
+        36.00000000000001
+      ],
+      "quaternion": [
+        -0.2781621728740897,
+        0.3101857098211793,
+        0.09543959730933486,
+        0.9040475177058606
+      ],
+      "direction": [
+        -0.5077498704517497,
+        -0.5621516422858657,
+        -0.6528212620093924
+      ],
+      "zoom": 1,
+      "projection": [
+        0.05,
+        0,
+        0,
+        0,
+        0,
+        0.06666666666666667,
+        0,
+        0,
+        0,
+        0,
+        -0.010005002501250625,
+        0,
+        0,
+        0,
+        -1.001000500250125,
+        1
+      ]
+    },
+    "b": {
+      "position": [
+        28.000000000000007,
+        32,
+        36.00000000000001
+      ],
+      "quaternion": [
+        -0.2781621728740897,
+        0.3101857098211793,
+        0.09543959730933486,
+        0.9040475177058606
+      ],
+      "direction": [
+        -0.5077498704517497,
+        -0.5621516422858657,
+        -0.6528212620093924
+      ],
+      "zoom": 1,
+      "projection": [
+        0.05,
+        0,
+        0,
+        0,
+        0,
+        0.06666666666666667,
+        0,
+        0,
+        0,
+        0,
+        -0.010005002501250625,
+        0,
+        0,
+        0,
+        -1.001000500250125,
+        1
+      ]
+    }
+  },
+  "measurements": {
+    "a": {
+      "bounds": [
+        [
+          -2.9850000000000003,
+          2,
+          -4.8149999999999995
+        ],
+        [
+          -0.615,
+          6.17,
+          -3.385
+        ]
+      ],
+      "meshes": 1,
+      "triangles": 28,
+      "topology": {
+        "triangles": 28,
+        "vertices": 16,
+        "badEdges": 0,
+        "volume": 11.17531147833614,
+        "expectedVolume": 11.17531154025,
+        "volumeOk": true,
+        "ok": true
+      }
+    },
+    "b": {
+      "bounds": [
+        [
+          -2.9850000000000003,
+          2,
+          -4.8149999999999995
+        ],
+        [
+          -0.615,
+          6.17,
+          -3.385
+        ]
+      ],
+      "meshes": 1,
+      "triangles": 28,
+      "topology": {
+        "triangles": 28,
+        "vertices": 16,
+        "badEdges": 0,
+        "volume": 11.175311478336136,
+        "expectedVolume": 11.17531154025,
+        "volumeOk": true,
+        "ok": true
+      }
+    }
+  },
+  "changed": {
+    "id": "center-1",
+    "district": "center",
+    "kind": "tiered",
+    "x": -1.8,
+    "y": 2,
+    "z": -4.1,
+    "width": 2.37,
+    "depth": 1.43,
+    "height": 4.17,
+    "affiliation": "#e13a80"
+  },
+  "publicCameraAfter": {
+    "experiment": {
+      "position": [
+        28,
+        32,
+        36
+      ],
+      "target": [
+        0,
+        1,
+        0
+      ],
+      "zoom": 1
+    },
+    "a": {
+      "position": [
+        28.000000000000007,
+        32,
+        36.00000000000001
+      ],
+      "target": [
+        0,
+        1,
+        0
+      ],
+      "zoom": 1
+    },
+    "b": {
+      "position": [
+        28.000000000000007,
+        32,
+        36.00000000000001
+      ],
+      "target": [
+        0,
+        1,
+        0
+      ],
+      "zoom": 1
+    }
+  },
+  "cameraAfter": {
+    "a": {
+      "position": [
+        28.000000000000007,
+        32,
+        36.00000000000001
+      ],
+      "quaternion": [
+        -0.2781621728740897,
+        0.3101857098211793,
+        0.09543959730933486,
+        0.9040475177058606
+      ],
+      "direction": [
+        -0.5077498704517497,
+        -0.5621516422858657,
+        -0.6528212620093924
+      ],
+      "zoom": 1,
+      "projection": [
+        0.05,
+        0,
+        0,
+        0,
+        0,
+        0.06666666666666667,
+        0,
+        0,
+        0,
+        0,
+        -0.010005002501250625,
+        0,
+        0,
+        0,
+        -1.001000500250125,
+        1
+      ]
+    },
+    "b": {
+      "position": [
+        28.000000000000007,
+        32,
+        36.00000000000001
+      ],
+      "quaternion": [
+        -0.2781621728740897,
+        0.3101857098211793,
+        0.09543959730933486,
+        0.9040475177058606
+      ],
+      "direction": [
+        -0.5077498704517497,
+        -0.5621516422858657,
+        -0.6528212620093924
+      ],
+      "zoom": 1,
+      "projection": [
+        0.05,
+        0,
+        0,
+        0,
+        0,
+        0.06666666666666667,
+        0,
+        0,
+        0,
+        0,
+        -0.010005002501250625,
+        0,
+        0,
+        0,
+        -1.001000500250125,
+        1
+      ]
+    }
+  },
+  "provenanceAfter": {
+    "head": "92be955a6716eead5e35c232fdc023840a15feae",
+    "status": " M experiments/graphics-city-pipeline/README.md\n M experiments/graphics-city-pipeline/STATUS.md\n M experiments/graphics-city-pipeline/public/a/parts.blend\n M experiments/graphics-city-pipeline/route-a/generate.py\n M experiments/graphics-city-pipeline/src/route-a.ts\n M experiments/graphics-city-pipeline/src/route-b.ts\n?? experiments/graphics-city-pipeline/C2-BENCHMARK.md\n?? experiments/graphics-city-pipeline/c2-after.png\n?? experiments/graphics-city-pipeline/c2-artifacts-2LlmPf/\n?? experiments/graphics-city-pipeline/c2-artifacts-8vJjvC/\n?? experiments/graphics-city-pipeline/c2-artifacts-N6bMQk/\n?? experiments/graphics-city-pipeline/c2-artifacts-i0lG5f/\n?? experiments/graphics-city-pipeline/c2-before.png\n?? experiments/graphics-city-pipeline/c2-results.json\n?? experiments/graphics-city-pipeline/c2-topology.mjs\n?? experiments/graphics-city-pipeline/inspect-c2.mjs\n?? experiments/graphics-city-pipeline/public/a/tiered.glb\n?? experiments/graphics-city-pipeline/test-c2-topology.mjs",
+    "hashes": {
+      "c2-topology.mjs": "be0d2b74f9615ed99078a4c676e2cba08d9ff6d6e86133df22a4a036d5158171",
+      "inspect-c2.mjs": "417073bdf8f67076041ae4b2401a9b63473d40a4f245ceadf7262a257a9d7c48",
+      "public/a/block.glb": "a0c143a6d89388a4b257cfdb8f4d39cc5a9530797deb0ee135642721bf887df7",
+      "public/a/parts.blend": "5ed8439c0392cda68062c5d8a05f5e9061f399036d36a20d738c4d9418608b87",
+      "public/a/taper.glb": "7671d77822dc839b567d8fdcfd2cce0eb94382a8eef0f0c675bec75acbfff701",
+      "public/a/tiered.glb": "daf3a711e4f38f210a1fcdac4ad41bfdf5b2f3e8c99c86b24a0c460214f69e9e",
+      "route-a/generate.py": "6d53f0a266f867641d53ba3613888f0c78a373faa481fff5bf9388344c1ec1f8",
+      "src/input.ts": "d3fbd265a738e858bfdb90550d8d2da5d6d7d6fb5987d5cbd9e95612e32f41e6",
+      "src/main.ts": "9a239a4f0697ad62d1471e231193d32ab6db86c2c0e48a689f603979400779e1",
+      "src/route-a.ts": "b996d70006c617ae2181c5534cb752db29057a21f32120c8c8930bc98a726edb",
+      "src/route-b.ts": "1b9aaf9deec5f1447ecfedbe5accb28d051a90823fa1af446519c6d047873fc4",
+      "src/style.css": "ad72086368d3e437fe0f8f24644cb7b1f63f4901223b514026badea3f640e789",
+      "test-c2-topology.mjs": "ec3d38f0dddde5025a9d4607f9e613eaf47e1e04227420e338690b9678252f01"
+    }
+  },
+  "finished": "2026-11-20T02:10:04.206Z"
+}

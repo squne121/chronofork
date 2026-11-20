@@ -1,0 +1,454 @@
+{
+  "A": {
+    "buildings": [
+      {
+        "id": "west-1",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "west-2",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "west-3",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "west-4",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "west-5",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.075
+      },
+      {
+        "id": "west-6",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.548
+      },
+      {
+        "id": "west-7",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "west-8",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "west-9",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "west-10",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "center-1",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "center-2",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.075
+      },
+      {
+        "id": "center-3",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.548
+      },
+      {
+        "id": "center-4",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "center-5",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "center-6",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "center-7",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "center-8",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.075
+      },
+      {
+        "id": "center-9",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.548
+      },
+      {
+        "id": "center-10",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "east-1",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "east-2",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "east-3",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "east-4",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "east-5",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.075
+      },
+      {
+        "id": "east-6",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.548
+      },
+      {
+        "id": "east-7",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "east-8",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "east-9",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "east-10",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 1.47
+      }
+    ],
+    "bridgeVertices": [
+      [
+        5.89393,
+        4.10607,
+        0.75
+      ],
+      [
+        5.89393,
+        4.10607,
+        -0.75
+      ],
+      [
+        6.10607,
+        3.89393,
+        0.75
+      ],
+      [
+        6.10607,
+        3.89393,
+        -0.75
+      ],
+      [
+        3.89393,
+        2.10607,
+        -0.75
+      ],
+      [
+        3.89393,
+        2.10607,
+        0.75
+      ],
+      [
+        4.10607,
+        1.89393,
+        -0.75
+      ],
+      [
+        4.10607,
+        1.89393,
+        0.75
+      ]
+    ]
+  },
+  "B": {
+    "buildings": [
+      {
+        "id": "west-1",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "west-2",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "west-3",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "west-4",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "west-5",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.075
+      },
+      {
+        "id": "west-6",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.548
+      },
+      {
+        "id": "west-7",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "west-8",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "west-9",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "west-10",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "center-1",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "center-2",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.075
+      },
+      {
+        "id": "center-3",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.548
+      },
+      {
+        "id": "center-4",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "center-5",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "center-6",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "center-7",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "center-8",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.075
+      },
+      {
+        "id": "center-9",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.548
+      },
+      {
+        "id": "center-10",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "east-1",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "east-2",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "east-3",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "east-4",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 1.47
+      },
+      {
+        "id": "east-5",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.075
+      },
+      {
+        "id": "east-6",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.548
+      },
+      {
+        "id": "east-7",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 2.25
+      },
+      {
+        "id": "east-8",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 2.009
+      },
+      {
+        "id": "east-9",
+        "tri": 12,
+        "openEdges": 0,
+        "volume": 3.9
+      },
+      {
+        "id": "east-10",
+        "tri": 16,
+        "openEdges": 0,
+        "volume": 1.47
+      }
+    ],
+    "bridgeVertices": [
+      [
+        5.89393,
+        4.10607,
+        0.75
+      ],
+      [
+        5.89393,
+        4.10607,
+        -0.75
+      ],
+      [
+        6.10607,
+        3.89393,
+        0.75
+      ],
+      [
+        6.10607,
+        3.89393,
+        -0.75
+      ],
+      [
+        3.89393,
+        2.10607,
+        -0.75
+      ],
+      [
+        3.89393,
+        2.10607,
+        0.75
+      ],
+      [
+        4.10607,
+        1.89393,
+        -0.75
+      ],
+      [
+        4.10607,
+        1.89393,
+        0.75
+      ]
+    ]
+  }
+}

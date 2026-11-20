@@ -1,0 +1,6 @@
+C0 作業記録（時刻は実測、JST +09:00）
+受領確認: 2026-11-19 21:14:15
+作業: 契約と共通入力・Aインターフェースを確認。足元原点の block / taper を GLB 出力する Blender Python スクリプト、および各 GLB を事前読込みし複製を返す TypeScript ローダーを作成。
+確認: 2026-11-19 21:15:30 Python の構文解析に成功。
+未検証: Blender は指定によりダウンロード・実行していないため GLB は未生成。Blender API・エクスポート後の座標、寸法、法線、実表示は未検証。実験用およびルートの依存関係が未導入のため TypeScript 型検査・ビルド・ブラウザー確認は未実施。C2 の具体内容は未提示。
+生成手順: experiments/graphics-city-pipeline で blender --background --python route-a/generate.py を実行すると public/a/block.glb と public/a/taper.glb を生成する。
