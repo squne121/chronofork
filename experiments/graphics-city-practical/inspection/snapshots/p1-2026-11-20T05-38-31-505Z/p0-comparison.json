@@ -1,0 +1,44 @@
+{
+  "baseline": "p0-20261120-1429",
+  "current": "p1-2026-11-20T05-38-31-505Z",
+  "limitation": "Hierarchy/occurrence matching can be ambiguous for duplicate or unnamed siblings; changes are reported, not judged. FNV attribute hashes can collide. Material records omit textures/shaders; cannot establish complete equality. Runtime numeric IDs/UUIDs are not stable semantic IDs.",
+  "views": {
+    "a": {
+      "baselineObjects": 86,
+      "currentObjects": 92,
+      "unchanged": 86,
+      "missing": [],
+      "changed": [],
+      "added": [
+        "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:district-high[0]/Object3D:district-high-sidewalk[0]",
+        "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:district-high[0]/Object3D:district-high-sidewalk[0]/Mesh:sidewalk_segment[0]",
+        "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:district-high[0]/Object3D:district-high-sidewalk[0]/Mesh:sidewalk_segment001[0]",
+        "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:district-high[0]/Object3D:district-high-sidewalk[0]/Mesh:sidewalk_segment002[0]",
+        "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:fortress-01[0]/Mesh:bastion-east[0]",
+        "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:fortress-01[0]/Mesh:bastion-west[0]"
+      ],
+      "cameraEqual": true,
+      "canvasEqual": true,
+      "errors": []
+    },
+    "b": {
+      "baselineObjects": 83,
+      "currentObjects": 90,
+      "unchanged": 83,
+      "missing": [],
+      "changed": [],
+      "added": [
+        "/Scene:[0]/Group:city-01[0]/Group:district-high[0]/Group:district-high-cliff-walk[0]",
+        "/Scene:[0]/Group:city-01[0]/Group:district-high[0]/Group:district-high-cliff-walk[0]/Mesh:[0]",
+        "/Scene:[0]/Group:city-01[0]/Group:district-high[0]/Group:district-high-cliff-walk[0]/Mesh:[1]",
+        "/Scene:[0]/Group:city-01[0]/Group:district-high[0]/Group:district-high-cliff-walk[0]/Mesh:[2]",
+        "/Scene:[0]/Group:city-01[0]/Group:district-high[0]/Group:district-high-cliff-walk[0]/Mesh:[3]",
+        "/Scene:[0]/Group:city-01[0]/Group:fortress-01[0]/Mesh:fortress-bastion-west[0]",
+        "/Scene:[0]/Group:city-01[0]/Group:fortress-01[0]/Mesh:fortress-bastion-east[0]"
+      ],
+      "cameraEqual": true,
+      "canvasEqual": true,
+      "errors": []
+    }
+  }
+}

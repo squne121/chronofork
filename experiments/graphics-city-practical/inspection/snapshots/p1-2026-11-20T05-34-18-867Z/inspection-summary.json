@@ -1,0 +1,135 @@
+{
+  "scope": "P1 capture 2026-11-20 14:34 JST. Automated image observations are not human visual evaluation.",
+  "glbSha256BeforeAfter": "6449e22821eff28c156503bab5c91551533058308ad93145f8a619796c068c51",
+  "cameraAndCanvas": {
+    "normal": {
+      "camera": true,
+      "canvas": true
+    },
+    "close": {
+      "camera": true,
+      "canvas": true
+    }
+  },
+  "ids": {
+    "a": [
+      {
+        "id": "fortress-01",
+        "count": 1
+      },
+      {
+        "id": "bridge-01",
+        "count": 1
+      },
+      {
+        "id": "district-west",
+        "count": 1
+      },
+      {
+        "id": "district-east",
+        "count": 1
+      },
+      {
+        "id": "district-high",
+        "count": 1
+      },
+      {
+        "id": "building-west-01",
+        "count": 1
+      },
+      {
+        "id": "building-west-02",
+        "count": 1
+      },
+      {
+        "id": "building-west-03",
+        "count": 1
+      },
+      {
+        "id": "building-east-01",
+        "count": 1
+      },
+      {
+        "id": "building-east-02",
+        "count": 1
+      },
+      {
+        "id": "building-east-03",
+        "count": 1
+      },
+      {
+        "id": "building-high-01",
+        "count": 1
+      },
+      {
+        "id": "building-high-02",
+        "count": 1
+      }
+    ],
+    "b": [
+      {
+        "id": "fortress-01",
+        "count": 1
+      },
+      {
+        "id": "bridge-01",
+        "count": 1
+      },
+      {
+        "id": "district-west",
+        "count": 1
+      },
+      {
+        "id": "district-east",
+        "count": 1
+      },
+      {
+        "id": "district-high",
+        "count": 1
+      },
+      {
+        "id": "building-west-01",
+        "count": 1
+      },
+      {
+        "id": "building-west-02",
+        "count": 1
+      },
+      {
+        "id": "building-west-03",
+        "count": 1
+      },
+      {
+        "id": "building-east-01",
+        "count": 1
+      },
+      {
+        "id": "building-east-02",
+        "count": 1
+      },
+      {
+        "id": "building-east-03",
+        "count": 1
+      },
+      {
+        "id": "building-high-01",
+        "count": 1
+      },
+      {
+        "id": "building-high-02",
+        "count": 1
+      }
+    ]
+  },
+  "observations": [
+    "In normal and close images, two low polygonal bastions beside the gate are visible for each sample.",
+    "Bridge deck and gate are visible without the former cliff-face occlusion, but surface contact and walkability remain unverified.",
+    "High-district sidewalk exists in scene objects; it is small or partly obscured in these fixed views, so full route visibility and connection are pending.",
+    "P0 comparison reports changed UV fingerprint for A building-high-01 body; target-external full preservation is not established."
+  ],
+  "limitations": [
+    "Matching uses object hierarchy and ordinal, ambiguous with duplicate unnamed siblings.",
+    "Geometry fingerprints are noncryptographic, materials omit textures and shaders.",
+    "Hash list was generated after capture and only the A GLB was checked immediately before and after capture."
+  ]
+}

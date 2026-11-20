@@ -1,0 +1,65 @@
+{
+  "baseline": "p2-evidence-after",
+  "current": "p2-independent-2026-11-20T05-46-51-742Z",
+  "limitation": "Hierarchy/occurrence matching can be ambiguous for duplicate or unnamed siblings; changes are reported, not judged. FNV attribute hashes can collide. Material records omit textures/shaders; cannot establish complete equality. Runtime numeric IDs/UUIDs are not stable semantic IDs.",
+  "views": {
+    "a": {
+      "baselineObjects": 93,
+      "currentObjects": 92,
+      "unchanged": 89,
+      "missing": [
+        "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:building-west-01[0]/Mesh:affiliation_plaque[0]"
+      ],
+      "changed": [
+        {
+          "path": "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:district-high[0]/Object3D:district-high-sidewalk[0]/Mesh:sidewalk_segment[0]",
+          "fields": [
+            "geometry"
+          ]
+        },
+        {
+          "path": "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:district-high[0]/Object3D:district-high-sidewalk[0]/Mesh:sidewalk_segment001[0]",
+          "fields": [
+            "geometry"
+          ]
+        },
+        {
+          "path": "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:district-high[0]/Object3D:district-high-sidewalk[0]/Mesh:sidewalk_segment002[0]",
+          "fields": [
+            "geometry"
+          ]
+        }
+      ],
+      "added": [],
+      "cameraEqual": true,
+      "canvasEqual": true,
+      "errors": []
+    },
+    "b": {
+      "baselineObjects": 91,
+      "currentObjects": 90,
+      "unchanged": 88,
+      "missing": [
+        "/Scene:[0]/Group:city-01[0]/Group:building-west-01[0]/Mesh:affiliation plaque[0]"
+      ],
+      "changed": [
+        {
+          "path": "/Scene:[0]/Group:city-01[0]/Group:fortress-01[0]/Mesh:fortress-bastion-west[0]",
+          "fields": [
+            "geometry"
+          ]
+        },
+        {
+          "path": "/Scene:[0]/Group:city-01[0]/Group:fortress-01[0]/Mesh:fortress-bastion-east[0]",
+          "fields": [
+            "geometry"
+          ]
+        }
+      ],
+      "added": [],
+      "cameraEqual": true,
+      "canvasEqual": true,
+      "errors": []
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "baseline": "p2-baseline-2026-11-20T05-42-49-709Z",
+  "current": "p2-fixed-2026-11-20T05-47-57-497Z",
+  "limitation": "Hierarchy/occurrence matching can be ambiguous for duplicate or unnamed siblings; changes are reported, not judged. FNV attribute hashes can collide. Material records omit textures/shaders; cannot establish complete equality. Runtime numeric IDs/UUIDs are not stable semantic IDs.",
+  "views": {
+    "a": {
+      "baselineObjects": 92,
+      "currentObjects": 93,
+      "unchanged": 92,
+      "missing": [],
+      "changed": [],
+      "added": [
+        "/Scene:[0]/Group:city-01[0]/Group:Scene[0]/Object3D:building-west-01[0]/Mesh:affiliation_plaque[0]"
+      ],
+      "cameraEqual": true,
+      "canvasEqual": true,
+      "errors": []
+    },
+    "b": {
+      "baselineObjects": 90,
+      "currentObjects": 91,
+      "unchanged": 88,
+      "missing": [],
+      "changed": [
+        {
+          "path": "/Scene:[0]/Group:city-01[0]/Group:fortress-01[0]/Mesh:fortress-bastion-west[0]",
+          "fields": [
+            "geometry"
+          ]
+        },
+        {
+          "path": "/Scene:[0]/Group:city-01[0]/Group:fortress-01[0]/Mesh:fortress-bastion-east[0]",
+          "fields": [
+            "geometry"
+          ]
+        }
+      ],
+      "added": [
+        "/Scene:[0]/Group:city-01[0]/Group:building-west-01[0]/Mesh:affiliation plaque[0]"
+      ],
+      "cameraEqual": true,
+      "canvasEqual": true,
+      "errors": []
+    }
+  }
+}

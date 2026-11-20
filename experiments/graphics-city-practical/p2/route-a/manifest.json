@@ -1,0 +1,215 @@
+{
+  "city": {
+    "id": "city-01",
+    "moment": "after",
+    "affiliationMarker": {
+      "buildingId": "building-west-01",
+      "affiliation": "river-guild",
+      "color": "#417e88"
+    },
+    "terrain": {
+      "lowY": 0,
+      "highY": 6,
+      "cliffZ": 0
+    },
+    "fortress": {
+      "id": "fortress-01",
+      "center": [
+        0,
+        6,
+        9
+      ],
+      "size": [
+        20,
+        6,
+        12
+      ],
+      "gate": [
+        0,
+        6,
+        3
+      ]
+    },
+    "bridge": {
+      "id": "bridge-01",
+      "start": [
+        0,
+        0,
+        -12
+      ],
+      "end": [
+        0,
+        6,
+        3
+      ],
+      "width": 3
+    },
+    "districts": [
+      {
+        "id": "district-west",
+        "center": [
+          -10,
+          0,
+          -12
+        ],
+        "size": [
+          12,
+          10
+        ],
+        "groundY": 0,
+        "buildingType": "broad"
+      },
+      {
+        "id": "district-east",
+        "center": [
+          10,
+          0,
+          -12
+        ],
+        "size": [
+          12,
+          10
+        ],
+        "groundY": 0,
+        "buildingType": "tall"
+      },
+      {
+        "id": "district-high",
+        "center": [
+          12,
+          6,
+          8
+        ],
+        "size": [
+          8,
+          10
+        ],
+        "groundY": 6,
+        "buildingType": "tall"
+      }
+    ],
+    "buildings": [
+      {
+        "id": "building-west-01",
+        "districtId": "district-west",
+        "position": [
+          -13,
+          0,
+          -14
+        ],
+        "size": [
+          3,
+          2.8,
+          3
+        ],
+        "type": "broad"
+      },
+      {
+        "id": "building-west-02",
+        "districtId": "district-west",
+        "position": [
+          -8,
+          0,
+          -14
+        ],
+        "size": [
+          4,
+          3.3,
+          3
+        ],
+        "type": "broad"
+      },
+      {
+        "id": "building-west-03",
+        "districtId": "district-west",
+        "position": [
+          -11,
+          0,
+          -10
+        ],
+        "size": [
+          4,
+          2.5,
+          3
+        ],
+        "type": "broad"
+      },
+      {
+        "id": "building-east-01",
+        "districtId": "district-east",
+        "position": [
+          7,
+          0,
+          -14
+        ],
+        "size": [
+          2.8,
+          5,
+          3
+        ],
+        "type": "tall"
+      },
+      {
+        "id": "building-east-02",
+        "districtId": "district-east",
+        "position": [
+          12,
+          0,
+          -14
+        ],
+        "size": [
+          3,
+          4.3,
+          3
+        ],
+        "type": "tall"
+      },
+      {
+        "id": "building-east-03",
+        "districtId": "district-east",
+        "position": [
+          10,
+          0,
+          -10
+        ],
+        "size": [
+          3,
+          5.5,
+          3
+        ],
+        "type": "tall"
+      },
+      {
+        "id": "building-high-01",
+        "districtId": "district-high",
+        "position": [
+          12,
+          6,
+          5
+        ],
+        "size": [
+          2.5,
+          4.5,
+          2.5
+        ],
+        "type": "tall"
+      },
+      {
+        "id": "building-high-02",
+        "districtId": "district-high",
+        "position": [
+          12,
+          6,
+          10
+        ],
+        "size": [
+          2.5,
+          4,
+          3
+        ],
+        "type": "tall"
+      }
+    ]
+  },
+  "glbSha256": "4231e4de87d68ddca2fa8c40617efade136e3f74abe524bcaaa487afa415895c"
+}
