@@ -54,6 +54,13 @@ export const MULTI_HOUSE_SUPPLY = Object.freeze({
 
 const sexForYear = (y: number): 'MALE' | 'FEMALE' => (y % 2 === 0 ? 'FEMALE' : 'MALE')
 
+// 成人時の独立した試験名簿で、該当コホートの唯一の構成員（ordinal 0）を確認したという前提。
+// C004の実出生数から成人生存を推定せず、この名簿から禁親や信頼も導かない。
+const TEST_LATER_SURVIVOR_RECORDS: ReadonlyMap<Id, Id> = new Map([
+  ['multi-house:c004:east:1250:female', 'fixture:eldia-east:1268:adult-roll:1250-female-0'],
+  ['multi-house:c004:west:1253:male', 'fixture:eldia-west:1271:adult-roll:1253-male-0'],
+])
+
 function buildCohorts(): SupportingMarriageCohort[] {
   const out: SupportingMarriageCohort[] = []
   for (const g of SUPPLY_GROUPS) {
@@ -79,7 +86,7 @@ function buildCohorts(): SupportingMarriageCohort[] {
         tier: 'REGIONAL_LOWER_NOBILITY', sex, birthYear,
         memberCount: MULTI_HOUSE_SUPPLY.laterMembersPerCohort,
         source: 'C004_COHORT', sourceEvidenceId: `multi-house:c004-birth:${g.key}:${birthYear}`,
-        survivorAttestationId: `multi-house:survivor-census:${g.key}:${birthYear}`,
+        survivorAttestationId: TEST_LATER_SURVIVOR_RECORDS.get(id) ?? `multi-house:survivor-census:${g.key}:${birthYear}`,
         provenance: 'CALIBRATION_ONLY',
       })
     }
@@ -114,19 +121,32 @@ export const MULTI_HOUSE_B009_CALIBRATION = Object.freeze({
 
 /** 個別の架空試験台帳。各行は当該ペアについて別々の系譜調査を行い、
  * 禁親範囲に共通祖先が見つからなかったという試験前提である。実在資料でも世界設定でもない。
- * 家門差・人口出典・性別を証拠として導出せず、この4件以外は未確認のまま扱う。1280年以降の証拠更新は未実装。
+ * 家門差・人口出典・性別を証拠として導出しない。掲載のないペアや期限切れの調査は未確認のまま扱う。
  */
-const TEST_KINSHIP_RECORDS = [
+const TEST_INITIAL_KINSHIP_RECORDS = [
   { personId: 'person-exp-02', cohortId: 'multi-house:initial:west:1232:female', ordinal: 0, record: 'fixture:west-1232-0:pedigree-review-02' },
   { personId: 'person-exp-02', cohortId: 'multi-house:initial:east:1228:female', ordinal: 0, record: 'fixture:east-1228-0:pedigree-review-02' },
   { personId: 'person-exp-03', cohortId: 'multi-house:initial:west:1228:male', ordinal: 0, record: 'fixture:west-1228-0:pedigree-review-03' },
   { personId: 'person-exp-03', cohortId: 'multi-house:initial:east:1232:male', ordinal: 0, record: 'fixture:east-1232-0:pedigree-review-03' },
 ] as const
+const TEST_LATER_KINSHIP_RECORDS = [
+  { personId: 'person-exp-06', cohortId: 'multi-house:c004:east:1250:female', ordinal: 0,
+    record: 'fixture:eldia-east:1268:pedigree-review:06-1250-female-0',
+    countryId: 'country-eldia', checkedYear: 1268, validUntilYear: 1288 },
+  { personId: 'person-exp-03', cohortId: 'multi-house:c004:west:1253:male', ordinal: 0,
+    record: 'fixture:eldia-west:1271:pedigree-review:03-1253-male-0',
+    countryId: 'country-eldia', checkedYear: 1271, validUntilYear: 1291 },
+] as const
+
 function buildClearances(): SupportingKinshipClearance[] {
-  return TEST_KINSHIP_RECORDS.map(r => {
+  const records = [
+    ...TEST_INITIAL_KINSHIP_RECORDS.map(r => ({ ...r, countryId: 'country-eldia', checkedYear: 1250, validUntilYear: 1280 })),
+    ...TEST_LATER_KINSHIP_RECORDS,
+  ]
+  return records.map(r => {
     const ids = [r.personId, supportingCandidateId(r.cohortId, r.ordinal)].sort() as [string, string]
     return { clearanceId: `multi-house:kinship-check:${JSON.stringify(ids)}`, personIds: ids,
-      countryId: 'country-eldia', checkedYear: 1250, validUntilYear: 1280,
+      countryId: r.countryId, checkedYear: r.checkedYear, validUntilYear: r.validUntilYear,
       sourceEvidenceId: r.record, provenance: 'CALIBRATION_ONLY' }
   })
 }
@@ -136,6 +156,8 @@ const MULTI_HOUSE_CANDIDATE_PAIRS: readonly (readonly [Id, Id])[] = Object.freez
   ['person-exp-02', supportingCandidateId('multi-house:initial:east:1228:female', 0)],
   ['person-exp-03', supportingCandidateId('multi-house:initial:west:1228:male', 0)],
   ['person-exp-03', supportingCandidateId('multi-house:initial:east:1232:male', 0)],
+  ['person-exp-06', supportingCandidateId('multi-house:c004:east:1250:female', 0)],
+  ['person-exp-03', supportingCandidateId('multi-house:c004:west:1253:male', 0)],
 ])
 /** 明示した初期関係値は無し。新規ペアの初期値はB-009の校正値(initialTrust+決定的な個体差)で与える。 */
 export const MULTI_HOUSE_TRUST_BASE: readonly PairTrustBase[] = Object.freeze([]) as readonly PairTrustBase[]
@@ -146,6 +168,9 @@ const MULTI_HOUSE_CANDIDATE_TRUST_BASE: readonly PairTrustBase[] = [
   { personIds: MULTI_HOUSE_CANDIDATE_PAIRS[1]!, value: 35 },
   { personIds: MULTI_HOUSE_CANDIDATE_PAIRS[2]!, value: 35 },
   { personIds: MULTI_HOUSE_CANDIDATE_PAIRS[3]!, value: 40 },
+  // 後年候補の試験基準値。既存候補の35と同じ値で、年・乱数seed・証拠の有無に連動しない。
+  { personIds: ['person-exp-06', supportingCandidateId('multi-house:c004:east:1250:female', 0)], value: 35 },
+  { personIds: ['person-exp-03', supportingCandidateId('multi-house:c004:west:1253:male', 0)], value: 35 },
 ]
 
 export const MULTI_HOUSE_SUPPORTING_CLEARANCES: readonly SupportingKinshipClearance[] = Object.freeze(buildClearances())

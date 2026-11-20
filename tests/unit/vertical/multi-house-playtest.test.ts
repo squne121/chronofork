@@ -44,6 +44,63 @@ const cached = (seed: number) => {
   return cache.get(k)!
 }
 
+function observeC004(seed: number, result: Run) {
+  const traces = result.decisionTraces
+  const byYearPair = new Map(traces.flatMap(t => t.actorRef.kind === 'PERSON_PAIR'
+    ? [[JSON.stringify([t.year, pairOf(t.actorRef.ids), t.ruleId]), t] as const] : []))
+  const registrations = result.eventLog.filter(e => e.eventType === 'MARRIAGE_REGISTER')
+    .flatMap(e => (e.supportingMarriageRegistrations ?? []).map(r => ({ event: e, registration: r.registration })))
+  const supplies = traces.filter(t => t.ruleId === 'B-001' && t.status === 'ACCEPT' &&
+    t.candidates[0]?.inputs['supportingCandidateId'])
+  const offers = supplies.map(supply => {
+    const input = supply.candidates[0]!.inputs
+    const pair = pairOf([String(input['seekerPersonId']), String(input['supportingCandidateId'])])
+    const steps = ['B-004', 'B-005', 'A-LEG-01'].map(rule =>
+      byYearPair.get(JSON.stringify([supply.year, pair, rule])))
+    const marriage = registrations.find(r => r.event.year === supply.year &&
+      r.registration.person.personId === input['supportingCandidateId'] &&
+      r.event.involvedRefs.some(ref => ref.kind === 'PERSON_PAIR' && pairOf(ref.ids) === pair))
+    const record = result.snapshots.at(-1)?.legal.marriages.find(m =>
+      m.registeredYear === supply.year && pairOf(m.personIds) === pair)
+    return {
+      year: supply.year, cohort: String(input['cohortId']), seeker: input['seekerPersonId'], candidate: input['supportingCandidateId'],
+      populationSource: input['populationSource'], source: input['sourceEvidenceId'], survivor: input['survivorAttestationId'],
+      supply: supply.traceId, steps: steps.map(t => t ? { trace: t.traceId, status: t.status, reasons: t.reasonCodes } : null),
+      trustSource: steps[0]?.candidates[0]?.inputs['trustSource'],
+      clearanceId: steps[1]?.candidates[0]?.inputs['supportingKinshipClearanceId'],
+      ...(marriage ? { event: marriage.event.eventId, marriage: record?.marriageId, contract: record?.contract } : {}),
+    }
+  })
+  const counts = { initial: 0, c004: 0 }
+  for (const r of registrations) {
+    if (r.registration.birthBacking === 'C004_COHORT') counts.c004++
+    else counts.initial++
+  }
+  const laterOffers = offers.filter(o => o.populationSource === 'C004_COHORT')
+  const byCohort: Record<string, { offered: number; married: number; deferred: Record<string, number> }> = {}
+  for (const offer of offers) {
+    const row = byCohort[offer.cohort] ??= { offered: 0, married: 0, deferred: {} }
+    row.offered++
+    if (offer.event) row.married++
+    const last = offer.steps[2] ?? offer.steps[1] ?? offer.steps[0]
+    if (last?.status === 'DEFER') {
+      const reason = last.reasons.at(-1)!
+      row.deferred[reason] = (row.deferred[reason] ?? 0) + 1
+    }
+  }
+  report('MULTI_HOUSE_C004', { seed, counts, byCohort, offers: laterOffers })
+  for (const offer of laterOffers) {
+    expect(offer.source).not.toBe(offer.survivor)
+    expect(offer.trustSource).toBe('CALIBRATION_ONLY_CANDIDATE_BASE')
+    expect(offer.steps[1]).not.toBeNull()
+    if (offer.event) {
+      expect(offer.steps.map(step => step?.status)).toEqual(['ACCEPT', 'ACCEPT', 'ACCEPT'])
+      expect(offer.contract?.evidenceId).toBe(`evidence:nextgen-agreement:${offer.steps[1]?.trace}`)
+    }
+  }
+  return laterOffers
+}
+
 function observe(seed: number, result: Run, ms: number) {
   const final = result.snapshots.at(-1)!
   const recs = multiHousePersonRecords(final)
@@ -149,9 +206,10 @@ describe('複数家門試遊構成: 初期世界と静的な構成', () => {
     for (const c of MULTI_HOUSE_SUPPORTING_COHORTS) {
       for (let i = 0; i < c.memberCount; i++) cohortOf.set(supportingCandidateId(c.cohortId, i), c)
     }
-    expect(MULTI_HOUSE_SUPPORTING_CLEARANCES).toHaveLength(4)
-    expect(new Set(MULTI_HOUSE_SUPPORTING_CLEARANCES.map(c => c.sourceEvidenceId)).size).toBe(4)
+    expect(MULTI_HOUSE_SUPPORTING_CLEARANCES).toHaveLength(6)
+    expect(new Set(MULTI_HOUSE_SUPPORTING_CLEARANCES.map(c => c.sourceEvidenceId)).size).toBe(6)
     const ids = new Set<string>()
+    const checkedLater: string[] = []
     for (const cl of MULTI_HOUSE_SUPPORTING_CLEARANCES) {
       expect(ids.has(cl.clearanceId)).toBe(false)
       ids.add(cl.clearanceId)
@@ -164,7 +222,14 @@ describe('複数家門試遊構成: 初期世界と静的な構成', () => {
       expect(cl.sourceEvidenceId).not.toBe(cohort.sourceEvidenceId)
       expect(cl.sourceEvidenceId).not.toBe(cohort.survivorAttestationId)
       expect(cl.validUntilYear).toBeGreaterThan(cl.checkedYear)
+      if (cohort.source === 'C004_COHORT') {
+        checkedLater.push(cohort.cohortId)
+        expect(cl.checkedYear).toBe(cohort.birthYear + 18)
+        expect(cl.countryId).toBe('country-eldia')
+        expect(cohort.survivorAttestationId).toContain(`:${cl.checkedYear}:adult-roll:`)
+      }
     }
+    expect(checkedLater).toEqual(['multi-house:c004:east:1250:female', 'multi-house:c004:west:1253:male'])
     // 実出生人物(IDが出生前に不明)を含むペアの証拠は与えない
     expect(MULTI_HOUSE_SUPPORTING_CLEARANCES.some(c => c.personIds.some(x => x.startsWith('person:b002')))).toBe(false)
   })
@@ -176,7 +241,8 @@ describe('複数家門試遊構成: 初期世界と静的な構成', () => {
     expect(id['nextgenContract']).toEqual(MULTI_HOUSE_NEXTGEN_CONTRACT)
     expect(id['trustBase']).toEqual(MULTI_HOUSE_TRUST_BASE)
     expect(id['supporting']).toMatchObject({ cohorts: MULTI_HOUSE_SUPPORTING_COHORTS, ...MULTI_HOUSE_SUPPORTING_LIMITS })
-    expect((id['supporting'] as {candidatePairs: unknown[]}).candidatePairs).toHaveLength(4)
+    expect((id['supporting'] as {candidatePairs: unknown[]}).candidatePairs).toHaveLength(6)
+    expect(id['supportingCandidateTrustBase']).toHaveLength(6)
     expect(id['supportingKinshipClearances']).toEqual(MULTI_HOUSE_SUPPORTING_CLEARANCES)
     expect(id['world']).toEqual(createMultiHouseWorld())
     const trial = createExperimentalOrdinaryLegalTrial()
@@ -221,6 +287,7 @@ describe('主試遊seed 1250〜1350: 世代更新と不変条件（実計算）'
     expect(result.snapshots.at(-1)!.year).toBe(1350)
     const obs = observe(MULTI_HOUSE_SEED, result, ms)
     report('MULTI_HOUSE_OBSERVATION', obs)
+    expect(observeC004(MULTI_HOUSE_SEED, result).length).toBeGreaterThan(0)
     // 世代継続は保証せず、観測値として報告する。
     expect(obs.persons.byOrigin['INITIAL_KEY']).toBe(8)
     expect(obs.persons.byOrigin['POPULATION_SUPPORTING']).toBeGreaterThan(0)
@@ -412,8 +479,10 @@ describe('固定seedの追加観測(成功例を選ばない・少数)', () => {
   for (const seed of MULTI_HOUSE_EXTRA_SEEDS) {
     it(`seed ${seed}: 完走し不変条件を満たす。世代の継続/停止は観測値としてそのまま出力する`, () => {
       const { result, ms } = cached(seed)
-      if (result.snapshots.length) report('MULTI_HOUSE_OBSERVATION', observe(seed, result, ms))
-      else report('MULTI_HOUSE_HALT', result.halt)
+      if (result.snapshots.length) {
+        report('MULTI_HOUSE_OBSERVATION', observe(seed, result, ms))
+        observeC004(seed, result)
+      } else report('MULTI_HOUSE_HALT', result.halt)
       expect(result.status).toBe('COMPLETED')
       for (const snap of result.snapshots) {
         const ids = snap.persons.map(p => p.personId)
