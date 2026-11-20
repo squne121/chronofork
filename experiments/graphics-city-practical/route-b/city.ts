@@ -97,6 +97,20 @@ export async function createCity({ THREE, city }: { THREE: typeof import('three'
     // A cross street makes each settlement read as a connected district.
     box(district, [d.size[0] - 0.4, 0.035, 0.7], [d.center[0], d.groundY + 0.12, d.center[2]], pathMat)
     box(district, [0.7, 0.035, d.size[1] - 0.4], [d.center[0], d.groundY + 0.12, d.center[2]], pathMat)
+    if (d.id === 'district-high') {
+      // Follow the cliff-facing district edge without moving existing buildings.
+      const walkway = group(district, 'district-high-cliff-walk')
+      const edge = d.center[2] - d.size[1] / 2
+      const points = [[-0.08, 0.23], [0.05, 0.43], [0.18, 0.23], [0.31, 0.43], [0.44, 0.23]]
+        .map(([x, z]) => [d.center[0] + x * d.size[0], edge + z])
+      for (let i = 1; i < points.length; i++) {
+        const [x0, z0] = points[i - 1], [x1, z1] = points[i]
+        const dx = x1 - x0, dz = z1 - z0
+        const segment = box(walkway, [Math.hypot(dx, dz) + 0.12, 0.08, 0.34],
+          [(x0 + x1) / 2, d.groundY + 0.14, (z0 + z1) / 2], pathMat)
+        segment.rotation.y = -Math.atan2(dz, dx)
+      }
+    }
   }
   for (const b of city.buildings) {
     const building = group(root, b.id)
@@ -139,6 +153,24 @@ export async function createCity({ THREE, city }: { THREE: typeof import('three'
   box(fort, [gateWidth, 1, 1.3], [fx, fy + 3, front], wallMat)
   box(fort, [5, 4, 4], [fx, fy + 2, fz + 2], wallMat, 'keep')
   box(fort, [5.4, 0.3, 4.4], [fx, fy + 4.15, fz + 2], roofMat)
+  // Low polygonal bastions project from both sides of the gate; the middle
+  // passage and the pre-existing walls, towers and bridge remain untouched.
+  for (const sign of [-1, 1]) {
+    const shape = new THREE.Shape()
+    const outline = [[2.15, 0.35], [2.15, -1], [3.25, -2.1], [5.4, -2.1], [7, -0.9], [7, 0.35]]
+    outline.forEach(([x, z], i) => {
+      if (i === 0) shape.moveTo(sign * x, -z)
+      else shape.lineTo(sign * x, -z)
+    })
+    shape.closePath()
+    const bastion = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 1.5, bevelEnabled: false }), wallMat)
+    bastion.name = sign < 0 ? 'fortress-bastion-west' : 'fortress-bastion-east'
+    bastion.rotation.x = -Math.PI / 2
+    bastion.position.set(f.gate[0], fy, front)
+    bastion.castShadow = true
+    bastion.receiveShadow = true
+    fort.add(bastion)
+  }
 
   const b = city.bridge
   const bridge = group(root, b.id)

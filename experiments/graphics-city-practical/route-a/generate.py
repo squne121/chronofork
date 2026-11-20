@@ -1,8 +1,10 @@
 """Generate the editable Blender source and GLB from the frozen common city input."""
+import base64
 import bpy
 import json
 import math
 import os
+import struct
 from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -158,6 +160,39 @@ for sx in (-1, 1):
         box('tower crown', (x+sx*w/2, y+h+.22, z+sz*d/2), (2.7, .44, 2.7), 'fortress', root, .06)
 box('inner keep', (x, y+2.6, z+2), (5.5, 5.2, 4), 'fortress', root, .12)
 
+# Two low polygonal bastions project from the front wall, clear of the gate.
+gate_z = z-d/2
+for side, label in [(-1, 'west'), (1, 'east')]:
+    outline = [(2.4, 0), (6.7, 0), (7.1, -1.5), (5.8, -2.7), (3.0, -2.7), (2.3, -1.5)]
+    outline = [(x + side*dx, gate_z + dz) for dx, dz in outline]
+    if side < 0:
+        outline.reverse()
+    vertices = [(px, y, pz) for px, pz in outline] + [(px, y+2.4, pz) for px, pz in outline]
+    n = len(outline)
+    faces = [tuple(reversed(range(n))), tuple(range(n, 2*n))]
+    faces += [(i, (i+1)%n, (i+1)%n+n, i+n) for i in range(n)]
+    bastion_mesh = bpy.data.meshes.new('bastion mesh ' + label)
+    bastion_mesh.from_pydata([point(v) for v in vertices], [], faces)
+    bastion_mesh.update()
+    bastion = bpy.data.objects.new('bastion-' + label, bastion_mesh)
+    bpy.context.collection.objects.link(bastion)
+    bastion.parent = root
+    bastion.data.materials.append(mats['fortress'])
+    bevel = bastion.modifiers.new('Bastion edge rounding', 'BEVEL')
+    bevel.width = .08
+    bevel.segments = 2
+
+# A bent sidewalk follows the cliff-facing edge without moving any buildings.
+high = next(d for d in city['districts'] if d['id'] == 'district-high')
+walk = group('district-high-sidewalk')
+walk.parent = bpy.data.objects['district-high']
+hx, hy, hz = high['center']
+edge_z = hz - high['size'][1]/2
+points = [(hx-1.1, hy+.10, edge_z-.45), (hx+2.7, hy+.10, edge_z-.45),
+          (hx+3.45, hy+.10, edge_z+.3), (hx+3.45, hy+.10, edge_z+1.2)]
+for i in range(len(points)-1):
+    beam('sidewalk segment', points[i], points[i+1], .5, .16, 'district', walk)
+
 bridge = city['bridge']
 root = group(bridge['id'])
 a, b = bridge['start'], bridge['end']
@@ -174,4 +209,43 @@ for t in (.30, .60):
 
 bpy.context.preferences.filepaths.save_version = 0
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, 'city.blend'))
-bpy.ops.export_scene.gltf(filepath=os.path.join(HERE, 'city.glb'), export_format='GLB', export_apply=True)
+glb_path = os.path.join(HERE, 'city.glb')
+bpy.ops.export_scene.gltf(filepath=glb_path, export_format='GLB', export_apply=True)
+
+# Blender's evaluated bevel can produce different UV interpolation across runs,
+# even when vertex positions and normals are unchanged. Restore the P0 UVs for
+# existing nodes; new P1 meshes retain the UVs Blender gives them. Fail rather
+# than copying onto an incompatible accessor after a future structural change.
+with open(os.path.join(HERE, 'uv-baseline.json'), encoding='utf-8') as f:
+    baseline_uv = json.load(f)
+with open(glb_path, 'rb') as f:
+    glb = bytearray(f.read())
+json_length, chunk_type = struct.unpack_from('<I4s', glb, 12)
+assert glb[:4] == b'glTF' and chunk_type == b'JSON'
+gltf = json.loads(glb[20:20+json_length])
+bin_header = 20 + json_length
+bin_length, chunk_type = struct.unpack_from('<I4s', glb, bin_header)
+assert chunk_type == b'BIN\x00'
+bin_start = bin_header + 8
+restored = set()
+for node in gltf['nodes']:
+    name = node.get('name')
+    if name not in baseline_uv:
+        continue
+    assert name not in restored and 'mesh' in node
+    primitives = gltf['meshes'][node['mesh']]['primitives']
+    assert len(primitives) == 1
+    accessor = gltf['accessors'][primitives[0]['attributes']['TEXCOORD_0']]
+    view = gltf['bufferViews'][accessor['bufferView']]
+    assert accessor['componentType'] == 5126 and accessor['type'] == 'VEC2'
+    assert 'byteStride' not in view and view.get('buffer', 0) == 0
+    uv = base64.b64decode(baseline_uv[name], validate=True)
+    assert len(uv) == accessor['count'] * 8
+    offset = view.get('byteOffset', 0) + accessor.get('byteOffset', 0)
+    assert offset + len(uv) <= bin_length
+    glb[bin_start+offset:bin_start+offset+len(uv)] = uv
+    restored.add(name)
+assert restored == set(baseline_uv), 'P0 UV nodes missing in regenerated GLB'
+with open(glb_path, 'wb') as f:
+    f.write(glb)
+print('Restored P0 UVs for', len(restored), 'existing nodes')

@@ -3,8 +3,8 @@
 // ./node_modules/.bin/vite --config inspection/vite.config.mjs --configLoader native
 // In another shell, use an existing Playwright installation (no downloads):
 // NODE_PATH=/path/to/existing/node_modules node inspection/capture.mjs http://127.0.0.1:5178/
-// node inspection/analyze.mjs
-// Outputs and the Vite cache stay under inspection/. Capture overwrites prior outputs.
+// Capture creates a timestamped snapshots directory and prints its path.
+// Outputs and the Vite cache stay under inspection/; prior captures are not overwritten.
 // Material fingerprints cover only the recorded fields, not textures or shader code.
 // Fingerprints are non-cryptographic; IDs and matrices must also be compared.
 import { createRequire } from 'node:module'
@@ -16,8 +16,12 @@ const require = createRequire(import.meta.url)
 const { chromium } = require('playwright')
 const here = dirname(fileURLToPath(import.meta.url))
 const url = process.argv[2] || 'http://127.0.0.1:5173/'
-const output = join(here, 'output')
-await mkdir(output, { recursive: true })
+const label = process.argv[3] || 'capture'
+if (!/^[a-z0-9-]+$/i.test(label)) throw new Error('Snapshot label must contain only letters, digits and hyphens')
+await mkdir(join(here, 'snapshots'), { recursive: true })
+const output = join(here, 'snapshots', `${label}-${new Date().toISOString().replace(/[:.]/g, '-')}`)
+await mkdir(output, { recursive: false })
+console.log(`Output: ${output}`)
 const browser = await chromium.launch({ headless: true })
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 })
