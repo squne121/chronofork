@@ -1,0 +1,6 @@
+1cff9134a423db0a51cf1f2e6d7fe4ca58bd5d9ee26926f9710bf434db8d07fd  /home/squne/projects/chronofork-wt-city-140/experiments/graphics-city-practical/p2/inspection/snapshots/p2-baseline-2026-11-20T05-42-49-709Z/normal.png
+0edc534687e20af81616a9937c38078428240095919d88a049ca33731696e224  /home/squne/projects/chronofork-wt-city-140/experiments/graphics-city-practical/p2/inspection/snapshots/p2-baseline-2026-11-20T05-42-49-709Z/close.png
+c84e955a0da0e55479af9ac928f767a350a56740b68d8ec6b029ae144a0fb30c  /home/squne/projects/chronofork-wt-city-140/experiments/graphics-city-practical/p2/inspection/snapshots/p2-after-2026-11-20T05-43-36-080Z/normal.png
+0edc534687e20af81616a9937c38078428240095919d88a049ca33731696e224  /home/squne/projects/chronofork-wt-city-140/experiments/graphics-city-practical/p2/inspection/snapshots/p2-after-2026-11-20T05-43-36-080Z/close.png
+c84e955a0da0e55479af9ac928f767a350a56740b68d8ec6b029ae144a0fb30c  /home/squne/projects/chronofork-wt-city-140/experiments/graphics-city-practical/inspection/snapshots/p2-root-independent-2026-11-20T05-47-46-852Z/normal.png
+0edc534687e20af81616a9937c38078428240095919d88a049ca33731696e224  /home/squne/projects/chronofork-wt-city-140/experiments/graphics-city-practical/inspection/snapshots/p2-root-independent-2026-11-20T05-47-46-852Z/close.png

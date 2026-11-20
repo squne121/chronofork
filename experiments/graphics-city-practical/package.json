@@ -2,7 +2,7 @@
   "name": "chronofork-city-pipeline-experiment",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite --host 127.0.0.1", "build": "vite build --outDir dist" },
+  "scripts": { "dev": "vite --host 127.0.0.1", "build": "vite build --outDir build/node_modules/.cache/city-dist" },
   "dependencies": { "three": "0.182.0" },
   "devDependencies": { "@playwright/test": "1.64.1", "@types/three": "0.182.0", "typescript": "5.9.3", "vite": "7.3.1" }
 }
