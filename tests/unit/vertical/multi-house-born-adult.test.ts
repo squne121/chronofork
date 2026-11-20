@@ -411,7 +411,7 @@ describe('担当B 3B: 実B-002出生者の成人婚姻と次世代', () => {
     expect(findPair(unauthorized.traces, 'B-005', pair)?.status).toBe('ACCEPT')
     const response = findPair(unauthorized.traces, 'A-LEG-01', pair)
     expect(response?.status).toBe('DEFER')
-    expect(response?.reasonCodes).toContain('PERSON_UNAVAILABLE') // Aが授権なしで候補ビューを登録審査へ渡さない。
+    expect(response?.reasonCodes).toContain('AUTHORITY_RECORD_MISSING')
     expect(reviewOrdinaryAuthority(adult, withoutMarriageAuthority, trial.laws, {
       action: 'NORMAL_MARRIAGE', sovereignCountryId: countryId, issuerRef: { kind: 'COUNTRY', id: countryId }, year: adult.year,
     })).toMatchObject({ status: 'PENDING', reasonCodes: ['AUTHORITY_RECORD_MISSING'] })

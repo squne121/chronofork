@@ -23,7 +23,9 @@ describe('成立時の補助人物と婚姻の原子的登録', () => {
     const r = run(w, o, newTx('main', 1270))
     expect(r.status).toBe('APPLIED')
     expect(r.world.persons).toContainEqual(c.supportingPerson!.person)
-    expect(r.world.legal.marriages).toContainEqual(c.marriage)
+    expect(r.world.legal.marriages).toContainEqual({ ...c.marriage, supportingPopulationEvidenceIds: [
+      c.supportingPerson!.sourceEvidenceId, c.supportingPerson!.survivorAttestationId,
+    ] })
     expect(r.world.groups).toEqual(w.groups)
     expect(r.world.demographics).toEqual(w.demographics)
     expect(r.applied).toHaveLength(1)

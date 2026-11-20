@@ -12,9 +12,9 @@ import type { B004Calibration } from './b004-candidate.ts'
 import { createB004CalibrationEvaluator } from './b004-candidate.ts'
 
 const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0
-const supportingResolvers = new WeakMap<RuleEvaluator, SupportingCandidateResolver>()
-export const b004SupportingResolver = (evaluator: RuleEvaluator | undefined) =>
-  evaluator && supportingResolvers.get(evaluator)
+const worldStateEvaluators = new WeakMap<RuleEvaluator, Readonly<{resolve:SupportingCandidateResolver|undefined; minAdultAge:number}>>()
+export const b004WorldStateEvidence = (evaluator: RuleEvaluator | undefined) =>
+  evaluator && worldStateEvaluators.get(evaluator)
 
 /** 人物の存在・年齢・婚姻状態から毎年候補を導出。超過は黙って捨てず停止する。 */
 export function createB004WorldStateEvaluator(
@@ -42,8 +42,13 @@ export function createB004WorldStateEvaluator(
       ])
     }
     const supplied=resolveSupporting?.(world,ctx)??[]
-    if(n+supplied.length>match.maxCandidatePairs)throw new EvaluationFailure('縁談候補が校正予算を超過しました',[
-      {code:'PAIR_BUDGET_EXCEEDED',message:String(n+supplied.length)},
+    const eligible=supplied.filter(s=>{
+      const seeker=adults.find(p=>p.personId===s.seekerId)
+      return seeker!==undefined&&seeker.interactionRole!=='SUPPORTING'&&seeker.sex!==s.person.sex&&
+        s.person.alive&&ctx.year-s.person.birthYear>=match.minAdultAge&&!married.has(s.person.personId)
+    })
+    if(n+eligible.length>match.maxCandidatePairs)throw new EvaluationFailure('縁談候補が校正予算を超過しました',[
+      {code:'PAIR_BUDGET_EXCEEDED',message:String(n+eligible.length)},
     ])
     const pairs: [Id,Id][]=[]
     for(const a of men)for(const b of women){
@@ -67,11 +72,6 @@ export function createB004WorldStateEvaluator(
     const ev=createB004CalibrationEvaluator({pairs,view:activeView,calibration})
     if(!ev.ok)throw new EvaluationFailure('B004候補評価器を生成できません',ev.issues.map(i=>({code:i.code,message:i.message})))
     const out=ev.evaluator(world,ctx)
-    const eligible=supplied.filter(s=>{
-      const seeker=adults.find(p=>p.personId===s.seekerId)
-      return seeker!==undefined&&seeker.interactionRole!=='SUPPORTING'&&seeker.sex!==s.person.sex&&
-        s.person.alive&&ctx.year-s.person.birthYear>=match.minAdultAge&&!married.has(s.person.personId)
-    })
     const candidatePairs=eligible.map(s=>normalizePersonPair(s.seekerId,s.person.personId)).filter(p=>p!==null)
     const keys=new Set(candidatePairs.map(pairKey))
     const known=new Set([...world.persons.map(p=>p.personId),...eligible.map(s=>s.person.personId)])
@@ -97,6 +97,6 @@ export function createB004WorldStateEvaluator(
       })),
     }
   }
-  if (resolveSupporting) supportingResolvers.set(evaluator, resolveSupporting)
+  worldStateEvaluators.set(evaluator, {resolve:resolveSupporting,minAdultAge:match.minAdultAge})
   return evaluator
 }

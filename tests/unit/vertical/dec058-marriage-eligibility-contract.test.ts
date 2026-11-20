@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createExperimentalWorld, createExperimentalOrdinaryLegalTrial, NALVEN_DYNASTY_ID } from '../../../src/scenario/experimental/index.ts'
 import type { Person, WorldState } from '../../../src/simulation/contracts/index.ts'
 import { reviewDomesticMarriageEligibility } from '../../../src/simulation/legal/nextgen-marriage.ts'
-import { reviewSupportingKinshipClearance } from '../../../src/simulation/legal/supporting-kinship-clearance.ts'
+import { reviewSupportingKinshipClearance, validateSupportingKinshipClearances } from '../../../src/simulation/legal/supporting-kinship-clearance.ts'
 import {
   chooseNextgenContract, negotiatedMarriageContract, EXPERIMENTAL_NEXTGEN_CONTRACT,
 } from '../../../src/simulation/legal/nextgen-contract.ts'
@@ -96,6 +96,10 @@ describe('DEC-058 / 国内次世代の婚姻適格性・双方向契約選択',(
       checkedYear:1250,validUntilYear:1251,sourceEvidenceId:'source',provenance:'CALIBRATION_ONLY' as const}]
     expect(reviewSupportingKinshipClearance(world,pair,'country-eldia',1250,evidence,[candidate]))
       .toEqual(reviewSupportingKinshipClearance(registered,pair,'country-eldia',1250,evidence))
+    const blank=[{...evidence[0]!,sourceEvidenceId:' \t '}]
+    expect(validateSupportingKinshipClearances(blank)).toEqual(['SUPPORTING_CLEARANCE_INVALID:0'])
+    expect(reviewSupportingKinshipClearance(world,pair,'country-eldia',1250,blank,[candidate]))
+      .toMatchObject({status:'DEFER',reasonCode:'SUPPORTING_KINSHIP_CLEARANCE_MISSING'})
     expect(reviewSupportingKinshipClearance(world,pair,'country-eldia',1250,[]))
       .toMatchObject({status:'DEFER',reasonCode:'PERSON_UNKNOWN'})
     expect(world.persons.some(p=>p.personId===candidate.personId)).toBe(false)

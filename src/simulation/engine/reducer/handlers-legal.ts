@@ -21,6 +21,9 @@ const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length 
 
 export const marriageRegister: Handler<MarriageRegisterCommand> = (d, c) => {
   const m = c.marriage
+  if (m.supportingPopulationEvidenceIds !== undefined) {
+    return fail('INVALID_COMMAND', '人口出典は成立時の補助人物登録からのみ確定します')
+  }
   if (c.supportingPerson !== undefined) {
     if (!m.personIds.includes(c.supportingPerson.person.personId)) {
       return fail('INVALID_COMMAND', '補助人物は婚姻の当事者でなければなりません')
@@ -41,7 +44,10 @@ export const marriageRegister: Handler<MarriageRegisterCommand> = (d, c) => {
     const active = w.legal.marriages.find((x) => x.status === 'ACTIVE' && x.personIds.includes(id))
     if (active) return fail('PERSON_ALREADY_MARRIED', `人物 ${id} は有効な婚姻 ${active.marriageId} があります`, [id, active.marriageId])
   }
-  d.world = { ...w, legal: { ...w.legal, marriages: [...w.legal.marriages, m] } }
+  const registration = c.supportingPerson
+  const recorded = registration ? { ...m, supportingPopulationEvidenceIds: [registration.sourceEvidenceId,
+    ...(registration.survivorAttestationId === undefined ? [] : [registration.survivorAttestationId])] } : m
+  d.world = { ...w, legal: { ...w.legal, marriages: [...w.legal.marriages, recorded] } }
   return null
 }
 

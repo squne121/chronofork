@@ -80,8 +80,8 @@ export const personPromote: Handler<PersonPromotionCommand> = (d, c) => {
 
 
 /**
- * DEC-061: B-001専用の非操作補助人物記録。既存の重要人物昇格とは異なるSourceとCommandを使う。
- * 候補が法的婚姻可能であるとの証明ではなく、人口集団に含まれる匿名者を少数だけ追跡可能にする。
+ * DEC-061: MARRIAGE_REGISTERの原子的適用に含まれる補助人物記録。
+ * 人口集団の内訳を個別化する処理で、禁親や法的資格はここでは証明しない。
  */
 export const personSupportingRecord: Handler<SupportingPersonRegistration> = (d, c) => {
   const w = d.world
@@ -105,7 +105,7 @@ export const personSupportingRecord: Handler<SupportingPersonRegistration> = (d,
     if(p.birthYear>=1250)
       return fail('LEGAL_BASIS_MISSING','初期人口コホートの出生年が不正です')
   }else if(c.birthBacking==='C004_COHORT'){
-    if(!nonEmpty(c.survivorAttestationId)||c.survivorAttestationId===c.sourceEvidenceId)
+    if(!nonEmpty(c.survivorAttestationId)||c.survivorAttestationId.trim()===c.sourceEvidenceId.trim())
       return fail('LEGAL_BASIS_MISSING','過去年出生集団の成人生存に独立した試験用出典がありません')
     const record=w.demographics.anonymousBirthHistory?.find(
       s=>s.groupId===p.originGroupId&&s.year===p.birthYear)

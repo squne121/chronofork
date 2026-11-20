@@ -30,9 +30,12 @@ describe('当年・当枝の抽象婚姻候補ビュー', () => {
   })
   it('候補予算超過を切り捨てず診断する', () => {
     const world = createExperimentalWorld()
-    const result = createSupportingMarriageCandidateView(world,
-      {branchId:'a',year:world.year,seekerId:'person-exp-02'},[cohort],{...options,maxCandidates:3}).result
-    expect(result).toEqual({status:'DEFER',candidates:[],reasonCodes:['SUPPORTING_CANDIDATE_BUDGET_EXCEEDED']})
+    const scope = {branchId:'a',year:world.year,seekerId:'person-exp-02'}
+    const full = createSupportingMarriageCandidateView(world,scope,[cohort],{...options,maxCandidates:4}).result
+    const result = createSupportingMarriageCandidateView(world,scope,[cohort],{...options,maxCandidates:3}).result
+    expect(full.candidates).toHaveLength(4)
+    expect(result).toEqual({status:'DEFER',candidates:[],reasonCodes:['SUPPORTING_CANDIDATE_BUDGET_EXCEEDED'],
+      budgetOmittedCandidateIds:full.candidates.map(c=>c.candidateId).sort()})
   })
   it('登録予算を消費せず複数探索者に同じ候補を提示する', () => {
     const world = createExperimentalWorld()

@@ -103,17 +103,22 @@ export function checkCommandAuthority(
       (s.sourceRuleId !== 'A-TIT-07' || s.phase !== 4)) {
     return reject('WRITE_OWNER_VIOLATION', '死亡統治者の未確定化はA-TIT-07のPhase4でのみ実行できます')
   }
-  if (c.type === 'MARRIAGE_REGISTER' && c.supportingPerson !== undefined && s.sourceRuleId !== 'A-LEG-01') {
-    return reject('WRITE_OWNER_VIOLATION', '成立時の補助人物を伴う婚姻登録はA-LEG-01のみが実行できます')
+  if (c.type === 'MARRIAGE_REGISTER' && s.sourceRuleId !== 'A-LEG-01') {
+    return reject('WRITE_OWNER_VIOLATION', '婚姻登録はA-LEG-01のみが実行できます')
   }
   if (c.type === 'MARRIAGE_DISSOLVE' && s.sourceRuleId !== 'A-LEG-01') {
     return reject('WRITE_OWNER_VIOLATION', '婚姻終了はA-LEG-01のみが確定します')
   }
-  if (c.type === 'PERSON_SUPPORTING_RECORD' && s.sourceRuleId !== 'B-001') {
-    return reject('WRITE_OWNER_VIOLATION', 'SUPPORTING人物記録はB-001だけが実行できます')
+  if (c.type === 'PERSON_SUPPORTING_RECORD') {
+    return reject('WRITE_OWNER_VIOLATION', '人口由来の補助人物を単独では登録できません')
   }
   if (c.type === 'PERSON_PROMOTE' && s.sourceRuleId !== 'B-001') {
     return reject('WRITE_OWNER_VIOLATION', '昇格によるPerson登録はB-001だけが実行できます')
+  }
+  if ((c.type === 'PERSON_PROMOTE' && c.person?.interactionRole === 'SUPPORTING') ||
+      ((c.type === 'PERSON_PROMOTE' || c.type === 'PERSON_BIRTH') &&
+        typeof c.person?.personId === 'string' && c.person.personId.startsWith('support:population:'))) {
+    return reject('WRITE_OWNER_VIOLATION', '人口候補を昇格や出生として登録できません')
   }
   if (c.type === 'PERSON_PAIR_TRUST_SET' && s.sourceRuleId !== 'B-009') {
     return reject('WRITE_OWNER_VIOLATION', 'PERSON_PAIR_TRUST_SETはB-009以外では発行できません')

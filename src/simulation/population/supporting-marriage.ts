@@ -47,6 +47,8 @@ export type SupportingMarriageSupplyOptions=Readonly<{
   /** 試験用候補短縮。婚姻は確定しない。 */
   maxCandidates:number
   perCohortSamples:number
+  /** 明示の探索対象または証拠台帳に現れる候補だけを調べる。標本上限超過は切り捨てず診断する。 */
+  boundedCandidateIds?:ReadonlySet<Id>
   maximumPreviewAge:number
   /** 既に個別化された候補または他の婚姻へ使用済みの候補ID。 */
   usedCandidateIds?:ReadonlySet<Id>
@@ -56,7 +58,7 @@ export type SupportingMarriageSupplyOptions=Readonly<{
 }>
 export type SupportingMarriageSupplyResult=
  | Readonly<{status:'PROPOSED';candidates:readonly SupportingMarriageCandidate[];reasonCodes:readonly string[]}>
- | Readonly<{status:'DEFER';candidates:readonly [];reasonCodes:readonly string[]}>
+ | Readonly<{status:'DEFER';candidates:readonly [];reasonCodes:readonly string[]; budgetOmittedCandidateIds?:readonly Id[]}>
 
 /** 一回の評価に限定された読取専用ビュー。枝はスコープであり候補IDや乱数キーには混ぜない。 */
 export type SupportingMarriageCandidateView = Readonly<{
@@ -76,7 +78,7 @@ export function createSupportingMarriageCandidateView(
   return {...scope, result:proposeSupportingMarriageCandidates(world,scope.seekerId,cohorts,options)}
 }
 
-const present=(v:unknown):v is string=>typeof v==='string'&&v.length>0
+const present=(v:unknown):v is string=>typeof v==='string'&&v.trim().length>0
 const integer=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v)
 const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0
 
@@ -130,7 +132,8 @@ export function validateSupportingMarriageCohorts(
     }else{
       if(c.birthYear<START_YEAR||c.birthYear>=world.year)
         issues.push('C004_COHORT_YEAR_INVALID:'+i)
-      if(!present(c.survivorAttestationId)||c.survivorAttestationId===c.sourceEvidenceId)
+      if(!present(c.survivorAttestationId)||
+        (present(c.sourceEvidenceId)&&c.survivorAttestationId.trim()===c.sourceEvidenceId.trim()))
         issues.push('C004_SURVIVOR_ATTESTATION_MISSING:'+i)
       const record=world.demographics.anonymousBirthHistory?.find(
         s=>s.groupId===c.groupId&&s.year===c.birthYear)
@@ -183,6 +186,7 @@ export function proposeSupportingMarriageCandidates(
   const house=world.houses.find(h=>h.houseId===seeker.houseId)
   if(!house?.countryId)return{status:'DEFER',candidates:[],reasonCodes:['SEEKER_JURISDICTION_UNVERIFIED']}
   const possible:{candidate:SupportingMarriageCandidate;rank:number}[]=[]
+  let perCohortOverflow=false
   for(const pool of cohorts){
     const h=world.houses.find(x=>x.houseId===pool.affiliationHouseId)
     if(!h||h.countryId!==house.countryId||pool.sex===seeker.sex)continue
@@ -196,9 +200,20 @@ export function proposeSupportingMarriageCandidates(
       stream:'ENDOGENOUS',year:world.year,phase:3,ruleId:'B-001',
       actorId:seekerId,targetId:pool.cohortId,eventKey:'SUPPORTING_CANDIDATE_START',
     })*pool.memberCount)
+    const prefix='support:population:'
+    const bounded=options.boundedCandidateIds&&[...options.boundedCandidateIds].flatMap(id=>{
+      if(!id.startsWith(prefix))return []
+      try{
+        const v:unknown=JSON.parse(id.slice(prefix.length))
+        if(Array.isArray(v)&&v[0]===pool.cohortId&&integer(v[1])&&v[1]>=0&&v[1]<pool.memberCount&&
+          id===supportingCandidateId(pool.cohortId,v[1]))return [v[1]]
+      }catch{ /* 人口候補の安定IDではない。 */ }
+      return []
+    })
+    const slots=bounded?.length??pool.memberCount
     let selected=0
-    for(let i=0;i<pool.memberCount&&selected<samples;i++){
-      const slot=(start+i)%pool.memberCount
+    for(let i=0;i<slots&&(selected<samples||bounded!==undefined);i++){
+      const slot=bounded?.[i]??(start+i)%pool.memberCount
       const id=supportingCandidateId(pool.cohortId,slot)
       if(options.usedCandidateIds?.has(id)||world.persons.some(p=>p.personId===id))continue
       const candidate:SupportingMarriageCandidate={
@@ -211,6 +226,7 @@ export function proposeSupportingMarriageCandidates(
       }
       if(options.candidateFilter&&!options.candidateFilter(candidate))continue
       selected++
+      if(selected>samples)perCohortOverflow=true
       const rank=drawRandom(options.seed,{
         stream:'ENDOGENOUS',year:world.year,phase:3,ruleId:'B-001',
         actorId:seekerId,targetId:id,eventKey:'SUPPORTING_OFFER_RANK',
@@ -220,8 +236,9 @@ export function proposeSupportingMarriageCandidates(
   }
   possible.sort((a,b)=>a.rank-b.rank||cmp(a.candidate.candidateId,b.candidate.candidateId))
   if(possible.length===0)return {status:'DEFER',candidates:[],reasonCodes:['NO_COHORT_CANDIDATE_AVAILABLE']}
-  if(possible.length>options.maxCandidates)
-    return {status:'DEFER',candidates:[],reasonCodes:['SUPPORTING_CANDIDATE_BUDGET_EXCEEDED']}
+  if(perCohortOverflow||possible.length>options.maxCandidates)
+    return {status:'DEFER',candidates:[],reasonCodes:['SUPPORTING_CANDIDATE_BUDGET_EXCEEDED'],
+      budgetOmittedCandidateIds:possible.map(x=>x.candidate.candidateId).sort(cmp)}
   return{status:'PROPOSED',candidates:possible.map(x=>x.candidate),
     reasonCodes:['POPULATION_COHORT_OFFERS_ONLY','LEGAL_KINSHIP_REVIEW_REQUIRED']}
 }

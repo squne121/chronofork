@@ -2,7 +2,7 @@
 // すべて CALIBRATION_ONLY。史実・正式世界設定・Goal・婚姻/出生/死亡/相続の成立を固定しない。
 // 婚姻・出生・死亡・王朝所属・相続は既存B-001/002/003/004/005/009・A-LEG-01・A-DYN-02・A-SUC/A-TITの
 // 毎年のWorldState評価に任せ、特定の年・人物へ予約しない。既存 integrated-run.ts は変更しない。
-import type { Id, PairTrustBase, StatModifier, WorldState } from '../../simulation/contracts/index.ts'
+import type { EventLogEntry, Id, PairTrustBase, StatModifier, SupportingPersonRegistration, WorldState } from '../../simulation/contracts/index.ts'
 import { createAutonomousCalibrationEvaluators } from '../../simulation/autonomy/index.ts'
 import type { AutonomyCalibration } from '../../simulation/autonomy/index.ts'
 import type { EvaluatorMap } from '../../simulation/engine/index.ts'
@@ -271,32 +271,44 @@ export type MultiHousePersonRecord = Readonly<{
   legalDynasty: WorldState['persons'][number]['legalDynasty']
   fatherId: Id | null
   motherId: Id | null
-  /** SUPPORTINGのみ: 人口コホートと出典(C004出生出典・生存確認・初期台帳は別ID)。 */
+  /** 確定婚姻Eventに記録された人口出典。構成上のコホート定義で補完しない。 */
   population: Readonly<{ cohortId: Id; memberOrdinal: number; birthBacking: 'INITIAL_POPULATION' | 'C004_COHORT'
     sourceEvidenceId: Id; survivorAttestationId: Id | null; familyPoolId: Id }> | null
 }>
 
 const INITIAL_KEY_IDS: ReadonlySet<Id> = new Set(createExperimentalWorld().persons.map(p => p.personId))
 
-/** WorldStateの人物を、stable ID・家門・法的王朝・親子・出身集団・出典つきの事実データへ整理する(表示名は含めない)。 */
-export function multiHousePersonRecords(world: WorldState): readonly MultiHousePersonRecord[] {
-  const cohortOf = new Map<Id, SupportingMarriageCohort>()
-  for (const c of MULTI_HOUSE_SUPPORTING_COHORTS) {
-    for (let i = 0; i < c.memberCount; i++) cohortOf.set(supportingCandidateId(c.cohortId, i), c)
+/** 同じ履歴の確定EventLogがある場合だけ、実登録された人口出典を表示する。 */
+export function multiHousePersonRecords(world: WorldState, events: readonly EventLogEntry[] = []): readonly MultiHousePersonRecord[] {
+  const marriages = new Map(world.legal.marriages.map(m => [m.marriageId, m]))
+  const registered = new Map<Id, SupportingPersonRegistration | null>()
+  for (const event of events) {
+    if (event.eventType !== 'MARRIAGE_REGISTER' || event.year > world.year) continue
+    for (const row of event.supportingMarriageRegistrations ?? []) {
+      const r = row.registration
+      const id = r.person.personId
+      const marriage = marriages.get(row.marriageId)
+      if (marriage?.registeredYear !== event.year || !marriage.personIds.includes(id) ||
+        !event.sourceTraceIds.includes(row.sourceTraceId) ||
+        id !== supportingCandidateId(r.cohortId, r.memberOrdinal)) continue
+      registered.set(id, registered.has(id) ? null : r)
+    }
   }
   return world.persons.map((p): MultiHousePersonRecord => {
-    const cohort = cohortOf.get(p.personId)
+    const r = registered.get(p.personId)
+    const registration = r && p.interactionRole === 'SUPPORTING' && r.person.sex === p.sex &&
+      r.person.birthYear === p.birthYear && r.person.originGroupId === p.originGroupId ? r : null
     const origin: MultiHousePersonOrigin = INITIAL_KEY_IDS.has(p.personId) ? 'INITIAL_KEY'
-      : cohort && p.interactionRole === 'SUPPORTING' ? 'POPULATION_SUPPORTING'
-        : p.fatherId !== undefined || p.motherId !== undefined ? 'AUTONOMOUS_BIRTH' : 'OTHER'
+      : registration ? 'POPULATION_SUPPORTING'
+        : p.interactionRole !== 'SUPPORTING' && (p.fatherId !== undefined || p.motherId !== undefined) ? 'AUTONOMOUS_BIRTH' : 'OTHER'
     return {
       personId: p.personId, origin, sex: p.sex, birthYear: p.birthYear, alive: p.alive,
       houseId: p.houseId, originGroupId: p.originGroupId, legalDynasty: p.legalDynasty,
       fatherId: p.fatherId ?? null, motherId: p.motherId ?? null,
-      population: origin === 'POPULATION_SUPPORTING' && cohort ? {
-        cohortId: cohort.cohortId, memberOrdinal: Number(JSON.parse(p.personId.slice('support:population:'.length))[1]),
-        birthBacking: cohort.source, sourceEvidenceId: cohort.sourceEvidenceId,
-        survivorAttestationId: cohort.survivorAttestationId ?? null, familyPoolId: cohort.familyPoolId,
+      population: origin === 'POPULATION_SUPPORTING' && registration ? {
+        cohortId: registration.cohortId, memberOrdinal: registration.memberOrdinal,
+        birthBacking: registration.birthBacking, sourceEvidenceId: registration.sourceEvidenceId,
+        survivorAttestationId: registration.survivorAttestationId ?? null, familyPoolId: registration.familyPoolId,
       } : null,
     }
   })

@@ -12,15 +12,15 @@ import { reviewDomesticMarriageEligibility } from '../../legal/nextgen-marriage.
 import { reviewSupportingKinshipClearance,supportingClearanceKey,validateSupportingKinshipClearances }
   from '../../legal/supporting-kinship-clearance.ts'
 import type { SupportingKinshipClearance } from '../../legal/supporting-kinship-clearance.ts'
-import { supportingPopulationEvidenceIds, inspectSupportingCandidateSupply } from '../../autonomy/supporting-candidate-view.ts'
+import { supportingPopulationEvidenceIds, inspectSupportingCandidateSupply, supportingRankingBlock } from '../../autonomy/supporting-candidate-view.ts'
 import type { SupportingCandidateResolver } from '../../autonomy/supporting-candidate-view.ts'
 import { B004_CALIBRATION_REASON } from './b004-candidate.ts'
 
-export const B005_NEXTGEN_VERSION='b005-bilateral-family-contract-2:CALIBRATION_ONLY'
+export const B005_NEXTGEN_VERSION='b005-bilateral-family-contract-3:CALIBRATION_ONLY'
 type Query=Extract<CrossDomainRequest,{kind:'LEGAL_MARRIAGE_QUERY'}>
 type Candidate=Readonly<{trace:DecisionTrace;pair:readonly [Id,Id];score:number|null}>
 const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0
-const supportingEvidence = new WeakMap<RuleEvaluator, Readonly<{resolve: SupportingCandidateResolver; clearanceKey: string}>>()
+const supportingEvidence = new WeakMap<RuleEvaluator, Readonly<{resolve: SupportingCandidateResolver | undefined; clearanceKey: (year:number,pairs:ReadonlyMap<string,string>)=>string}>>()
 export const b005SupportingEvidence = (evaluator: RuleEvaluator | undefined) =>
   evaluator && supportingEvidence.get(evaluator)
 export function createB005NextgenEvaluator(
@@ -39,7 +39,8 @@ export function createB005NextgenEvaluator(
     if(ctx.ruleId!=='B-005'||ctx.phase!==3||ctx.year!==world.year)
       throw new EvaluationFailure('B-005次世代交渉の年/RuleID/Phase不一致',[
         {code:'RULE_MISMATCH',message:'B-005 Phase3'}])
-    const {candidates:supplied,rankingBlock}=inspectSupportingCandidateSupply(resolveSupporting,world,ctx)
+    const supply=inspectSupportingCandidateSupply(resolveSupporting,world,ctx)
+    const {candidates:supplied}=supply
     const candidatesFor=(pair:readonly [Id,Id])=>supplied.filter(c=>
       pair.includes(c.person.personId)&&pair.includes(c.seekerId))
     const personsFor=(pair:readonly [Id,Id])=>candidatesFor(pair).map(c=>c.person)
@@ -73,14 +74,12 @@ export function createB005NextgenEvaluator(
         return {trace,pair,score:validSelection&&typeof score==='number'&&Number.isSafeInteger(score)?score:null}
       })
       .sort((a,b)=>cmp(pairKey(a.pair),pairKey(b.pair)))
-    // 未登録候補も競う当事者だけ、相互信頼に加えて各自の家門支持・継承利害を比較する。
-    // 登録済み人物だけの既存経路は同じ順位を保つ。本当に同順位ならIDでは解消しない。
+    // 全ペアで同じ比較を行う。家門支持・継承利害は信頼スコアが等しいときだけ使い、IDで同順位を解消しない。
     const eligible=matches.filter(c=>c.trace.status==='ACCEPT'&&c.trace.reasonCodes.includes(B004_CALIBRATION_REASON)&&
       c.score!==null&&evidence(c.pair)?.status==='CLEARED')
-    const mixedActors=new Set(eligible.filter(c=>personsFor(c.pair).length>0).flatMap(c=>[...c.pair]))
     const people=new Map([...world.persons,...supplied.map(c=>c.person)].map(p=>[p.personId,p]))
-    const interests=(pair:readonly [Id,Id])=>pair.map((id,i)=>mixedActors.has(id)
-      ?partnerHouseInterest(world,people.get(id)!,people.get(pair[1-i]!)!,fixedCalibration):0)
+    const interests=(pair:readonly [Id,Id])=>pair.map((id,i)=>
+      partnerHouseInterest(world,people.get(id)!,people.get(pair[1-i]!)!,fixedCalibration))
     const rankings=new Map<Id,Readonly<{score:number;interest:number;keys:readonly string[]}>>()
     for(const c of eligible){
       const score=c.score!
@@ -100,6 +99,7 @@ export function createB005NextgenEvaluator(
       const eligibility=reviewDomesticMarriageEligibility(world,pair,candidatePersons)
       const clearance=evidence(pair)
       const rankInterests=clearance?.status==='CLEARED'?interests(pair):[]
+      const rankingBlock=supportingRankingBlock(supply,pair)
       const unique=rankingBlock===null&&score!==null&&pair.every(id=>{
         const r=rankings.get(id)
         return r!==undefined&&r.score===score&&r.keys.length===1&&r.keys[0]===key
@@ -131,6 +131,8 @@ export function createB005NextgenEvaluator(
             partnerHouseInterests:rankInterests,
             selectedContractKey:agreement?.status==='ACCEPT'?agreement.choice.key:null,
             supportingKinshipClearanceId:clearance?.status==='CLEARED'?clearance.clearanceId:null,
+            ...(clearance?.status==='CLEARED'&&clearance.clearanceId!==null
+              ?{supportingKinshipClearanceRecordKey:clearance.clearanceRecordKey}:{}),
             ...(agreement?{contractOptions:agreement.choices.map(c=>({
               key:c.key,dynastyId:c.dynastyId,
               firstConsentScore:c.firstConsentScore,secondConsentScore:c.secondConsentScore,
@@ -156,8 +158,8 @@ export function createB005NextgenEvaluator(
     }
     return {ruleId:ctx.ruleId,phase:ctx.phase,commands:[],requests,deferred:[],traceDrafts}
   }
-  if (resolveSupporting) supportingEvidence.set(evaluator, Object.freeze({
-    resolve: resolveSupporting, clearanceKey: supportingClearanceKey(stableClearances),
+  supportingEvidence.set(evaluator, Object.freeze({
+    resolve: resolveSupporting, clearanceKey: (year:number,pairs:ReadonlyMap<string,string>)=>supportingClearanceKey(stableClearances,year,pairs),
   }))
   return evaluator
 }

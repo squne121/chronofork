@@ -95,7 +95,7 @@ describe('担当B C1: 主試遊の年初forkから判断・法的履歴まで', 
     expect(a1.snapshots.slice(0, year - a0.startYear + 1)).toStrictEqual(a0.snapshots.slice(0, year - a0.startYear + 1))
     expect(a1.eventLog.filter(e => e.year < year)).toStrictEqual(a0.eventLog.filter(e => e.year < year))
     expect(a1.decisionTraces.filter(t => t.year < year)).toStrictEqual(a0.decisionTraces.filter(t => t.year < year))
-    expect(multiHouseRunConfigDigest()).toBe('1342c44ee5aff1ba')
+    expect(multiHouseRunConfigDigest()).toBe('5090c8485f4b8570')
   }, timeout)
 
   it('B-004は信頼だけを補正し、B-005の選択差を法的登録・出生・帰属・相続につなぐ', () => {

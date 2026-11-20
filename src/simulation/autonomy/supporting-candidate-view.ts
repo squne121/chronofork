@@ -10,9 +10,14 @@ export type SupportingCandidateResolver = (world:WorldState,ctx:EvaluationContex
 
 type SupplyInspection = Readonly<{
   candidates: readonly ResolvedSupportingCandidate[]
-  rankingBlock: 'SUPPORTING_CANDIDATE_BUDGET_EXCEEDED' | 'SUPPORTING_SUPPLY_UNVERIFIED' | null
+  verified: boolean
+  budgetBlockedActors: ReadonlySet<Id>
 }>
-const unverified = {candidates:[],rankingBlock:'SUPPORTING_SUPPLY_UNVERIFIED'} as const
+const noBlockedActors:ReadonlySet<Id>=new Set()
+const unverified = {candidates:[],verified:false,budgetBlockedActors:noBlockedActors} as const
+export const supportingRankingBlock = (supply:SupplyInspection,pair:readonly [Id,Id]) =>
+  !supply.verified?'SUPPORTING_SUPPLY_UNVERIFIED':
+    pair.some(id=>supply.budgetBlockedActors.has(id))?'SUPPORTING_CANDIDATE_BUDGET_EXCEEDED':null
 const populationResolvers = new WeakMap<SupportingCandidateResolver, Readonly<{
   evidenceIds: readonly Id[]
   inspect: (world:WorldState,ctx:EvaluationContext)=>SupplyInspection
@@ -22,7 +27,7 @@ export const supportingPopulationEvidenceIds = (resolver: SupportingCandidateRes
 export const inspectSupportingCandidateSupply = (
   resolver: SupportingCandidateResolver | undefined, world:WorldState, ctx:EvaluationContext,
 ):SupplyInspection => resolver ? populationResolvers.get(resolver)?.inspect(world,ctx) ?? unverified
-  : {candidates:[],rankingBlock:null}
+  : {candidates:[],verified:true,budgetBlockedActors:noBlockedActors}
 
 export const isPopulationSupportingResolver = (resolve: SupportingCandidateResolver): boolean =>
   populationResolvers.has(resolve)
@@ -75,10 +80,24 @@ export function createSupportingCandidateResolver(input:B001SupportingInput):Sup
       result.push({seekerId:v.seekerPersonId,person,registration,traceId:trace.traceId,
         maxRecordsPerYear:fixed.maxRecordsPerYear,maxAliveSupporting:fixed.maxAliveSupporting})
     }
-    // 残り0枠も含む。未探索の候補を除いて別のペアを首位に繰り上げない。
-    const incomplete=replay.traceDrafts.some(t=>t.status==='DEFER'&&t.reasonCodes.some(code=>
-      code==='SUPPORTING_CANDIDATE_BUDGET_EXCEEDED'||code==='OPEN_EVIDENCE_BACKED_CANDIDATES_AT_LIMIT'))
-    return {candidates:result,rankingBlock:incomplete?'SUPPORTING_CANDIDATE_BUDGET_EXCEEDED':null}
+    // 未提示ペアの双方に限って首位が不明。既知の順位候補は除かず、他者を繰り上げない。
+    const budgetBlockedActors=new Set<Id>()
+    for(const d of replay.traceDrafts){
+      const omitted=d.candidates[0]?.inputs.budgetOmittedCandidateIds
+      if(d.status!=='DEFER'||d.actorRef.kind!=='PERSON'||!Array.isArray(omitted)||!omitted.length)continue
+      const seeker=world.persons.find(p=>d.actorRef.kind==='PERSON'&&p.personId===d.actorRef.id)
+      const minAge=ctx.marriageCandidateMinAge??18
+      if(!seeker?.alive||ctx.year-seeker.birthYear<minAge)continue
+      for(const id of omitted){
+        if(typeof id!=='string'||!id.startsWith('support:population:'))continue
+        const [cohortId]=JSON.parse(id.slice('support:population:'.length)) as [Id,number]
+        const cohort=fixed.cohorts.find(c=>c.cohortId===cohortId)
+        if(!cohort||ctx.year-cohort.birthYear<minAge)continue
+        budgetBlockedActors.add(d.actorRef.id)
+        budgetBlockedActors.add(id)
+      }
+    }
+    return {candidates:result,verified:true,budgetBlockedActors}
   }
   const resolve:SupportingCandidateResolver=(world,ctx)=>inspect(world,ctx).candidates
   const evidenceIds=Object.freeze(fixed.cohorts.flatMap(c =>

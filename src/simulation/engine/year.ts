@@ -17,8 +17,9 @@ import { isPopulationSupportingResolver } from '../autonomy/supporting-candidate
 import { drawRandom } from '../random.ts'
 import { aLeg01SupportingEvidence } from '../rules/a/aleg01-nextgen.ts'
 import { unwrapSpouseDeathDissolution } from '../rules/a/aleg01-spouse-death.ts'
-import { b004SupportingResolver } from '../rules/b/b004-worldstate.ts'
+import { b004WorldStateEvidence } from '../rules/b/b004-worldstate.ts'
 import { b005SupportingEvidence } from '../rules/b/b005-nextgen.ts'
+import { reviewDomesticMarriageEligibility } from '../legal/nextgen-marriage.ts'
 import { getRule } from '../rule-registry.ts'
 import { validateWorldState } from '../validation/index.ts'
 import type { Diagnostic } from '../validation/index.ts'
@@ -80,6 +81,9 @@ function checkOutcome(o: RuleOutcome, ctx: EvaluationContext): string | null {
   if (o.responses !== undefined && !Array.isArray(o.responses)) return 'Outcome.responses が配列ではありません'
   const ids = new Set<Id>()
   for (const [i, d] of o.traceDrafts.entries()) {
+    if (!d || !Array.isArray(d.reasonCodes) || !Array.isArray(d.candidates) || !Array.isArray(d.modifierIds)) {
+      return `traceDrafts[${i}] の理由・候補・修正参照が不正です`
+    }
     if (d.year !== ctx.year || d.phase !== ctx.phase || d.ruleId !== ctx.ruleId) {
       return `traceDrafts[${i}] の年/フェーズ/RuleID が評価対象と一致しません`
     }
@@ -111,23 +115,47 @@ function supportingRegistrationCheck(
   legalEvaluator: RuleEvaluator, requestUsed: (id: Id) => boolean,
 ): CheckSupportingRegistration {
   const planned = o.commands.filter(c => c.type === 'MARRIAGE_REGISTER' && c.supportingPerson !== undefined)
-  if (planned.length === 0) return () => '補助人物の登録予定が存在しません'
-  const b4Resolve = b004SupportingResolver(evaluators['B-004'])
+  const b4Evidence = b004WorldStateEvidence(evaluators['B-004'])
+  const b4Resolve = b4Evidence?.resolve
   const legalEvidence = aLeg01SupportingEvidence(unwrapSpouseDeathDissolution(legalEvaluator))
   const negotiationEvidence = b005SupportingEvidence(evaluators['B-005'])
   const resolve = legalEvidence?.resolve ?? b4Resolve
   const alive = world.persons.filter(p => p.alive && p.interactionRole === 'SUPPORTING').length
-  const supplied = resolve && isPopulationSupportingResolver(resolve) ? resolve(world, ctx) : []
+  const supplied = o.commands.some(c => c.type === 'MARRIAGE_REGISTER') && resolve && isPopulationSupportingResolver(resolve)
+    ? resolve(world, ctx) : []
   return (c, q, draftIndex) => {
     const registration = c.supportingPerson
-    if (!registration) return '補助人物の登録内容が不正です'
-    const id = registration.person.personId
-    const matching = supplied.filter(s => s.person.personId === id &&
-      q.payload.personIds.includes(id) && q.payload.personIds.includes(s.seekerId))
+    const matching = registration ? supplied.filter(s => s.person.personId === registration.person.personId &&
+      q.payload.personIds.includes(s.person.personId) && q.payload.personIds.includes(s.seekerId)) : []
     const candidate = matching[0]
-    if (matching.length !== 1 || !candidate || canonicalize(candidate.registration) !== canonicalize(registration)) {
+    if (registration && (matching.length !== 1 || !candidate ||
+        canonicalize(candidate.registration) !== canonicalize(registration))) {
       return '補助人物の登録内容を当年・当枝のB-001候補供給から再導出できません'
     }
+    // 登録済みの当事者でも、競合候補の脱落やOutcomeの書き換えで首位を作らない。
+    const ids = q.payload.personIds
+    const registeredSupporting = world.persons.some(p => ids.includes(p.personId) && p.interactionRole === 'SUPPORTING')
+    if (legalEvidence || negotiationEvidence || b4Resolve || registration || registeredSupporting) {
+      if (!b4Evidence || !legalEvidence || !negotiationEvidence ||
+          b4Resolve !== legalEvidence.resolve || b4Resolve !== negotiationEvidence.resolve) {
+        return '婚姻に必要な正規のB-004・B-005・A-LEG-01審査を確認できません'
+      }
+      const supportingIds = new Set([...supplied.map(s => s.person.personId),
+        ...world.persons.filter(p => p.interactionRole === 'SUPPORTING').map(p => p.personId)])
+      const related = new Map<string, Id>()
+      for (const t of ctx.priorTraces ?? []) {
+        if (t.ruleId !== 'B-004' || t.status !== 'ACCEPT' || t.actorRef.kind !== 'PERSON_PAIR') continue
+        const pair = t.actorRef.ids
+        if (!pair.some(id => ids.includes(id)) || !pair.some(id => supportingIds.has(id))) continue
+        const people = supplied.filter(s => pair.includes(s.seekerId) && pair.includes(s.person.personId)).map(s => s.person)
+        const eligibility = reviewDomesticMarriageEligibility(world, pair, people)
+        if (eligibility.status === 'ELIGIBLE') related.set(JSON.stringify(pair), eligibility.countryId)
+      }
+      if (negotiationEvidence.clearanceKey(ctx.year, related) !== legalEvidence.clearanceKey(ctx.year, related)) {
+        return 'B-005とA-LEG-01の補助人物禁親台帳が一致しません'
+      }
+    }
+    if (!registration || !candidate) return null
     // 新規個別化を許可するのは年に一度のA-LEG-01のみ。今回の登録予定を全件加算する。
     if (planned.length > candidate.maxRecordsPerYear || alive + planned.length > candidate.maxAliveSupporting) {
       return '成立時の補助人物登録予算を超過しています'
@@ -145,15 +173,6 @@ function supportingRegistrationCheck(
         !chosen?.eligible || chosen.candidateId !== draft.selectedCandidateId || !c.marriage.contract ||
         chosen.inputs.contractId !== c.marriage.contract.contractId) {
       return '補助人物の婚姻CommandとA-LEG-01の照会・判断・契約が一致しません'
-    }
-    // B-004は明示信頼、B-005は全候補で双方一意首位と契約合意、A-LEG-01は禁親・授権と
-    // 契約全体を再審査する。同じ正規resolverを使うfactoryの未改変Outcomeに限定する。
-    if (b4Resolve !== resolve || !negotiationEvidence || negotiationEvidence.resolve !== resolve ||
-        !legalEvidence || legalEvidence.resolve !== resolve) {
-      return '補助人物の婚姻に必要な正規のB-004・B-005・A-LEG-01審査を確認できません'
-    }
-    if (negotiationEvidence.clearanceKey !== legalEvidence.clearanceKey) {
-      return 'B-005とA-LEG-01の補助人物禁親台帳が一致しません'
     }
     return null
   }
@@ -232,10 +251,8 @@ function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[]
           c.source.sourceTraceId !== traceId(draftIndex)) {
         return '婚姻登録commandの対象・Trace参照が照会と一致しません'
       }
-      if (c.supportingPerson !== undefined) {
-        const bad = checkSupporting(c, q, draftIndex)
-        if (bad !== null) return bad
-      }
+      const bad = checkSupporting(c, q, draftIndex)
+      if (bad !== null) return bad
     } else if (matching.length !== 0) return '未承認の照会から婚姻登録commandが生成されました'
   }
   if (o.commands.length !== accepts+dissolveCommands.length) return '照会外の不明なA-LEG-01 commandが含まれます'
@@ -271,7 +288,7 @@ function rulerVacateEvidenceError(o: RuleOutcome, year: number, events: readonly
   return null
 }
 
-function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions, priorTraces: readonly DecisionTrace[], marriageQueries: readonly MarriageQuery[], supportingCandidateSnapshot: EvaluationContext['supportingCandidateSnapshot']): EvaluationContext {
+function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions, priorTraces: readonly DecisionTrace[], marriageQueries: readonly MarriageQuery[], supportingCandidateSnapshot: EvaluationContext['supportingCandidateSnapshot'], marriageCandidateMinAge: number | undefined): EvaluationContext {
   const year = world.year
   return Object.freeze<EvaluationContext>({
     year,
@@ -282,6 +299,7 @@ function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: R
     priorTraces: deepFreeze(cloneData(priorTraces)),
     marriageQueries: deepFreeze(cloneData(marriageQueries)),
     ...(supportingCandidateSnapshot ? { supportingCandidateSnapshot } : {}),
+    ...(marriageCandidateMinAge === undefined ? {} : { marriageCandidateMinAge }),
     traceId: (i) => traceIdOf(year, phase, ruleId, i),
     random: (k) =>
       drawRandom(options.seed, {
@@ -360,6 +378,7 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
   const events: EventLogEntry[] = []
   const traces: DecisionTrace[] = []
   const marriageQueries: MarriageQuery[] = []
+  const marriageCandidateMinAge = b004WorldStateEvidence(evaluators['B-004'])?.minAdultAge
   let supportingCandidateSnapshot: EvaluationContext['supportingCandidateSnapshot']
 
   for (const phase of YEARLY_PHASES) {
@@ -377,7 +396,7 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
       if (ruleId === 'B-001' && phase === 3) {
         supportingCandidateSnapshot = deepFreeze({ branchId: options.branchId ?? 'main', year: t, world: cloneData(world) })
       }
-      const ctx = makeContext(world, phase, ruleId, options, traces, marriageQueries, supportingCandidateSnapshot)
+      const ctx = makeContext(world, phase, ruleId, options, traces, marriageQueries, supportingCandidateSnapshot, marriageCandidateMinAge)
       let outcome: RuleOutcome
       try {
         outcome = evaluator(deepFreeze(cloneData(world)), ctx)

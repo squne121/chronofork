@@ -127,6 +127,8 @@ export type Marriage = Readonly<{
   dissolvedYear?: Year
   /** 未設定は「契約条項なし／証拠なし」であり、帰属を推定しない（子の帰属は UNDETERMINED のまま）。 */
   contract?: MarriageContract
+  /** 成立時に消費した人口出典。再開後も個別禁親の証拠に流用しない。 */
+  supportingPopulationEvidenceIds?: readonly Id[]
 }>
 
 export type LegalCase = Readonly<{

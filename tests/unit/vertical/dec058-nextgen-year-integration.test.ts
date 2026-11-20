@@ -125,12 +125,16 @@ describe('DEC-058 次世代の実B-005合意・A登録・出生時の合法王�
   })
 
   it('同一人物に等価な縁談が集中すると、PERSON ID順で配偶者を決めない',()=>{
-    const r=year(createExperimentalWorld(),[[P2,P5],[P4,P5]])
+    const world=createExperimentalWorld()
+    const {houseId,legalDynasty}=world.persons.find(p=>p.personId===P2)!
+    // 信頼だけでなく、P5から見た両者の家門支持・継承利害も等しい入力にする。
+    const input={...world,persons:world.persons.map(p=>p.personId===P4?{...p,houseId,legalDynasty}:p)}
+    const r=year(input,[[P2,P5],[P4,P5]])
     const w=completed(r)
     expect(w.legal.marriages).toHaveLength(0)
     if(r.status==='COMPLETED')
       expect(r.traces.filter(t=>t.ruleId==='B-005'&&t.reasonCodes.includes(
-        'MUTUAL_UNIQUE_PARTNER_NOT_ESTABLISHED')).length).toBeGreaterThan(0)
+        'MUTUAL_UNIQUE_PARTNER_NOT_ESTABLISHED'))).toHaveLength(2)
   })
 
   it('契約案の効用同率なら婚姻せず、ナルヴェン帰属条項を勝手に採用しない',()=>{

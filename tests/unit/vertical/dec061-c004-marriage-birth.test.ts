@@ -50,12 +50,12 @@ function toAdult():WorldState{
 }
 function calendar(world:WorldState,clearances:readonly SupportingKinshipClearance[],
   trustBase:readonly PairTrustBase[]=[],candidateTrust:number|null=40,supportingMarriage:B001SupportingInput=config,
-  otherCandidateTrust:readonly PairTrustBase[]=[]){
+  otherCandidateTrust:readonly PairTrustBase[]=[],autonomy=auto){
   const result=createAutonomousCalibrationEvaluators({branchStartWorld:world,ledger:[],trustBase,
     supportingMarriage,supportingCandidateTrustBase:candidateTrust===null?otherCandidateTrust:
       [{personIds:pair,value:candidateTrust},...otherCandidateTrust],
     nextgenMarriage:{book:trial.book,laws:trial.laws,supportingKinshipClearances:clearances},
-    autonomy:auto,
+    autonomy,
   })
   if(!result.ok)throw new Error('AUTONOMY_CONFIG:'+result.issues.join(','))
   return result.evaluators
@@ -76,6 +76,26 @@ describe('DEC-061: 過去年C004の匿名出生→非操作配偶者→翌年実
     expect(support?.reasonCodes).toContain('SUPPORTING_KINSHIP_CLEARANCE_MISSING')
     expect(key?.status).toBe('ACCEPT')
     expect(r.world.legal.marriages.every(m=>!m.personIds.includes(id))).toBe(true)
+  })
+  it.each(['sourceEvidenceId', 'survivorAttestationId'] as const)('空白だけの%sでは年を停止せず候補を保留する', field=>{
+    const adult=toAdult()
+    const r=runYear(adult,{seed,evaluators:calendar(adult,[clearance],[],40,
+      {...config,cohorts:[{...cohort,[field]:' '}]})})
+    if(r.status!=='COMPLETED')throw new Error(JSON.stringify(r.halt))
+    expect(r.traces.some(t=>t.ruleId==='B-001'&&t.status==='DEFER'&&t.reasonCodes.some(code=>
+      code.startsWith(field==='sourceEvidenceId'?'COHORT_SOURCE_EVIDENCE_MISSING':'C004_SURVIVOR_ATTESTATION_MISSING')))).toBe(true)
+    expect(r.world.persons.some(p=>p.personId===id)).toBe(false)
+  })
+  it('B-004の年齢条件で除外した提示は縁談評価予算に含めない',()=>{
+    const adult=toAdult()
+    const eligible=adult.persons.filter(p=>adult.year-p.birthYear>=21)
+    const count=eligible.filter(p=>p.sex==='MALE').length*eligible.filter(p=>p.sex==='FEMALE').length
+    expect(count).toBeGreaterThan(0)
+    const r=runYear(adult,{seed,evaluators:calendar(adult,[clearance],[],40,config,[],
+      {...auto,marriage:{minAdultAge:21,maxCandidatePairs:count}})})
+    if(r.status!=='COMPLETED')throw new Error(JSON.stringify(r.halt))
+    expect(r.traces.some(t=>t.ruleId==='B-001'&&t.candidates[0]?.inputs.supportingCandidateId===id)).toBe(true)
+    expect(r.traces.filter(t=>t.ruleId==='B-004')).toHaveLength(count)
   })
   it('探索と禁親証拠が揃っても候補信頼値なしでは縁談を採択しない',()=>{
     const adult=toAdult()
@@ -148,7 +168,7 @@ describe('DEC-061: 過去年C004の匿名出生→非操作配偶者→翌年実
     expect(r.world.persons).toEqual(adult.persons)
   })
 
-  it('同年の有効なC004二件が人数予算を超えれば年全体を戻す',()=>{
+  it.each([[1,2], [2,1]] as const)('同年の有効なC004二件が人数予算を超えれば(%s/%s)優先順位を作らず保留する',(annualLimit,aliveLimit)=>{
     const adult=toAdult()
     const other='person-exp-04'
     const second:SupportingMarriageCohort={...cohort,cohortId:'trial:actual-C004-births-1250-south',
@@ -156,19 +176,27 @@ describe('DEC-061: 過去年C004の匿名出生→非操作配偶者→翌年実
       sourceEvidenceId:'trial:year-1250-C004-group-south-elite',survivorAttestationId:'trial:1268-separate-south-census'}
     const otherId=supportingCandidateId(second.cohortId,0)
     const otherPair=[other,otherId].sort() as [string,string]
-    const run=(limit:number)=>runYear(adult,{seed,evaluators:calendar(adult,[clearance,{
+    const run=(annual:number,alive:number)=>runYear(adult,{seed,evaluators:{...c4,...calendar(adult,[clearance,{
       ...clearance,clearanceId:'trial:south-pair-review',sourceEvidenceId:'trial:south-pair-pedigree',personIds:otherPair,
-    }],[],40,{...config,cohorts:[cohort,second],maxAliveSupporting:2,maxRecordsPerYear:limit,
-      candidatePairs:[[p2,id],[other,otherId]]},[{personIds:otherPair,value:40}])})
-    const control=run(2)
+    }],[],40,{...config,cohorts:[cohort,second],maxAliveSupporting:alive,maxRecordsPerYear:annual,
+      candidatePairs:[[p2,id],[other,otherId]]},[{personIds:otherPair,value:40}])}})
+    const control=run(2,2)
     if(control.status!=='COMPLETED')throw new Error(JSON.stringify(control.halt))
     expect(control.events.flatMap(e=>e.supportingMarriageRegistrations??[])).toHaveLength(2)
-    const over=run(1)
-    expect(over.status).toBe('HALTED')
-    if(over.status!=='HALTED')throw new Error('EXPECTED_C004_REGISTRATION_HALT')
-    expect(over.halt.message).toContain('登録予算を超過')
-    expect(over.world).toEqual(adult)
-    expect(over).not.toHaveProperty('events')
+    const over=run(annualLimit,aliveLimit)
+    if(over.status!=='COMPLETED')throw new Error(JSON.stringify(over.halt))
+    expect(over.world.year).toBe(adult.year+1)
+    expect(over.world.persons).toEqual(adult.persons)
+    expect(over.world.legal.marriages).toEqual(adult.legal.marriages)
+    expect(over.events.flatMap(e=>e.supportingMarriageRegistrations??[])).toHaveLength(0)
+    expect(over.events.some(e=>e.eventType==='POPULATION_COHORT')).toBe(true)
+    const legal=over.traces.filter(t=>t.ruleId==='A-LEG-01')
+    expect(legal).toHaveLength(2)
+    for(const trace of legal){
+      expect(trace.status).toBe('DEFER')
+      expect(trace.reasonCodes).toContain('SUPPORTING_REGISTRATION_BUDGET_EXCEEDED')
+      expect(trace.eventIds).toEqual([])
+    }
   })
 
   it.each(['source','survivor','birth'] as const)('人口証拠欠落(%s)を理由付きで保留する',missing=>{

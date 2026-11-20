@@ -103,7 +103,7 @@ function observeC004(seed: number, result: Run) {
 
 function observe(seed: number, result: Run, ms: number) {
   const final = result.snapshots.at(-1)!
-  const recs = multiHousePersonRecords(final)
+  const recs = multiHousePersonRecords(final, result.eventLog)
   const byId = new Map(recs.map(r => [r.personId, r]))
   const depth = new Map<string, number>()
   const gen = (id: string): number => {
@@ -319,7 +319,10 @@ describe('主試遊seed 1250〜1350: 世代更新と不変条件（実計算）'
       for (const [k, n] of usedByBirth) expect(n).toBeLessThanOrEqual(backing.get(k) ?? 0)
     }
     // 補助人物は人物IDの規則どおりコホートの構成員として1回だけ個別化される
-    const finalRecs = multiHousePersonRecords(result.snapshots.at(-1)!)
+    const finalRecs = multiHousePersonRecords(result.snapshots.at(-1)!, result.eventLog)
+    expect(finalRecs.filter(r => r.origin === 'POPULATION_SUPPORTING')).toHaveLength(
+      result.snapshots.at(-1)!.persons.filter(p => p.interactionRole === 'SUPPORTING').length,
+    )
     for (const r of finalRecs.filter(x => x.origin === 'POPULATION_SUPPORTING')) {
       expect(r.population).not.toBeNull()
       expect(r.personId).toBe(supportingCandidateId(r.population!.cohortId, r.population!.memberOrdinal))

@@ -5,10 +5,10 @@ import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.t
 import { EvaluationFailure } from '../../engine/evaluators.ts'
 import { createSupportingMarriageCandidateView, validateSupportingMarriageCohorts } from '../../population/supporting-marriage.ts'
 import type { SupportingMarriageCohort } from '../../population/supporting-marriage.ts'
-import { validateSupportingKinshipClearances } from '../../legal/supporting-kinship-clearance.ts'
+import { isIndependentKinshipSource, validateSupportingKinshipClearances } from '../../legal/supporting-kinship-clearance.ts'
 import type { SupportingKinshipClearance } from '../../legal/supporting-kinship-clearance.ts'
 
-export const B001_SUPPORTING_VERSION = 'b001-supporting-candidates-1:CALIBRATION_ONLY'
+export const B001_SUPPORTING_VERSION = 'b001-supporting-candidates-2:CALIBRATION_ONLY'
 export type B001SupportingInput = Readonly<{
   cohorts: readonly SupportingMarriageCohort[]
   /** 1年の新規記録上限。全人口のPerson化をしない。 */
@@ -54,18 +54,32 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
     maxOpenCandidatesPerSeeker: input.maxOpenCandidatesPerSeeker,
   })
   const clearanceByPair = new Map<string, SupportingKinshipClearance[]>()
+  const attestedBySeeker = new Map<Id, Set<Id>>()
   for (const c of structuredClone(input.kinshipClearances ?? []) as SupportingKinshipClearance[]) {
     const k = JSON.stringify(c.personIds)
     clearanceByPair.set(k, [...(clearanceByPair.get(k) ?? []), c])
+    for(const [actor,peer] of [[c.personIds[0],c.personIds[1]],[c.personIds[1],c.personIds[0]]] as const){
+      const ids=attestedBySeeker.get(actor)??new Set<Id>()
+      ids.add(peer)
+      attestedBySeeker.set(actor,ids)
+    }
   }
-  const candidatePairs = input.candidatePairs === undefined ? undefined : new Set(input.candidatePairs.map(p => JSON.stringify(p)))
-  const selected = (a: Id, b: Id) => candidatePairs === undefined || candidatePairs.has(JSON.stringify([a, b]))
+  const selectedBySeeker = input.candidatePairs === undefined ? undefined : new Map<Id, Set<Id>>()
+  for(const [seekerId,candidateId] of input.candidatePairs??[]){
+    const ids=selectedBySeeker?.get(seekerId)??new Set<Id>()
+    ids.add(candidateId)
+    selectedBySeeker?.set(seekerId,ids)
+  }
+  const selected = (a: Id, b: Id) => selectedBySeeker === undefined || selectedBySeeker.get(a)?.has(b)===true
   const evidenceBacked = input.kinshipClearances !== undefined
-  // B-005/A-LEG-01(reviewSupportingKinshipClearance)と同じ厳しさ: 管轄一致・当年有効・ちょうど1件のときだけ。
-  const cleared = (a: Id, b: Id, year: number, countryId: Id | undefined): boolean =>
-    countryId !== undefined &&
-    (clearanceByPair.get(JSON.stringify(cmp(a, b) <= 0 ? [a, b] : [b, a])) ?? [])
-      .filter(c => c.countryId === countryId && c.checkedYear <= year && year < c.validUntilYear).length === 1
+  const populationEvidenceIds=cohorts.flatMap(c=>[c.sourceEvidenceId,...(c.survivorAttestationId?[c.survivorAttestationId]:[])])
+  // 管轄一致・当年有効・ちょうど1件・人口出典とは独立。禁親審査そのものはB-005/A-LEG-01が行う。
+  const cleared = (a: Id, b: Id, year: number, countryId: Id | undefined): boolean => {
+    if(countryId===undefined)return false
+    const matching=(clearanceByPair.get(JSON.stringify(cmp(a, b) <= 0 ? [a, b] : [b, a])) ?? [])
+      .filter(c => c.countryId === countryId && c.checkedYear <= year && year < c.validUntilYear)
+    return matching.length===1&&isIndependentKinshipSource(matching[0]!.sourceEvidenceId,populationEvidenceIds)
+  }
   const evaluator: RuleEvaluator = (world: WorldState, ctx: EvaluationContext): RuleOutcome => {
     if (ctx.ruleId !== 'B-001' || ctx.phase !== 3 || ctx.year !== world.year) {
       throw new EvaluationFailure('B-001補助人物候補の供給は当年フェーズ3に限ります',[
@@ -78,54 +92,64 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
     const evidenceMissing = new Set([
       'COHORT_SOURCE_EVIDENCE_MISSING', 'C004_SURVIVOR_ATTESTATION_MISSING',
       'C004_BIRTH_BACKING_INSUFFICIENT', 'C004_SHARED_BIRTH_CAPACITY_EXCEEDED',
+      'GROUP_POPULATION_CAPACITY_EXCEEDED',
     ])
     if (checked.some(code => !evidenceMissing.has(code.split(':', 1)[0]!))) {
       throw new EvaluationFailure('人口集団の補助人物出典が不整合', checked.map(code => ({code,message:code})))
     }
+    const usableCohorts=eligibleCohorts.filter((c,i)=>!checked.some(code=>
+      code===`GROUP_POPULATION_CAPACITY_EXCEEDED:${c.groupId}`||
+      (c.source==='C004_COHORT'&&code===`C004_SHARED_BIRTH_CAPACITY_EXCEEDED:${JSON.stringify([c.groupId,c.birthYear])}`)||
+      ['COHORT_SOURCE_EVIDENCE_MISSING','C004_SURVIVOR_ATTESTATION_MISSING','C004_BIRTH_BACKING_INSUFFICIENT']
+        .some(reason=>code===`${reason}:${i}`)))
     const married = new Set(world.legal.marriages.filter(m => m.status === 'ACTIVE').flatMap(m => m.personIds))
     const seekers = world.persons
       .filter(p => p.alive && p.interactionRole !== 'SUPPORTING' &&
         !married.has(p.personId) && ctx.year - p.birthYear >= 18)
       .sort((a,b) => cmp(a.personId,b.personId))
     const traceDrafts: DecisionTraceDraft[] = []
-    const defer=(seekerId:Id, ...reasonCodes:string[])=>{
+    const defer=(seekerId:Id, reasonCodes:readonly string[], omitted:readonly Id[]=[])=>{
       const key=JSON.stringify([ctx.year,seekerId,...reasonCodes])
       traceDrafts.push({
         year:ctx.year,phase:ctx.phase,ruleId:ctx.ruleId,
         actorRef:{kind:'PERSON',id:seekerId},
         candidates:[{candidateId:'b001:supporting:defer:'+key,eligible:false,
-          inputs:{seekerPersonId:seekerId,provenance:'CALIBRATION_ONLY'},
+          inputs:{seekerPersonId:seekerId,provenance:'CALIBRATION_ONLY',
+            ...(omitted.length>0?{budgetOmittedCandidateIds:omitted}:{})},
           reasonCodes:['CALIBRATION_ONLY',...reasonCodes]}],
         status:'DEFER',reasonCodes:['CALIBRATION_ONLY','SUPPORTING_SUPPLY_DEFERRED',...reasonCodes],
         modifierIds:[],ruleVersion:B001_SUPPORTING_VERSION,
       })
     }
+    const noCandidates:ReadonlySet<Id>=new Set()
     for (const seeker of seekers) {
-      // 共通の出生枠を再配分せず、供給台帳全体を保留する。登録済み人物の審査は続行できる。
-      if (checked.length > 0) {
-        defer(seeker.personId, ...checked)
-        continue
-      }
+      // 欠けた出典だけを隔離する。共有枠が衝突した集団・出生枠は再配分しない。
+      if (checked.length > 0) defer(seeker.personId, checked)
+      if (checked.length > 0 && usableCohorts.length === 0) continue
       const seekerCountry = world.houses.find(h => h.houseId === seeker.houseId)?.countryId
       let candidateBudget = 32
       if (evidenceBacked && settings.maxOpenCandidatesPerSeeker !== undefined) {
         const open = world.persons.filter(p => p.alive && p.interactionRole === 'SUPPORTING' &&
           !married.has(p.personId) && p.sex !== seeker.sex && selected(seeker.personId, p.personId) && cleared(seeker.personId, p.personId, ctx.year, seekerCountry)).length
         candidateBudget = settings.maxOpenCandidatesPerSeeker - open
-        if (candidateBudget <= 0) {
-          defer(seeker.personId, 'OPEN_EVIDENCE_BACKED_CANDIDATES_AT_LIMIT')
-          continue
-        }
       }
-      const supplied = createSupportingMarriageCandidateView(world, {branchId:ctx.branchId, year:ctx.year, seekerId:seeker.personId}, eligibleCohorts, {
-        ...((evidenceBacked || candidatePairs !== undefined) ? { candidateFilter: (c: { candidateId: Id }) => selected(seeker.personId, c.candidateId) && (!evidenceBacked || cleared(seeker.personId, c.candidateId, ctx.year, seekerCountry)) } : {}),
+      const supplied = createSupportingMarriageCandidateView(world, {branchId:ctx.branchId, year:ctx.year, seekerId:seeker.personId}, usableCohorts, {
+        ...(selectedBySeeker?{boundedCandidateIds:selectedBySeeker.get(seeker.personId)??noCandidates}
+          :evidenceBacked?{boundedCandidateIds:attestedBySeeker.get(seeker.personId)??noCandidates}:{}),
+        ...((evidenceBacked || selectedBySeeker !== undefined) ? { candidateFilter: (c: { candidateId: Id }) => selected(seeker.personId, c.candidateId) && (!evidenceBacked || cleared(seeker.personId, c.candidateId, ctx.year, seekerCountry)) } : {}),
         seed: ctx.seed,
-        maxCandidates: candidateBudget,
+        maxCandidates: Math.max(1,candidateBudget),
         perCohortSamples: settings.perCohortSamples,
         maximumPreviewAge: settings.maximumPreviewAge,
       }).result
+      // 残り0枠でも、提示できなかった候補を記録し、順位が不明になる当事者だけを特定する。
+      if (candidateBudget <= 0) {
+        defer(seeker.personId,['OPEN_EVIDENCE_BACKED_CANDIDATES_AT_LIMIT'],
+          supplied.status==='PROPOSED'?supplied.candidates.map(c=>c.candidateId):supplied.budgetOmittedCandidateIds)
+        continue
+      }
       if (supplied.status !== 'PROPOSED') {
-        defer(seeker.personId,supplied.reasonCodes[0]??'NO_COHORT_CANDIDATE_AVAILABLE')
+        defer(seeker.personId,supplied.reasonCodes,supplied.budgetOmittedCandidateIds)
         continue
       }
       for (const candidate of supplied.candidates) {
