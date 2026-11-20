@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { DecisionTrace, EventLogEntry, Id, TargetRef } from '../simulation/contracts/index.ts'
 import type { TimelineResult } from '../simulation/engine/index.ts'
 import type { EntityKind, Selection, WorldIndex } from './inspection-source.ts'
-import { describeEvent } from './event-summary.ts'
+import { describeEvent, unresolvedLabel } from './event-summary.ts'
 import type { EventNames } from './event-summary.ts'
 import { formatDelta, formatJson, numericChanges } from './timeline-source.ts'
 import type { TraceIndex } from './timeline-source.ts'
@@ -26,12 +26,19 @@ function refKey(r: TargetRef): string {
   return r.kind === 'PERSON_PAIR' ? `PERSON_PAIR:${r.ids.join('+')}` : `${r.kind}:${r.id}`
 }
 
+const UNRESOLVED_KIND = { person: 'person', group: 'group', region: 'region', title: 'other' } as const
+/** 通常表示用の参照名。解決できなければ生IDを出さず、名前を創作しない未確認ラベルにする（元のIDはEvent/Trace/技術詳細に残る）。 */
+function refLabel(index: WorldIndex, kind: EntityKind, id: Id): string {
+  const link = index.link(kind, id)
+  return link.resolved ? link.label : unresolvedLabel(UNRESOLVED_KIND[kind], id)
+}
+
 function RefView({ r, index, worldIndex, onSelect }: { r: TargetRef; index: WorldIndex; worldIndex: WorldIndex; onSelect: (s: Selection) => void }) {
-  if (r.kind === 'PERSON_PAIR') return <span>{r.ids.join('・')}</span>
+  if (r.kind === 'PERSON_PAIR') return <span>{r.ids.map((id) => refLabel(index, 'person', id)).join('・')}</span>
   const kind = REF_KIND[r.kind]
-  if (!kind) return <span>{r.kind}:{r.id}</span>
+  if (!kind) return <span>{unresolvedLabel('other', r.id)}</span>
   const link = index.link(kind, r.id)
-  if (!link.resolved) return <span className="missing">{link.label}</span>
+  if (!link.resolved) return <span className="missing">{refLabel(index, kind, r.id)}</span>
   // 表示年の年初にはまだ存在しない人物（その年に生まれた子）: 実在は確認済みだが年初の詳細は無い。
   if (kind === 'person' && !worldIndex.person(r.id)) {
     const born = index.person(r.id)?.birthYear
@@ -53,7 +60,7 @@ export function targetOptions(events: readonly EventLogEntry[], index: WorldInde
       const key = refKey(r)
       if (seen.has(key)) continue
       const kind = r.kind === 'PERSON_PAIR' ? undefined : REF_KIND[r.kind]
-      const label = r.kind === 'PERSON_PAIR' ? r.ids.map((id) => index.link('person', id).label).join('・') : kind ? index.link(kind, r.id).label : key
+      const label = r.kind === 'PERSON_PAIR' ? r.ids.map((id) => refLabel(index, 'person', id)).join('・') : kind ? refLabel(index, kind, r.id) : unresolvedLabel('other', r.id)
       seen.set(key, { key, ref: r, label })
     }
   }
@@ -166,7 +173,7 @@ export function HistoryPanel(p: Props) {
                 {describeEvent(e, names)?.headline ?? <>
                 {e.year}年 {e.eventType}
                 {' / '}
-                {e.involvedRefs.map((r) => (r.kind === 'PERSON_PAIR' ? r.ids.map((id) => p.refIndex.link('person', id).label).join('・') : (REF_KIND[r.kind] ? p.refIndex.link(REF_KIND[r.kind]!, r.id).label : refKey(r)))).join('、')}</>}
+                {e.involvedRefs.map((r) => (r.kind === 'PERSON_PAIR' ? r.ids.map((id) => refLabel(p.refIndex, 'person', id)).join('・') : (REF_KIND[r.kind] ? refLabel(p.refIndex, REF_KIND[r.kind]!, r.id) : unresolvedLabel('other', r.id)))).join('、')}</>}
                 {numericChanges(e)
                   .filter((c) => c.path.endsWith('population'))
                   .map((c) => ` / 人口 ${c.before.toLocaleString('ja-JP')}→${c.after.toLocaleString('ja-JP')}（${formatDelta(c.delta)}）`)

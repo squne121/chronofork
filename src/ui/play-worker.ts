@@ -1,7 +1,7 @@
 // 統合モード(100年のA0/A1再計算)を実行するWeb Worker。UIのメインスレッドを塞がない。
 // 計算本体は runPlayComparison(UIアダプタ)そのもの。ここでは実行時間の計測と転送ビューへの縮約だけを行う。
-import { runPlayComparison } from './branch-play-source.ts'
-import type { PlayInput, PlayView } from './branch-play-source.ts'
+import { runPlayComparison, runPlayObservation } from './branch-play-source.ts'
+import type { ObservationInput, ObservationSlice, PlayInput, PlayView } from './branch-play-source.ts'
 import { toDisplayView } from './play-view.ts'
 import { runPlayCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
@@ -10,12 +10,13 @@ import type { PlayProgress } from './play-progress.ts'
 import { SingleA0Cache } from './a0-cache.ts'
 
 /** 比較の再計算(input)か、人物選択用のA0候補の取得(candidates)。候補は必要な人物情報だけを返す。 */
-export type WorkerRequest=Readonly<{input:PlayInput}>|Readonly<{candidates:Readonly<{seed:number;mode:PlayMode}>}>
+export type WorkerRequest=Readonly<{input:PlayInput}>|Readonly<{observe:ObservationInput}>|Readonly<{candidates:Readonly<{seed:number;mode:PlayMode}>}>
 export type WorkerResponse=
   | Readonly<{kind:'PROGRESS';progress:PlayProgress}>
   /** A0を再計算せず保存済みを使う。A0の年次進捗は送らない(再計算したように見せない)。 */
   | Readonly<{kind:'A0_REUSED'}>
   | Readonly<{ok:true;candidates:PlayCandidateSet;computeMs:number}>
+  | Readonly<{ok:true;observation:ObservationSlice;computeMs:number}>
   | Readonly<{ok:true;view:PlayView;computeMs:number;viewMs:number}>
   /** 既存A0/A1はブラウザに表示済み。第2介入時にはA1/A2差分だけを返し、重複した履歴の巨大転送を避ける。 */
   | Readonly<{ok:true;secondView:PlayView;a0Source:'COMPUTED'|'REUSED';computeMs:number;viewMs:number}>
@@ -35,6 +36,13 @@ ctx.onmessage=e=>{
       const c=runPlayCandidates(e.data.candidates.seed,e.data.candidates.mode)
       const computeMs=performance.now()-t0
       ctx.postMessage(c.ok?{ok:true,candidates:c.set,computeMs}:{ok:false,code:c.code,message:c.message,computeMs})
+      return
+    }
+    if('observe' in e.data){
+      const r=runPlayObservation(e.data.observe,a0Cache,p=>ctx.postMessage({kind:'PROGRESS',progress:p}))
+      const computeMs=performance.now()-t0
+      ctx.postMessage(r.ok?{ok:true,observation:r.observation,computeMs}
+        :{ok:false,code:r.code,message:r.message,computeMs})
       return
     }
     // 進捗は小さなDTOだけを送る。WorldState・ログは最終結果まで送らない。

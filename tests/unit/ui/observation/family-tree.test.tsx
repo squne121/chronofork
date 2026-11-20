@@ -174,8 +174,8 @@ describe('FamilyTree モデル/表示', () => {
     expect(screen.getByTestId('family-unconfirmed-ghost2')).toBeTruthy()
     expect(screen.getByTestId('family-unconfirmed-me')).toBeTruthy()
     expect(screen.getByTestId('family-house').textContent).toContain('確認できない')
-    expect(screen.getByTestId('family-legal-dynasty').textContent).toContain('王朝名を確認できない')
-    expect(screen.getByTestId('family-title-t1').textContent).toContain('地域ID: rX')
+    expect(screen.getByTestId('family-legal-dynasty').textContent).toContain('名前未確認の王朝')
+    expect(screen.getByTestId('family-title-t1').textContent).toMatch(/名前未確認の地域（識別/)
   })
 
   it('存在しない人物IDでもクラッシュしない', () => {
@@ -243,6 +243,20 @@ describe('FamilyTree モデル/表示', () => {
     expect(screen.getByTestId('family-node-wife').textContent).toContain('死亡（1259年）')
   })
 
+  it('内部marriageIdを含む自律児の仮名を家系図・読み上げから隠し、人物IDは選択に保持する', () => {
+    const rawName='試験用自律児 1269 (marriage:normal:[\\"key\\",\\"person-exp-02\\"])'
+    const child=person('child-synthetic',{name:rawName,birthYear:1269,fatherId:'me'})
+    const onPerson=vi.fn()
+    render(<FamilyTree world={world(1270,{persons:[...base(),child]})}
+      personId="me" onSelectPerson={onPerson}/>)
+    const node=screen.getByTestId('family-node-child-synthetic')
+    expect(node.textContent).toContain('試験用自律児 1269')
+    expect(node.textContent).not.toContain('marriage:normal')
+    expect(node.getAttribute('aria-label')).not.toContain('marriage:normal')
+    expect(screen.getByTestId('family-tree-summary').textContent).not.toContain('marriage:normal')
+    fireEvent.click(node)
+    expect(onPerson).toHaveBeenCalledWith('child-synthetic')
+  })
   it('入力snapshotを変更しない', () => {
     const w = world(1260, { persons: withParents(), marriages: [marriage('m1', 'me', 'wife')] })
     const before = JSON.stringify(w)

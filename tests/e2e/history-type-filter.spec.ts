@@ -4,7 +4,7 @@ for (const width of [1280, 960]) {
   test(`${width}px: 実EventLogを種類で絞り込み、詳細を開いても横スクロールしない`, async ({ page }, testInfo) => {
     test.setTimeout(90000)
     await page.setViewportSize({ width, height: 900 })
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     await page.getByTestId('branch-run').click()
     await expect(page.getByTestId('branch-status')).toContainText('A1 COMPLETED')
     await page.getByTestId('event-scope').selectOption('all')

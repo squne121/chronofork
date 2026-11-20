@@ -57,7 +57,20 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent,onInspe
   return <div className="panel integrated-overview" data-testid="integrated-overview">
     <h3 className="step-title"><span className="step-no">3</span>統合モードの結果（{playModeLabel(view.mode)}）</h3>
 
-    <details open data-testid="integrated-source">
+    <div className="headline" data-testid="integrated-verdict">
+      {noDiff
+        ?<p><strong>A0とA1で、全期間のEventと1350年のWorldStateに差は確認されませんでした。</strong>比較したのはEventと1350年のWorldStateです（途中年の状態や判断Traceの違いは別に確認できます）。</p>
+        :overview.totalDifferences===0&&overview.finalWorldIdentical===null
+        ?<p><strong>Eventに差はありませんが、1350年のWorldStateを比較できませんでした（判定不能）。</strong></p>
+        :<p><strong>A0とA1で差が確認されました:</strong> 全期間のEvent差分 {overview.totalDifferences}件
+          {overview.finalWorldIdentical===false?' / 1350年のWorldStateも異なります':overview.finalWorldIdentical===true?' / 1350年のWorldStateは同一です':''}。</p>}
+      <p data-testid="integrated-trace-use">介入が判断Traceに記録された件数: A0 {overview.interventionTraces.a0}件 / A1 {overview.interventionTraces.a1}件
+        （A1側の判断の理由には介入が残ります。結果の差とは別です）。</p>
+      {om&&<p className="note" data-testid="integrated-count-note">この画面のEvent/Trace件数は、同一記録を省略した後の表示分です（省略した個別詳細は閲覧できません）。全件数と省略件数は上の「入力条件と計算結果の出典」を参照してください。</p>}
+      <p className="note">単独原因の断定ではなく、正式勝敗でもありません。差の理由は下のEventから「④ 理由を確認する」のDecisionTraceで辿れます。</p>
+    </div>
+
+    <details data-testid="integrated-source">
       <summary>入力条件と計算結果の出典</summary>
       <dl className="compare-metrics">
         <dt>実行構成</dt><dd>createExperimentalIntegratedWorld / Evaluators（実装側の共通ファクトリ）</dd>
@@ -82,19 +95,6 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent,onInspe
         両枝で差のある記録は全て残しています。省略した個別の詳細は、現在のUIでは後から閲覧できません。
       </p>}
     </details>
-
-    <div className="headline" data-testid="integrated-verdict">
-      {noDiff
-        ?<p><strong>A0とA1で、全期間のEventと1350年のWorldStateに差は確認されませんでした。</strong>比較したのはEventと1350年のWorldStateです（途中年の状態や判断Traceの違いは別に確認できます）。</p>
-        :overview.totalDifferences===0&&overview.finalWorldIdentical===null
-        ?<p><strong>Eventに差はありませんが、1350年のWorldStateを比較できませんでした（判定不能）。</strong></p>
-        :<p><strong>A0とA1で差が確認されました:</strong> 全期間のEvent差分 {overview.totalDifferences}件
-          {overview.finalWorldIdentical===false?' / 1350年のWorldStateも異なります':overview.finalWorldIdentical===true?' / 1350年のWorldStateは同一です':''}。</p>}
-      <p data-testid="integrated-trace-use">介入が判断Traceに記録された件数: A0 {overview.interventionTraces.a0}件 / A1 {overview.interventionTraces.a1}件
-        （A1側の判断の理由には介入が残ります。結果の差とは別です）。</p>
-      {om&&<p className="note" data-testid="integrated-count-note">この画面のEvent/Trace件数は、同一記録を省略した後の表示分です（省略した個別詳細は閲覧できません）。全件数と省略件数は上の「入力条件と計算結果の出典」を参照してください。</p>}
-      <p className="note">単独原因の断定ではなく、正式勝敗でもありません。差の理由は下のEventから「④ 理由を確認する」のDecisionTraceで辿れます。</p>
-    </div>
 
     <HistoricalChangesExplorer rows={overview.rows} view={view} totalDifferences={overview.totalDifferences} worldA0={final0} worldA1={final1} onInspectEvent={onInspectEvent} onInspectTrace={onInspectTrace}/>
 

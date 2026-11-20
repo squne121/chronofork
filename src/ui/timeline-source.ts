@@ -21,7 +21,30 @@ export type RunInputs = Readonly<{
   evaluatedRuleIds: readonly string[]
 }>
 
-export type TimelineRun = Readonly<{ inputs: RunInputs; result: TimelineResult; initialWorld: WorldState }>
+export type TimelineRun = Readonly<{
+  inputs: RunInputs
+  result: TimelineResult
+  initialWorld: WorldState
+  /** true の間は旧試験計算を未実行の空run。旧試験を開くとき（または明示計算）に実計算へ置き換える。 */
+  pending?: true
+}>
+
+/** 旧試験計算を行わない空run。通常の原史A0入口の初期表示で重い計算を避けるために使う。 */
+export function pendingExperimentalRun(seed: number): TimelineRun {
+  const scenario = createExperimentalScenario()
+  const result: TimelineResult = {
+    status: 'COMPLETED', seed, branchId: 'main', rngVersion, startYear: scenario.world.year,
+    snapshots: [], transitions: 0, eventLog: [], decisionTraces: [], goal: null, technicalGoal: null, halt: null,
+    coverage: { implementedRuleIds: [], todoRuleIds: [], executedRuleIds: [], injectedTodoRuleIds: [] },
+    autonomousHistory: { status: 'NOT_ESTABLISHED', blockers: ['旧試験計算は未実行'] },
+  }
+  return {
+    inputs: { seed, scenarioId: scenario.id, rulesetVersion: EXPERIMENTAL_TUNING.rulesetVersion, rngVersion, evaluatedRuleIds: [] },
+    result,
+    initialWorld: scenario.world,
+    pending: true,
+  }
+}
 
 /** 明示的な試験計算。C-004 人口コホート（CALIBRATION_ONLY）のみを注入し、勝敗評価は要求しない。 */
 export function runExperimentalTimeline(seed: number): TimelineRun {

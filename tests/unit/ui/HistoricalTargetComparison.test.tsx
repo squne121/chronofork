@@ -49,7 +49,9 @@ describe('DEC-073 — 選択対象のA0/A1実記録比較', () => {
     expect(onTrace).toHaveBeenCalledWith('A1','trace-A1-1250')
     expect(onEvent).not.toHaveBeenCalled()
     fireEvent.change(target,{target:{value:'PERSON:p5'}})
-    expect(screen.getByTestId('target-comparison').textContent).toContain('人物: p5（介入対象）のA0/A1記録を比べる')
+    const tc=screen.getByTestId('target-comparison').textContent!
+    expect(tc).toMatch(/人物: 名前未確認の人物（識別[0-9A-Z]+）（介入対象）のA0\/A1記録を比べる/)
+    expect(tc).not.toContain('p5（')
   })
 
   it('A0の婚姻成立Eventと、A1の不採択Traceを混同せず別々に開ける', () => {
@@ -104,7 +106,7 @@ describe('DEC-073 — 選択対象のA0/A1実記録比較', () => {
     const child = ev('birth-child', 1251, 'PERSON_BIRTH', [{kind:'PERSON',id:childId}])
     const category = EVENT_CATEGORIES.find(c => c.key === 'birth')!
     const rows:CategoryRow[] = [{category,a0:[child],a1:[],a0Only:[child],a1Only:[],changed:[]}]
-    const world = {persons:[{personId:childId,name:'試験用自律児 1251 (marriage:normal:[1250,"nested"])'}],
+    const world = {persons:[{personId:childId,name:'試験用自律児 1251 (marriage:normal:[1250,"nested"])',sex:'MALE',birthYear:1251}],
       houses:[],groups:[],countries:[],regions:[]} as unknown as WorldState
     render(<HistoricalChangesExplorer rows={rows} totalDifferences={1}
       view={view(run([child],[]),run([],[]))} worldA0={world} worldA1={world}
@@ -112,7 +114,7 @@ describe('DEC-073 — 選択対象のA0/A1実記録比較', () => {
     const target = screen.getByTestId('change-target') as HTMLSelectElement
     const choice = [...target.options].find(o => o.value === 'PERSON:' + childId)
     expect(choice).toBeDefined()
-    expect(choice?.textContent).toBe('人物: 試験用自律児 1251')
+    expect(choice?.textContent).toBe('人物: 試験人物（1251年生・男）')
     expect(choice?.value).toBe('PERSON:' + childId)
   })
 

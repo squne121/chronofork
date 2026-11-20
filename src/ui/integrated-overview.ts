@@ -2,8 +2,9 @@
 import type { EventLogEntry, Id, Person, WorldState } from '../simulation/contracts/index.ts'
 import type { PlayView } from './branch-play-source.ts'
 import { descendantDepths } from './dynasty-continuity.ts'
-import { describeEvent, shortPersonName } from './event-summary.ts'
+import { describeEvent, unresolvedLabel } from './event-summary.ts'
 import type { EventNames } from './event-summary.ts'
+import { personDisplayNames } from './observation/person-display.ts'
 
 export type EventCategory=Readonly<{key:string;label:string;types:readonly string[]}>
 export const EVENT_CATEGORIES:readonly EventCategory[]=Object.freeze([
@@ -14,11 +15,15 @@ export const EVENT_CATEGORIES:readonly EventCategory[]=Object.freeze([
   {key:'dissolve',label:'婚姻の終了（配偶者の死亡）',types:['MARRIAGE_DISSOLVE']},
   {key:'dynasty',label:'法的王朝の確定',types:['LEGAL_DYNASTY_SET']},
   {key:'case',label:'相続審査の記録',types:['LEGAL_CASE_SET']},
-  {key:'title',label:'土地Titleの移転',types:['LEGAL_TITLE_TRANSFER']},
+  {key:'title',label:'称号の移転（王位・領地）',types:['LEGAL_TITLE_TRANSFER']},
+  {key:'ruler',label:'国家統治者の更新・未確定化',types:['COUNTRY_RULER_SET','COUNTRY_RULER_VACATE']},
   {key:'mandate',label:'統治委任の設定',types:['CONTROL_MANDATE_SET']},
 ])
 const typesOf=(e:EventLogEntry)=>e.eventType.split('+')
 export const inCategory=(e:EventLogEntry,c:EventCategory)=>typesOf(e).some(t=>c.types.includes(t))
+/** 原史探索の最初の一覧: 大量の補助人物登録は表示しないが、全Eventを保持・再表示可能にする。 */
+export const isObservationFocusEvent=(e:EventLogEntry)=>
+  EVENT_CATEGORIES.some(c=>c.key!=='supporting'&&inCategory(e,c))
 
 export type CategoryRow=Readonly<{
   category:EventCategory
@@ -61,18 +66,33 @@ export function buildOverview(v:PlayView):IntegratedOverview{
   return {rows,totalDifferences,finalWorldIdentical,interventionTraces:{a0:used(v.a0),a1:used(v.a1)}}
 }
 
-/** 最終snapshotから引いた表示名。無い参照は「参照不明」とせずIDをそのまま返す。 */
+/** 最終snapshotから引いた表示名。無い参照はundefined（表示側でunresolvedLabelへ）。 */
 export function namesOf(w:WorldState|undefined):EventNames{
+  const person=personDisplayNames(w?.persons??[])
   return {
-    person:id=>{const p=w?.persons.find(x=>x.personId===id);return p?shortPersonName(p.name):undefined},
+    person,
     group:id=>w?.groups.find(g=>g.groupId===id)?.name,
     dynasty:id=>w?.legal.dynasties.find(d=>d.dynastyId===id)?.name,
+    country:id=>w?.countries.find(c=>c.countryId===id)?.name,
   }
+}
+/** 年初snapshotに加え、同じ年の確定PERSON_BIRTH Eventに記録された人物名だけを解決に使う（IDから名前は生成しない）。 */
+export function namesOfYear(w:WorldState|undefined,events:readonly EventLogEntry[]):EventNames{
+  const base=namesOf(w)
+  const born: {personId:Id;name:string;sex:'MALE'|'FEMALE';birthYear:number}[]=[]
+  for(const e of events){
+    if(e.eventType!=='PERSON_BIRTH')continue
+    const after=e.stateChanges.find(c=>c.path.startsWith('$.persons[')&&c.before===null)?.after as {personId?:unknown;name?:unknown;sex?:unknown;birthYear?:unknown}|null|undefined
+    if(after&&typeof after.personId==='string'&&typeof after.name==='string'&&
+      (after.sex==='MALE'||after.sex==='FEMALE'))
+      born.push({personId:after.personId,name:after.name,sex:after.sex,birthYear:typeof after.birthYear==='number'?after.birthYear:e.year})
+  }
+  return {...base,person:personDisplayNames([...(w?.persons??[]),...born])}
 }
 export function eventHeadline(e:EventLogEntry,names:EventNames,typeLabel:string):string{
   const d=describeEvent(e,names)
   if(d)return d.headline
-  const people=e.involvedRefs.flatMap(r=>r.kind==='PERSON'?[names.person(r.id)??r.id]:r.kind==='PERSON_PAIR'?r.ids.map(i=>names.person(i)??i):[])
+  const people=e.involvedRefs.flatMap(r=>r.kind==='PERSON'?[names.person(r.id)??unresolvedLabel('person',r.id)]:r.kind==='PERSON_PAIR'?r.ids.map(i=>names.person(i)??unresolvedLabel('person',i)):[])
   return `${typeLabel}（${e.year}年）${people.length>0?' '+people.join('・'):''}`
 }
 
@@ -86,10 +106,10 @@ export function lineageRows(initial:WorldState,final:WorldState|undefined):reado
   const initialIds=new Set(initial.persons.map(p=>p.personId))
   const depths=descendantDepths(initial,final.persons)
   const names=namesOf(final)
-  const parent=(id:Id|undefined)=>id===undefined?'記録なし':names.person(id)??id
-  const dyn=(p:Person)=>p.legalDynasty.status==='DETERMINED'?names.dynasty(p.legalDynasty.dynastyId)??p.legalDynasty.dynastyId:'未確定'
+  const parent=(id:Id|undefined)=>id===undefined?'記録なし':names.person(id)??unresolvedLabel('person',id)
+  const dyn=(p:Person)=>p.legalDynasty.status==='DETERMINED'?names.dynasty(p.legalDynasty.dynastyId)??unresolvedLabel('dynasty',p.legalDynasty.dynastyId):'未確定'
   return final.persons.filter(p=>!initialIds.has(p.personId)&&p.birthYear>=initial.year)
-    .map(p=>({personId:p.personId,name:shortPersonName(p.name),birthYear:p.birthYear,generation:depths.get(p.personId)??-1,
+    .map(p=>({personId:p.personId,name:names.person(p.personId)??unresolvedLabel('person',p.personId),birthYear:p.birthYear,generation:depths.get(p.personId)??-1,
       father:parent(p.fatherId),mother:parent(p.motherId),dynasty:dyn(p),alive:p.alive}))
     .sort((a,b)=>a.birthYear-b.birthYear||a.personId.localeCompare(b.personId))
 }
@@ -104,8 +124,8 @@ export function titleRows(final:WorldState|undefined):readonly TitleRow[]{
   const names=namesOf(final)
   return final.titles.filter(t=>t.kind==='TERRITORIAL').map(t=>({
     titleId:t.titleId,
-    region:final.regions.find(r=>r.regionId===t.regionId)?.name??t.regionId,
-    holder:t.holder.status==='HELD'?(names.person(t.holder.personId)??t.holder.personId):'保持者未確定',
+    region:final.regions.find(r=>r.regionId===t.regionId)?.name??unresolvedLabel('region',t.regionId),
+    holder:t.holder.status==='HELD'?(names.person(t.holder.personId)??unresolvedLabel('person',t.holder.personId)):'保持者未確定',
     holderUndetermined:t.holder.status!=='HELD',
     pendingCases:final.legal.cases.filter(c=>c.titleId===t.titleId&&c.kind==='SUCCESSION'&&c.status==='PENDING').length,
     mandatesInPeriod:final.legal.controlMandates.filter(m=>m.regionId===t.regionId&&m.effectiveFromYear<=final.year&&final.year<m.endExclusiveYear).length,

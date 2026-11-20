@@ -2,6 +2,7 @@
 import {cleanup,fireEvent,render,screen} from '@testing-library/react'
 import {afterEach,describe,it,expect,vi} from 'vitest'
 import {FollowupInterventionPanel} from '../../../src/ui/FollowupInterventionPanel.tsx'
+import {InterventionComparePanel} from '../../../src/ui/InterventionComparePanel.tsx'
 import type {PlayView} from '../../../src/ui/branch-play-source.ts'
 import {createExperimentalWorld} from '../../../src/scenario/experimental/index.ts'
 
@@ -13,7 +14,7 @@ const run={
   inputs:{scenarioId:'experimental / A1'},
   initialWorld:world,
   result:{snapshots:snapshot,goal:null,technicalGoal:{status:'NOT_ACHIEVED',assessments:[]},
-    eventLog:[],decisionTraces:[],status:'COMPLETED'},
+    eventLog:[],decisionTraces:[],coverage:{todoRuleIds:[]},status:'COMPLETED'},
 } as unknown as PlayView['a1']
 const base:PlayView={
   mode:'INTEGRATED_EXPERIMENTAL',
@@ -27,6 +28,25 @@ const renderForm=(comparison=base)=>{
   render(<FollowupInterventionPanel comparison={comparison} year={1269} activeBranch="A1" busy={false} onRun={onRun} onViewA2={onViewA2}/>)
   return {onRun,onViewA2}
 }
+describe('比較結果の名前と記録不足',()=>{
+ it('入力seedの候補で旧結果を上書きせず、A2はA1側の実人物を表示する',()=>{
+  const a1person={...world.persons[0]!,personId:'branch-only',name:'A1固有人物'}
+  const a1world={...at,persons:[...at.persons,a1person]}
+  const a1run={...run,result:{...run.result,snapshots:[a1world]}}
+  const second={...base,input:{...base.input,firstPersonId:'branch-only'},a0:a1run,a1:a1run}
+  const comparison={...base,second} as PlayView
+  const candidateSet={seed:2,mode:'INTEGRATED_EXPERIMENTAL' as const,candidates:[{
+    id:base.input.firstPersonId,name:'別seedの人物',sex:'MALE' as const,birthYear:1250,ranges:[[1250,1349] as const]}]}
+  const props={seedText:'2',year:1269,comparison,candidateSet,activeBranch:'A0' as const,
+    onCancel:vi.fn(),onSeedText:vi.fn(),onFetchCandidates:vi.fn(),onCancelCandidates:vi.fn(),
+    onRun:vi.fn(),onViewBranch:vi.fn(),onInspectEvent:vi.fn(),onInspectTrace:vi.fn()}
+  render(<InterventionComparePanel {...props}/> )
+  expect(screen.getByTestId('effect-summary').textContent).not.toContain('別seedの人物')
+  expect(screen.getByTestId('effect-a2-comparison').textContent).toContain('A1固有人物')
+  expect(screen.getByTestId('branch-headline').textContent).toContain('比較に必要な記録なし')
+ })
+})
+
 describe('第2介入GUIフォーム',()=>{
  it('同年の別ペア2件目をA1へ追加する入力を送る（第1介入不変）',()=>{
   const {onRun}=renderForm()

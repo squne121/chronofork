@@ -3,7 +3,8 @@
 import type { Id, WorldState } from '../simulation/contracts/index.ts'
 import { interventionTargetIssue, runPlayBaseline } from './branch-play-source.ts'
 import type { PlayMode } from './branch-play-source.ts'
-import { shortPersonName } from './event-summary.ts'
+import { baseDisplayName, personIdTag } from './observation/person-display.ts'
+export { personIdTag } from './observation/person-display.ts'
 
 /** 1人分。ranges は A0 のどの年初WorldStateに（直接介入できる人物として）存在したかの [開始年, 終了年] 閉区間。 */
 export type PlayCandidate = Readonly<{
@@ -40,16 +41,9 @@ export const candidatesAtYear = (set: PlayCandidateSet, year: number): readonly 
 export const candidateSetMatches = (set: PlayCandidateSet | undefined, seed: number, mode: PlayMode): set is PlayCandidateSet =>
   set !== undefined && set.seed === seed && set.mode === mode
 
-/** 内部の正規IDは変えず、表示上の取り違え防止用に付ける短い識別タグ（FNV-1a 32bit）。構造化IDの断片は見せない。 */
-export const personIdTag = (id: Id): string => {
-  let h = 0x811c9dc5
-  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
-  return h.toString(16).padStart(8, '0')
-}
-/** 読める名前（内部キー「 (marriage:…)」を除く）・性別・出生年。単純なIDはそのまま、構造化/長いIDは識別タグにする。 */
+/** 候補には識別子を添え、同年生まれの別人も選択できるようにする。 */
 export const candidateLabel = (c: Pick<PlayCandidate, 'id' | 'name' | 'sex' | 'birthYear'>): string =>
-  `${shortPersonName(c.name)}（${c.sex === 'MALE' ? '男' : '女'}・${c.birthYear}年生・` +
-  `${/^[\w-]{1,16}$/.test(c.id) ? c.id : '識別 ' + personIdTag(c.id)}）`
+  `${baseDisplayName({personId:c.id,name:c.name,sex:c.sex,birthYear:c.birthYear})}・識別${personIdTag(c.id)}（${c.sex === 'MALE' ? '男' : '女'}・${c.birthYear}年生）`
 
 /** 人物選択用の軽量候補の取得入口（GUIの明示的な取得操作・Worker・同期テスト共通）。A0は runPlayBaseline の共通入口で計算する。 */
 export type PlayCandidatesResult =

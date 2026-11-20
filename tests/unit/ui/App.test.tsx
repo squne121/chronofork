@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it , beforeEach} from 'vitest'
 import { createExperimentalScenario } from '../../../src/scenario/experimental/index.ts'
 import { runTimeline } from '../../../src/simulation/engine/index.ts'
 import { createCalibrationEvaluators } from '../../../src/simulation/rules/c/index.ts'
@@ -23,6 +23,8 @@ const groupPop = (id: string) => {
   return within(screen.getByTestId('detail')).getByText('人口').nextElementSibling?.textContent
 }
 
+
+beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
 afterEach(cleanup)
 
 describe('App', () => {
@@ -51,6 +53,12 @@ describe('App', () => {
     render(<App />)
     fireEvent.click(screen.getByTestId('branch-run'))
     expect(screen.getByTestId('branch-status').textContent).toContain('A1 COMPLETED')
+    expect(screen.getByTestId('effect-summary').textContent).toContain('この介入で、実際に何が変わった？')
+    expect(screen.getByTestId('effect-input').textContent).toContain('信頼を')
+    expect(screen.getByTestId('effect-judgement').textContent).toContain('REJECT')
+    expect(screen.getByTestId('effect-judgement').textContent).toContain('ACCEPT')
+    expect(screen.getByTestId('effect-year-events').textContent).toContain('差分')
+    expect(screen.getByTestId('effect-technical-goal').textContent).toContain('技術判定')
     expect(screen.getByTestId('trial-goal-a0').textContent).toContain('条件に不一致')
     expect(screen.getByTestId('trial-goal-a1').textContent).toContain('条件に不一致')
     expect(screen.getByTestId('trial-goal-summary').textContent).toContain('正式勝敗を表しません')

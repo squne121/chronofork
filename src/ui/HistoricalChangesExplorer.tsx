@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import type { EventLogEntry, WorldState } from '../simulation/contracts/index.ts'
 import type { BranchChoice, PlayView } from './branch-play-source.ts'
 import { HistoricalTargetComparison } from './HistoricalTargetComparison.tsx'
-import { shortPersonName } from './event-summary.ts'
+import { unresolvedLabel } from './event-summary.ts'
 import { eventHeadline, namesOf } from './integrated-overview.ts'
 import type { CategoryRow } from './integrated-overview.ts'
 
@@ -70,14 +70,14 @@ function targetName(key: string, worlds: readonly (WorldState | undefined)[]): s
   const id = key.slice(separator + 1)
   for (const w of worlds) {
     if (!w) continue
-    const name = kind === 'PERSON' ? w.persons.find(p => p.personId === id)?.name
+    const name = kind === 'PERSON' ? namesOf(w).person(id)
       : kind === 'HOUSE' ? w.houses.find(h => h.houseId === id)?.name
       : kind === 'GROUP' ? w.groups.find(g => g.groupId === id)?.name
       : kind === 'COUNTRY' ? w.countries.find(c => c.countryId === id)?.name
       : kind === 'REGION' ? w.regions.find(r => r.regionId === id)?.name : undefined
-    if (name) return `${REF_LABEL[kind] ?? kind}: ${kind === 'PERSON' ? shortPersonName(name) : name}`
+    if (name) return `${REF_LABEL[kind] ?? kind}: ${name}`
   }
-  return `${REF_LABEL[kind] ?? kind}: ${id}`
+  return `${REF_LABEL[kind] ?? kind}: ${unresolvedLabel(kind==='PERSON'?'person':kind==='GROUP'?'group':kind==='COUNTRY'?'country':'other', id)}`
 }
 
 type Props = Readonly<{
