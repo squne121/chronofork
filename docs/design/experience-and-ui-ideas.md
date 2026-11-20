@@ -164,3 +164,38 @@
 **物語テンプレートへの含意:** 主人公をひとりに固定せず、時間を通じた政治秩序や社会の変容を主題とする。構造の変化の背景に人物の判断が登場することはよいが、その人物だけを救う物語へ変質させない。紹介文は「原史で確認できた変化」「その転換の背景となる要素」「どんな別の歴史を試せるかの問い」を分ける。勝利可能性を保証しない。
 
 **研究時の注意:** 大国・小国・人口集団それぞれの絶対／相対変化を区別する。特定の年の帝国崩壊や反乱を事実として強制しない。国家の分裂・崩壊等の判定は現行契約にない新しいゲーム規則を勝手に追加しない。最初の研究の具体題材・評価方法・必要となる実装は、今後のユーザー検討・承認事項とする。
+
+## 9. 美術探索・グラフィック制作（2026-11-19）
+
+**採用方針:** [DEC-147/148](../decisions/adopted-decisions.md)。仮アート原則と、Gemini Chatの優先利用・用途別の制作ツール選択・API/MCP対応を優先する方針を記録する。以下の観察・調査候補・次の実験案は、個別ツールや最終絵柄の採用とは区別する。
+
+### 観察と未確定事項
+
+- **ユーザーによる観察:** ChatGPTで出力した3方向の美術比較では、好みを分けられるほど大きな表現差を感じなかった。Gemini Chatで試した結果は、指示に沿った差分がより大きいと感じている。これは今回の制作条件に対する評価であり、全用途の性能順位ではない。
+- **支持・検討中:** Gemini出力のB方向（ユーザーがダークファンタジー的と捉えた方向）への相対的支持はあるが、どれも決め手に欠ける。B、写実、スタイライズ、3D等の最終採用は未確定。
+- **継続する要求:** 架空世界の美術を地球の中世や単一年代に固定しない。文化・地理・文明発展の違いを表現したい。湾岸・川・丘陵を全都市の固定要素にしない。具体的な文化・文明段階の分類やゲーム規則は未決。
+- **原因仮説・未検証:** 出力の類似には、モデル特性だけでなく、共通の構図・建築語彙・題材・プロンプト制約が影響している可能性がある。原因を切り分ける比較は未実施。
+- Hydrogen／Argonの会話モデル選択と、実際に画像を出力するモデルは区別する。今回の方針では、特定の会話モデルやAPIモデルIDを標準として固定しない。
+
+### 調査で確認した制作経路と用途候補
+
+**2026-11-19時点の文献確認。Gemini Chatの優先利用を除き、以下の個別ツール・構成は未採用で、Chronofork環境での接続・自動制作・品質はUNVERIFIED。** 「APIで実行できる」「公式MCPがある」「好みに合う美術を自律制作できる」は別の評価項目とする。
+
+| 用途・工程の候補 | 手段と確認できた連携 | 残る確認 |
+|---|---|---|
+| 都市・人物等のコンセプトアート | **優先先は採用済みのGemini Chat**。[公式画像機能](https://gemini.google/overview/image-generation/)は参照画像の画風適用、複数画像の利用、会話編集を案内。[Gemini API](https://ai.google.dev/gemini-api/docs/image-generation)は自動化の候補 | ChatとAPIで出力・設定・利用条件が同じとはみなさない。ユーザーの好み、表現差、編集時の保持を確認 |
+| 紋章・地図記号・装飾の生成案 | [Recraft](https://www.recraft.ai/docs/mcp-reference/getting-started)は公式API・リモートMCP、ラスター/SVG生成、保存した画風の利用に対応 | 画像生成サービスを呼ぶ方式。手順的な描画とは区別。MCPはStudio側クレジットを使用しAPI unitsとは別 |
+| 地図・紋章・図解の構造を直接作る | SVGをAIが編集し、[Inkscape/inkex](https://inkscape.gitlab.io/extensions/documentation/)と[CLI](https://wiki.inkscape.org/wiki/Using_the_Command_Line)で描画・書き出し。[Illustrator (Beta)](https://helpx.adobe.com/illustrator/desktop/connect-with-other-apps-and-tools/work-with-illustrator-documents-from-ai-tools.html)には公式MCPによる図形・レイヤー等の操作もある | SVGの図形構築と、Illustrator MCPで現在公開される操作範囲を混同しない。意匠の品質・小サイズの読みやすさを確認 |
+| UI・家系図の見せ方 | [Figma公式リモートMCP](https://developers.figma.com/docs/figma-mcp-server/write-to-canvas/)はPlugin API経由でフレーム・コンポーネント等を作成・編集できる。ゲーム内の関係線や人数は実データから描画する案 | Figma書込みはbeta・対象プラン/編集権限が必要。実装画面と連動する図の構造を画像生成へ任せない |
+| 筆致のある2D画の作業的な制作 | [Krita Python API](https://docs.krita.org/en/user_manual/python_scripting/introduction_to_python_scripting.html)と[Nodeの描画操作](https://api.kde.org/legacy/krita/html/classNode.html)はレイヤー、線・パス等を扱う。AIが手順を出し、描画結果を見て修正する方式の候補 | APIはKrita内で実行する。MCP接続部、利用版、実際のブラシ操作・保存を要検証。好みに合う写実画の自律制作は未実証 |
+| 合成・色調整・サイズ展開 | [GIMP 3 API](https://developer.gimp.org/api/3.0/)、[Photoshop UXP](https://developer.adobe.com/photoshop/uxp/2022/ps-reference/)でレイヤー・画像処理を操作 | APIの成熟度とMCP接続部の実用性は別。全機能が汎用リモートAPIとして即使用可能とはみなさない |
+| ピクセルアート・スプライトを選ぶ場合 | [Aseprite Lua API](https://www.aseprite.org/docs/scripting/)・[CLI](https://www.aseprite.org/docs/cli/)に既存資料と作例がある | ピクセルアートの採用を意味しない。今回の美術の好みとの適合は未確認 |
+
+### 評価情報と次の検証候補
+
+- モデルの比較には、[Artificial Analysisの画像評価方法](https://artificialanalysis.ai/methodology/image)と[Text-to-Image評価](https://artificialanalysis.ai/image/leaderboard/text-to-image)、[Arena画像評価](https://arena.ai/leaderboard/image/text-to-image)がある。テキストからの生成と画像編集の評価を分け、対象モデル・設定・評価条件を確認する。総合的な選好順位を、Chronoforkの表現の幅やユーザーの美術的な好みの評価へ直接置き換えない。
+- [SketchAgent（CVPR 2025）](https://yael-vinker.github.io/sketch-agent/)には、AIがストロークを順に指示し、キャンバスへ描いて編集する研究実例がある。手順的な描画が可能な証拠であり、完成した写実的ゲームアートを自律量産できる証拠ではない。
+- **次の小規模検証案（未採用）:** Gemini Chatで参照画像を使った表現比較を続けつつ、同じ紋章または地図記号をSVG/スクリプトで作り、画像生成と構造を直接編集する方式の修正しやすさを比べる。複数製品の一括導入を先行しない。
+- 比較では「好みを判断できる表現差」「情報量と読みやすさ」「人物・都市・UIへの展開」「指定部分の修正と他部分の保持」「編集可能な元データ」「制作時間・費用」を分けて確認する。評価条件・参照画像・モデル名・設定・出力を残し、AIの自己評価だけで美術的成功としない。
+
+この記録は美術領域の方針・検討状態を引き継ぐためのもの。新しいゲームデータ、文明発展規則、最終アート、制作基盤の導入をMVP完成の追加必須条件にはしない。
