@@ -1,6 +1,7 @@
 // DEC-058: 家門契約案を当年の実人物・王朝・所領・家門支持から評価。
 // 校正用効用係数は暫定。父系デフォルト、勝利対象王朝への優遇、同率のID順解消は禁止。
 import type { Id, MarriageContract, Person, WorldState } from '../contracts/index.ts'
+import { marriageCandidatePersons } from './nextgen-marriage.ts'
 
 export type ContractChoice=Readonly<{
   key:string
@@ -62,12 +63,26 @@ function houseSupport(world:WorldState,p:Person,id:Id):number{
   const houses=new Set(world.persons.filter(x=>dynastyOf(x,world)===id).map(x=>x.houseId))
   return Math.max(0,...[...houses].map(h=>group.support.houseBps[h]??0))
 }
+/** DEC-058の相手選好用。同じ信頼スコアの比較にのみ使い、契約案の同意とは分離する。 */
+export function partnerHouseInterest(
+  world:WorldState,person:Person,partner:Person,calibration:NextgenContractCalibration,
+):number{
+  const group=world.groups.find(g=>g.groupId===person.originGroupId)
+  const support=group?.support.houseBps[partner.houseId]??0
+  const dynasty=dynastyOf(partner,world)
+  return calibration.supportWeight*Math.floor(support/2000)+
+    calibration.titleWeight*(dynasty===null?0:titleStrength(world,dynasty))
+}
 export function chooseNextgenContract(
   world:WorldState,pair:readonly [Id,Id],trustScore:number,
   calibration:NextgenContractCalibration=EXPERIMENTAL_NEXTGEN_CONTRACT,
+  candidates:readonly Person[]=[],
 ):ContractAgreement{
   if(validateNextgenContractCalibration(calibration).length>0||!int(trustScore)||Math.abs(trustScore)>1000)
     return {status:'DEFER',reasonCode:'CONTRACT_CALIBRATION_OR_SCORE_INVALID',choices:[]}
+  const persons=marriageCandidatePersons(world,pair,candidates)
+  if(!persons)return {status:'DEFER',reasonCode:'CANDIDATE_VIEW_INVALID',choices:[]}
+  world={...world,persons}
   const ps=pair.map(id=>world.persons.find(p=>p.personId===id))
   if(ps.some(p=>!p))return {status:'DEFER',reasonCode:'CONTRACT_PARTY_MISSING',choices:[]}
   const people=ps as [Person,Person]

@@ -1,6 +1,6 @@
 // B の出生（Person 登録）と共通死亡 reducer。人口の増減は C① の枠確定と POPULATION_* のみが行い、
 // ここでは個別 Person の登録・死亡確定と枠の請求済み数の更新だけを行う（人口へ再加算しない: 契約 §4）。
-import type { PersonBirthCommand, PersonDeathCommand, PersonPromotionCommand, PersonSupportingRecordCommand, WorldState } from '../../contracts/index.ts'
+import type { PersonBirthCommand, PersonDeathCommand, PersonPromotionCommand, SupportingPersonRegistration, WorldState } from '../../contracts/index.ts'
 import type { Draft, Handler } from './draft.ts'
 import { fail, findPerson } from './draft.ts'
 import type { Rejection } from './types.ts'
@@ -80,10 +80,10 @@ export const personPromote: Handler<PersonPromotionCommand> = (d, c) => {
 
 
 /**
- * DEC-061: B-001専用の非操作補助人物記録。既存の重要人物昇格とは異なるSourceとCommandを使う。
- * 候補が法的婚姻可能であるとの証明ではなく、人口集団に含まれる匿名者を少数だけ追跡可能にする。
+ * DEC-061: MARRIAGE_REGISTERの原子的適用に含まれる補助人物記録。
+ * 人口集団の内訳を個別化する処理で、禁親や法的資格はここでは証明しない。
  */
-export const personSupportingRecord: Handler<PersonSupportingRecordCommand> = (d, c) => {
+export const personSupportingRecord: Handler<SupportingPersonRegistration> = (d, c) => {
   const w = d.world
   const p = c.person
   if (p.interactionRole !== 'SUPPORTING' || !p.alive || p.deathYear !== undefined ||
@@ -91,7 +91,8 @@ export const personSupportingRecord: Handler<PersonSupportingRecordCommand> = (d
       p.bloodlineDynastyId !== undefined || p.legalDynasty.status !== 'UNDETERMINED') {
     return fail('INVALID_COMMAND', '補助人物は非操作・生存・血縁/王朝未確定のまま記録してください')
   }
-  if (!c.sourceEvidenceId || !c.cohortId || !c.familyPoolId ||
+  const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+  if (!nonEmpty(c.sourceEvidenceId) || !nonEmpty(c.cohortId) || !nonEmpty(c.familyPoolId) ||
       !Number.isSafeInteger(c.cohortSize) || c.cohortSize < 1 ||
       !Number.isSafeInteger(c.memberOrdinal) || c.memberOrdinal < 0 ||
       c.memberOrdinal >= c.cohortSize ||
@@ -104,7 +105,7 @@ export const personSupportingRecord: Handler<PersonSupportingRecordCommand> = (d
     if(p.birthYear>=1250)
       return fail('LEGAL_BASIS_MISSING','初期人口コホートの出生年が不正です')
   }else if(c.birthBacking==='C004_COHORT'){
-    if(!c.survivorAttestationId||c.survivorAttestationId===c.sourceEvidenceId)
+    if(!nonEmpty(c.survivorAttestationId)||c.survivorAttestationId.trim()===c.sourceEvidenceId.trim())
       return fail('LEGAL_BASIS_MISSING','過去年出生集団の成人生存に独立した試験用出典がありません')
     const record=w.demographics.anonymousBirthHistory?.find(
       s=>s.groupId===p.originGroupId&&s.year===p.birthYear)

@@ -15,7 +15,7 @@ const cohort:SupportingMarriageCohort={
   source:'INITIAL_POPULATION',sourceEvidenceId:'experimental:assumed-age-band-1249',
   provenance:'CALIBRATION_ONLY',
 }
-const options={seed:73,maxCandidates:3,perCohortSamples:4,maximumPreviewAge:50} as const
+const options={seed:73,maxCandidates:3,perCohortSamples:3,maximumPreviewAge:50} as const
 
 describe('DEC-061: 大勢の人口集団からの非操作対象の婚姻候補供給（純粋技術境界）',()=>{
   it('初期8人物以外を候補に出せるが、重要Person/人口/婚姻/Goalは作らない',()=>{
@@ -37,10 +37,15 @@ describe('DEC-061: 大勢の人口集団からの非操作対象の婚姻候補�
     expect(world).toEqual(before) // 人口を勝手に増やさない・人物はまだ登録しない
     expect(proposeSupportingMarriageCandidates(world,seeker,[cohort],options)).toEqual(r)
   })
+  it('候補数が探索予算を超える場合は順位を切り捨てず保留する',()=>{
+    expect(proposeSupportingMarriageCandidates(world,seeker,[cohort],{...options,maxCandidates:1}))
+      .toMatchObject({status:'DEFER',candidates:[],reasonCodes:['SUPPORTING_CANDIDATE_BUDGET_EXCEEDED']})
+  })
   it('使用済み候補IDの再選抜は禁止し、別の候補でのみ継続できる',()=>{
     const first=proposeSupportingMarriageCandidates(world,seeker,[cohort],options)
     const used=new Set(first.candidates.map(p=>p.candidateId))
     const next=proposeSupportingMarriageCandidates(world,seeker,[cohort],{...options,usedCandidateIds:used})
+    expect(next.status).toBe('PROPOSED')
     expect(next.candidates.every(c=>!used.has(c.candidateId))).toBe(true)
   })
   it('perCohortSamples=1で使用済み候補を引いても未使用構成員まで探索を続ける',()=>{

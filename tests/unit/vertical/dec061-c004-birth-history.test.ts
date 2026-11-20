@@ -36,6 +36,13 @@ const cohort:SupportingMarriageCohort={
 const config={cohorts:[cohort],maxRecordsPerYear:1,maxAliveSupporting:2,
   perCohortSamples:1,maximumPreviewAge:50} as const
 
+function expectDefer(r:ReturnType<typeof runYear>,reason:string){
+  if(r.status!=='COMPLETED')throw new Error(JSON.stringify(r.halt))
+  expect(r.traces.some(t=>t.ruleId==='B-001'&&t.status==='DEFER'&&t.reasonCodes.some(c=>c.startsWith(reason)))).toBe(true)
+  expect(r.traces.some(t=>t.ruleId==='B-001'&&t.status==='ACCEPT')).toBe(false)
+  expect(r.events).toEqual([])
+}
+
 describe('DEC-061 C004の過去年匿名出生の根拠を成人まで保存（非権威）',()=>{
   it('C004の年次出生数を年末に確定し、古い当年Slotを保持せず翌年以降も履歴を残す',()=>{
     const w1=yearsTo(1251)
@@ -52,7 +59,7 @@ describe('DEC-061 C004の過去年匿名出生の根拠を成人まで保存（�
     expect(yearsTo(1252)).toEqual(w2)
   })
 
-  it('18年間は未成年のC004候補を作らず、成人後に実出生枠と別の生存試験証拠で1人を記録',()=>{
+  it('18年間は未成年のC004候補を作らず、成人後に実出生枠と別の生存試験証拠で候補だけを提示',()=>{
     const source=yearsTo(1267)
     const setup=createB001SupportingMarriageEvaluator(config)
     expect(setup.ok).toBe(true)
@@ -60,25 +67,24 @@ describe('DEC-061 C004の過去年匿名出生の根拠を成人まで保存（�
     const notAdult=runYear(source,{seed,evaluators:{'B-001':setup.evaluator}})
     expect(notAdult.status).toBe('COMPLETED')
     if(notAdult.status==='COMPLETED'){
-      expect(notAdult.events.filter(e=>e.eventType==='PERSON_SUPPORTING_RECORD')).toHaveLength(0)
+      expect(notAdult.traces.some(t=>t.ruleId==='B-001'&&t.status==='ACCEPT')).toBe(false)
+      expect(notAdult.world.persons).toEqual(source.persons)
     }
     const adult=yearsTo(1268)
     const r=runYear(adult,{seed,evaluators:{'B-001':setup.evaluator}})
     expect(r.status).toBe('COMPLETED')
     if(r.status!=='COMPLETED')return
-    const added=r.world.persons.filter(p=>p.interactionRole==='SUPPORTING')
-    expect(added).toHaveLength(1)
-    expect(added[0]).toMatchObject({
-      birthYear:1250,originGroupId:cohort.groupId,interactionRole:'SUPPORTING',
-      legalDynasty:{status:'UNDETERMINED'},
-    })
-    expect(r.events.filter(e=>e.eventType==='PERSON_SUPPORTING_RECORD')).toHaveLength(1)
+    expect(r.world.persons).toEqual(adult.persons)
+    const offers=r.traces.filter(t=>t.ruleId==='B-001'&&t.status==='ACCEPT')
+    expect(offers.length).toBeGreaterThan(0)
+    for(const offer of offers){
+      expect(offer.candidates[0]?.inputs).toMatchObject({cohortId:cohort.cohortId,candidateBirthYear:1250,
+        candidateGroupId:cohort.groupId,sourceEvidenceId:cohort.sourceEvidenceId,
+        survivorAttestationId:cohort.survivorAttestationId,kinshipStatus:'UNVERIFIED'})
+      expect(offer.eventIds).toEqual([])
+    }
     expect(r.world.groups).toEqual(adult.groups)
     expect(r.world.demographics.anonymousBirthHistory).toEqual(adult.demographics.anonymousBirthHistory)
-    const again=runYear(r.world,{seed,evaluators:{'B-001':setup.evaluator}})
-    expect(again.status).toBe('COMPLETED')
-    if(again.status==='COMPLETED')
-      expect(again.events.filter(e=>e.eventType==='PERSON_SUPPORTING_RECORD')).toHaveLength(0)
     expect(runYear(adult,{seed,evaluators:{'B-001':setup.evaluator}})).toEqual(r)
   })
 
@@ -90,17 +96,13 @@ describe('DEC-061 C004の過去年匿名出生の根拠を成人まで保存（�
     expect(missingSurvivor.ok).toBe(true)
     if(missingSurvivor.ok){
       const failed=runYear(adult,{seed,evaluators:{'B-001':missingSurvivor.evaluator}})
-      expect(failed.status).toBe('HALTED')
-      if(failed.status==='HALTED')expect(failed.halt.evaluatorDiagnostics.map(d=>d.code))
-        .toContain('C004_SURVIVOR_ATTESTATION_MISSING:0')
+      expectDefer(failed,'C004_SURVIVOR_ATTESTATION_MISSING:0')
     }
     const missingHistory:WorldState={...adult,demographics:{cohortSlots:[]}}
     const ok=createB001SupportingMarriageEvaluator(config)
     if(!ok.ok)throw new Error('factory invalid')
     const noHistory=runYear(missingHistory,{seed,evaluators:{'B-001':ok.evaluator}})
-    expect(noHistory.status).toBe('HALTED')
-    if(noHistory.status==='HALTED')expect(noHistory.halt.evaluatorDiagnostics.map(d=>d.code))
-      .toContain('C004_BIRTH_BACKING_INSUFFICIENT:0')
+    expectDefer(noHistory,'C004_BIRTH_BACKING_INSUFFICIENT:0')
 
     const count=adult.demographics.anonymousBirthHistory!.find(s=>
       s.groupId===cohort.groupId&&s.year===cohort.birthYear)!.anonymousBirths
@@ -113,9 +115,7 @@ describe('DEC-061 C004の過去年匿名出生の根拠を成人まで保存（�
     ]})
     if(!duplicateAlloc.ok)throw new Error('factory invalid')
     const bad=runYear(adult,{seed,evaluators:{'B-001':duplicateAlloc.evaluator}})
-    expect(bad.status).toBe('HALTED')
-    if(bad.status==='HALTED')expect(bad.halt.evaluatorDiagnostics.some(
-      d=>d.code.startsWith('C004_SHARED_BIRTH_CAPACITY_EXCEEDED'))).toBe(true)
+    expectDefer(bad,'C004_SHARED_BIRTH_CAPACITY_EXCEEDED:')
     const corrupted={...adult,demographics:{
       ...adult.demographics,anonymousBirthHistory:[
         ...adult.demographics.anonymousBirthHistory!,

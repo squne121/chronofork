@@ -1,6 +1,7 @@
 // DecisionTrace / EventLog / StatModifier（契約 §7）。
 import type { Id, JsonValue, Phase, TargetRef, Year } from './primitives.ts'
 import type { RuleId } from './rule-ids.ts'
+import type { SupportingPersonRegistration } from './commands.ts'
 
 export type StatModifier = Readonly<{
   modifierId: Id
@@ -54,4 +55,9 @@ export type EventLogEntry = Readonly<{
   involvedRefs: readonly TargetRef[]
   stateChanges: readonly StateChange[]
   sourceTraceIds: readonly Id[]
+  /** 成立時の人口出典。法的承認や禁親の証明ではない。 */
+  supportingMarriageRegistrations?: readonly Readonly<{
+    commandId: Id; requestId: Id; sourceTraceId: Id; marriageId: Id
+    registration: SupportingPersonRegistration
+  }>[]
 }>

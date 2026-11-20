@@ -119,7 +119,8 @@ function snapshotMetrics(r:ReturnType<typeof runTimeline>){
       recordedDeathsDuringYear:[...deathsIn1290].sort(),
       keyAdultsAfterB003:after1290Deaths?adults(after1290Deaths,'KEY'):null,
     }:null,
-    supportRecords:counts('PERSON_SUPPORTING_RECORD'),
+    supportRecords:r.eventLog.filter(e=>e.eventType==='MARRIAGE_REGISTER')
+      .flatMap(e=>e.supportingMarriageRegistrations??[]).length,
     supportAliveAtEnd:w.persons.filter(p=>p.alive&&p.interactionRole==='SUPPORTING').length,
     lateSupportPairs:latePairs.length,
     lateSupportPairsAccepted:acceptedLate,

@@ -14,8 +14,12 @@ const confirmedDeath=(traces:readonly DecisionTrace[],personId:string,year:numbe
     t.eventIds.length>0&&t.candidates.some(c=>c.inputs.personId===personId))
   return candidates.length===1?candidates[0]:undefined
 }
+const marriageEvaluators = new WeakMap<RuleEvaluator, RuleEvaluator>()
+export const unwrapSpouseDeathDissolution = (evaluator: RuleEvaluator): RuleEvaluator =>
+  marriageEvaluators.get(evaluator) ?? evaluator
+
 export function withSpouseDeathDissolution(marriage:RuleEvaluator):RuleEvaluator{
-  return (world:WorldState,ctx:EvaluationContext):RuleOutcome=>{
+  const evaluator: RuleEvaluator = (world:WorldState,ctx:EvaluationContext):RuleOutcome=>{
     if(ctx.ruleId!=='A-LEG-01'||ctx.phase!==3||world.year!==ctx.year)
       throw new EvaluationFailure('婚姻終了の年・フェーズ・RuleIDが不一致',[
         {code:'RULE_MISMATCH',message:'A-LEG-01 phase3'}])
@@ -66,4 +70,6 @@ export function withSpouseDeathDissolution(marriage:RuleEvaluator):RuleEvaluator
     }
     return {...base,commands:[...base.commands,...cmds],traceDrafts:[...base.traceDrafts,...drafts]}
   }
+  marriageEvaluators.set(evaluator, marriage)
+  return evaluator
 }

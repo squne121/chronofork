@@ -32,7 +32,15 @@ type CommandBase = Readonly<{
 
 type CommandOf<T extends string, P> = CommandBase & Readonly<{ type: T }> & Readonly<P>
 
-export type MarriageRegisterCommand = CommandOf<'MARRIAGE_REGISTER', { marriage: Marriage }>
+/** 成立時にのみ登録する人口内訳。法的審査の証拠ではない。 */
+export type SupportingPersonRegistration = Readonly<{
+  person: Person; cohortId: Id; cohortSize: number; memberOrdinal: number
+  sourceEvidenceId: Id; familyPoolId: Id; birthBacking: 'INITIAL_POPULATION' | 'C004_COHORT'
+  survivorAttestationId?: Id
+}>
+export type MarriageRegisterCommand = CommandOf<'MARRIAGE_REGISTER', {
+  marriage: Marriage; supportingPerson?: SupportingPersonRegistration
+}>
 /** B-003の確定死亡を根拠にA-LEG-01のみが婚姻を解消する。 */
 export type MarriageDissolveCommand = CommandOf<'MARRIAGE_DISSOLVE', {
   marriageId: Id; deceasedPersonId: Id; dissolvedYear: Year; cause: 'SPOUSE_DEATH'
@@ -73,13 +81,9 @@ export type PersonPromotionCommand = CommandOf<'PERSON_PROMOTE', {
   person: Person; cohortId: Id; cohortBirthYear: Year;
   cohortSize: number; memberOrdinal: number; identityEvidenceId: Id
 }>
+/** 旧形式の識別用。単独での補助人物登録は拒否し、成立時は MARRIAGE_REGISTER と一体で扱う。 */
+export type PersonSupportingRecordCommand = CommandOf<'PERSON_SUPPORTING_RECORD', SupportingPersonRegistration>
 /** B-009だけが更新できる人物ペアの累積信頼基礎値。介入修正値は含めない。 */
-/** B-001の少数抽象婚姻候補を、法的審査前にSUPPORTINGのみとして追跡可能にする専用記録。 */
-export type PersonSupportingRecordCommand = CommandOf<'PERSON_SUPPORTING_RECORD', {
-  person: Person; cohortId: Id; cohortSize: number; memberOrdinal: number
-  sourceEvidenceId: Id; familyPoolId: Id; birthBacking: 'INITIAL_POPULATION' | 'C004_COHORT'
-  survivorAttestationId?: Id
-}>
 export type PersonPairTrustSetCommand = CommandOf<'PERSON_PAIR_TRUST_SET', { relation: PersonPairTrust }>
 export type PersonDeathCommand = CommandOf<
   'PERSON_DEATH',

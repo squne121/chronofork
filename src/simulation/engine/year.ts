@@ -4,6 +4,7 @@
 import type {
   CrossDomainRequest,
   DecisionTrace,
+  DomainCommand,
   EventLogEntry,
   Id,
   Phase,
@@ -12,7 +13,13 @@ import type {
   WorldState,
 } from '../contracts/index.ts'
 import { GOAL_YEAR, START_YEAR } from '../contracts/index.ts'
+import { isPopulationSupportingResolver } from '../autonomy/supporting-candidate-view.ts'
 import { drawRandom } from '../random.ts'
+import { aLeg01SupportingEvidence } from '../rules/a/aleg01-nextgen.ts'
+import { unwrapSpouseDeathDissolution } from '../rules/a/aleg01-spouse-death.ts'
+import { b004WorldStateEvidence } from '../rules/b/b004-worldstate.ts'
+import { b005SupportingEvidence } from '../rules/b/b005-nextgen.ts'
+import { reviewDomesticMarriageEligibility } from '../legal/nextgen-marriage.ts'
 import { getRule } from '../rule-registry.ts'
 import { validateWorldState } from '../validation/index.ts'
 import type { Diagnostic } from '../validation/index.ts'
@@ -23,7 +30,7 @@ import { buildEvents, buildTraces } from './history.ts'
 import { traceIdOf } from './ids.ts'
 import { applyOutcome, createTransaction } from './reducer/index.ts'
 import type { Rejection } from './reducer/index.ts'
-import { cloneData } from './reducer/canonical.ts'
+import { canonicalize, cloneData } from './reducer/canonical.ts'
 import { RULE_SCHEDULE, YEARLY_PHASES } from './schedule.ts'
 import type { HaltCode, RunHalt, RunOptions, YearRunResult } from './types.ts'
 
@@ -74,6 +81,9 @@ function checkOutcome(o: RuleOutcome, ctx: EvaluationContext): string | null {
   if (o.responses !== undefined && !Array.isArray(o.responses)) return 'Outcome.responses が配列ではありません'
   const ids = new Set<Id>()
   for (const [i, d] of o.traceDrafts.entries()) {
+    if (!d || !Array.isArray(d.reasonCodes) || !Array.isArray(d.candidates) || !Array.isArray(d.modifierIds)) {
+      return `traceDrafts[${i}] の理由・候補・修正参照が不正です`
+    }
     if (d.year !== ctx.year || d.phase !== ctx.phase || d.ruleId !== ctx.ruleId) {
       return `traceDrafts[${i}] の年/フェーズ/RuleID が評価対象と一致しません`
     }
@@ -96,6 +106,77 @@ function checkOutcome(o: RuleOutcome, ctx: EvaluationContext): string | null {
 
 
 type MarriageQuery = Extract<CrossDomainRequest, { kind: 'LEGAL_MARRIAGE_QUERY' }>
+type MarriageRegister = Extract<DomainCommand, { type: 'MARRIAGE_REGISTER' }>
+type CheckSupportingRegistration = (command: MarriageRegister, query: MarriageQuery, draftIndex: number) => string | null
+
+/** 正規の評価器だけが、順位計算・法的再審査の結果を登録に使える。Traceのラベルで代替しない。 */
+function supportingRegistrationCheck(
+  o: RuleOutcome, world: WorldState, ctx: EvaluationContext, evaluators: EvaluatorMap,
+  legalEvaluator: RuleEvaluator, requestUsed: (id: Id) => boolean,
+): CheckSupportingRegistration {
+  const planned = o.commands.filter(c => c.type === 'MARRIAGE_REGISTER' && c.supportingPerson !== undefined)
+  const b4Evidence = b004WorldStateEvidence(evaluators['B-004'])
+  const b4Resolve = b4Evidence?.resolve
+  const legalEvidence = aLeg01SupportingEvidence(unwrapSpouseDeathDissolution(legalEvaluator))
+  const negotiationEvidence = b005SupportingEvidence(evaluators['B-005'])
+  const resolve = legalEvidence?.resolve ?? b4Resolve
+  const alive = world.persons.filter(p => p.alive && p.interactionRole === 'SUPPORTING').length
+  const supplied = o.commands.some(c => c.type === 'MARRIAGE_REGISTER') && resolve && isPopulationSupportingResolver(resolve)
+    ? resolve(world, ctx) : []
+  return (c, q, draftIndex) => {
+    const registration = c.supportingPerson
+    const matching = registration ? supplied.filter(s => s.person.personId === registration.person.personId &&
+      q.payload.personIds.includes(s.person.personId) && q.payload.personIds.includes(s.seekerId)) : []
+    const candidate = matching[0]
+    if (registration && (matching.length !== 1 || !candidate ||
+        canonicalize(candidate.registration) !== canonicalize(registration))) {
+      return '補助人物の登録内容を当年・当枝のB-001候補供給から再導出できません'
+    }
+    // 登録済みの当事者でも、競合候補の脱落やOutcomeの書き換えで首位を作らない。
+    const ids = q.payload.personIds
+    const registeredSupporting = world.persons.some(p => ids.includes(p.personId) && p.interactionRole === 'SUPPORTING')
+    if (legalEvidence || negotiationEvidence || b4Resolve || registration || registeredSupporting) {
+      if (!b4Evidence || !legalEvidence || !negotiationEvidence ||
+          b4Resolve !== legalEvidence.resolve || b4Resolve !== negotiationEvidence.resolve) {
+        return '婚姻に必要な正規のB-004・B-005・A-LEG-01審査を確認できません'
+      }
+      const supportingIds = new Set([...supplied.map(s => s.person.personId),
+        ...world.persons.filter(p => p.interactionRole === 'SUPPORTING').map(p => p.personId)])
+      const related = new Map<string, Id>()
+      for (const t of ctx.priorTraces ?? []) {
+        if (t.ruleId !== 'B-004' || t.status !== 'ACCEPT' || t.actorRef.kind !== 'PERSON_PAIR') continue
+        const pair = t.actorRef.ids
+        if (!pair.some(id => ids.includes(id)) || !pair.some(id => supportingIds.has(id))) continue
+        const people = supplied.filter(s => pair.includes(s.seekerId) && pair.includes(s.person.personId)).map(s => s.person)
+        const eligibility = reviewDomesticMarriageEligibility(world, pair, people)
+        if (eligibility.status === 'ELIGIBLE') related.set(JSON.stringify(pair), eligibility.countryId)
+      }
+      if (negotiationEvidence.clearanceKey(ctx.year, related) !== legalEvidence.clearanceKey(ctx.year, related)) {
+        return 'B-005とA-LEG-01の補助人物禁親台帳が一致しません'
+      }
+    }
+    if (!registration || !candidate) return null
+    // 新規個別化を許可するのは年に一度のA-LEG-01のみ。今回の登録予定を全件加算する。
+    if (planned.length > candidate.maxRecordsPerYear || alive + planned.length > candidate.maxAliveSupporting) {
+      return '成立時の補助人物登録予算を超過しています'
+    }
+    if (requestUsed(q.source.requestId) ||
+        (ctx.marriageQueries ?? []).some(other => other.source.requestId !== q.source.requestId &&
+          other.payload.personIds.some(personId => q.payload.personIds.includes(personId)))) {
+      return '補助人物の婚姻照会が同年に競合しています（当事者またはrequestId）'
+    }
+    const draft = o.traceDrafts[draftIndex]!
+    const chosen = draft.candidates[0]
+    if (c.source.sourceIntentId !== q.source.sourceTraceId || c.source.sourceRuleId !== 'A-LEG-01' ||
+        c.source.year !== ctx.year || c.source.phase !== ctx.phase || draft.actorRef.kind !== 'PERSON_PAIR' ||
+        canonicalize(draft.actorRef.ids) !== canonicalize(q.payload.personIds) || draft.candidates.length !== 1 ||
+        !chosen?.eligible || chosen.candidateId !== draft.selectedCandidateId || !c.marriage.contract ||
+        chosen.inputs.contractId !== c.marriage.contract.contractId) {
+      return '補助人物の婚姻CommandとA-LEG-01の照会・判断・契約が一致しません'
+    }
+    return null
+  }
+}
 
 /** B-005からA-LEG-01への型付き同年照会だけを配送する。他種別は既存の安全停止を維持。 */
 function legalMarriageRequestValid(r: CrossDomainRequest, year: number, traceIds: ReadonlySet<Id>): r is MarriageQuery {
@@ -112,7 +193,15 @@ function legalMarriageRequestValid(r: CrossDomainRequest, year: number, traceIds
 
 /** A-LEG-01が照会を一件ずつ応答し、ACCEPTのときだけ同一requestIdへの婚姻登録を出すことを検査。 */
 function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[], traceId: (draftIndex: number) => Id,
-  priorTraces: readonly DecisionTrace[]): string | null {
+  priorTraces: readonly DecisionTrace[], checkSupporting: CheckSupportingRegistration): string | null {
+  const candidateIds = new Set<Id>()
+  for (const c of o.commands) {
+    if (c.type !== 'MARRIAGE_REGISTER' || c.supportingPerson === undefined) continue
+    if (!queries.some(q => q.source.requestId === c.source.requestId)) return '照会外の補助人物登録が含まれます'
+    const id = c.supportingPerson.person.personId
+    if (candidateIds.has(id)) return '同じ補助候補の登録が重複しています'
+    candidateIds.add(id)
+  }
   const responses = o.responses
   if (!Array.isArray(responses) || responses.length !== queries.length || o.traceDrafts.length < queries.length) {
     return 'A-LEG-01の照会・応答・判断件数が一致しません'
@@ -157,10 +246,13 @@ function marriageResponseError(o: RuleOutcome, queries: readonly MarriageQuery[]
       accepts++
       if (matching.length !== 1 || matching[0]?.type !== 'MARRIAGE_REGISTER') return 'ACCEPTの婚姻登録commandがありません'
       const c = matching[0]
+      const draftIndex = o.traceDrafts.indexOf(ts[0]!)
       if (c.marriage.personIds[0] !== q.payload.personIds[0] || c.marriage.personIds[1] !== q.payload.personIds[1] ||
-          c.source.sourceTraceId !== traceId(o.traceDrafts.indexOf(ts[0]!))) {
+          c.source.sourceTraceId !== traceId(draftIndex)) {
         return '婚姻登録commandの対象・Trace参照が照会と一致しません'
       }
+      const bad = checkSupporting(c, q, draftIndex)
+      if (bad !== null) return bad
     } else if (matching.length !== 0) return '未承認の照会から婚姻登録commandが生成されました'
   }
   if (o.commands.length !== accepts+dissolveCommands.length) return '照会外の不明なA-LEG-01 commandが含まれます'
@@ -196,9 +288,9 @@ function rulerVacateEvidenceError(o: RuleOutcome, year: number, events: readonly
   return null
 }
 
-function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions, priorTraces: readonly DecisionTrace[], marriageQueries: readonly MarriageQuery[]): EvaluationContext {
+function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions, priorTraces: readonly DecisionTrace[], marriageQueries: readonly MarriageQuery[], supportingCandidateSnapshot: EvaluationContext['supportingCandidateSnapshot'], marriageCandidateMinAge: number | undefined): EvaluationContext {
   const year = world.year
-  return {
+  return Object.freeze<EvaluationContext>({
     year,
     phase,
     ruleId,
@@ -206,6 +298,8 @@ function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: R
     branchId: options.branchId ?? 'main',
     priorTraces: deepFreeze(cloneData(priorTraces)),
     marriageQueries: deepFreeze(cloneData(marriageQueries)),
+    ...(supportingCandidateSnapshot ? { supportingCandidateSnapshot } : {}),
+    ...(marriageCandidateMinAge === undefined ? {} : { marriageCandidateMinAge }),
     traceId: (i) => traceIdOf(year, phase, ruleId, i),
     random: (k) =>
       drawRandom(options.seed, {
@@ -217,7 +311,7 @@ function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: R
         targetId: k.targetId ?? null,
         eventKey: k.eventKey ?? null,
       }),
-  }
+  })
 }
 
 /** ⑦ Core: 年末の確定検証と t+1 年初への繰越。不足するドメイン規則は補完せず停止する。 */
@@ -284,6 +378,8 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
   const events: EventLogEntry[] = []
   const traces: DecisionTrace[] = []
   const marriageQueries: MarriageQuery[] = []
+  const marriageCandidateMinAge = b004WorldStateEvidence(evaluators['B-004'])?.minAdultAge
+  let supportingCandidateSnapshot: EvaluationContext['supportingCandidateSnapshot']
 
   for (const phase of YEARLY_PHASES) {
     for (const ruleId of RULE_SCHEDULE[phase]) {
@@ -297,7 +393,10 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
         }
         continue // TODO: 呼ばない。Command・Event・Trace を作らない。
       }
-      const ctx = makeContext(world, phase, ruleId, options, traces, marriageQueries)
+      if (ruleId === 'B-001' && phase === 3) {
+        supportingCandidateSnapshot = deepFreeze({ branchId: options.branchId ?? 'main', year: t, world: cloneData(world) })
+      }
+      const ctx = makeContext(world, phase, ruleId, options, traces, marriageQueries, supportingCandidateSnapshot, marriageCandidateMinAge)
       let outcome: RuleOutcome
       try {
         outcome = evaluator(deepFreeze(cloneData(world)), ctx)
@@ -312,6 +411,17 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
       }
       executed.push(ruleId)
 
+      if (outcome.commands.some(c => (c.type === 'PERSON_BIRTH' || c.type === 'PERSON_PROMOTE') &&
+          typeof c.person?.personId !== 'string')) {
+        return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: '新規PersonのIDが文字列ではありません' })
+      }
+      if (outcome.commands.some(c => c.type === 'PERSON_SUPPORTING_RECORD' ||
+          (c.type === 'PERSON_PROMOTE' && c.person?.interactionRole === 'SUPPORTING') ||
+          ((c.type === 'PERSON_BIRTH' || c.type === 'PERSON_PROMOTE') &&
+            c.person.personId.startsWith('support:population:')) ||
+          (c.type === 'MARRIAGE_REGISTER' && c.supportingPerson !== undefined && ruleId !== 'A-LEG-01'))) {
+        return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: '人口候補の個別化は合法な婚姻登録と同時にのみ行えます' })
+      }
       if (outcome.requests.length > 0) {
         const ids = new Set(outcome.traceDrafts.map((_, i) => ctx.traceId(i)))
         const requestsValid = ruleId === 'B-005' && phase === 3 && outcome.commands.length === 0 &&
@@ -328,7 +438,14 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
         marriageQueries.push(...outcome.requests as MarriageQuery[])
       }
       if (ruleId === 'A-LEG-01' && (marriageQueries.length>0 || outcome.commands.length>0 || (outcome.responses?.length??0)>0)) {
-        const bad = marriageResponseError(outcome, marriageQueries, ctx.traceId, traces)
+        let bad: string | null
+        try {
+          const checkSupporting = supportingRegistrationCheck(outcome, world, ctx, evaluators, evaluator,
+            requestId => tx.requests.has(requestId))
+          bad = marriageResponseError(outcome, marriageQueries, ctx.traceId, traces, checkSupporting)
+        } catch {
+          bad = 'A-LEG-01の婚姻照会・応答・登録証拠の形式が不正です'
+        }
         if (bad !== null) {
           return halted(input, t, executed, { code: 'INVALID_OUTCOME', phase, ruleId, message: bad })
         }

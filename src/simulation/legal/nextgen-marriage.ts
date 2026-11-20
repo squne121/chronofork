@@ -34,12 +34,27 @@ function ancestors(personId:Id,byId:ReadonlyMap<Id,Person>):
   return {distances,broken}
 }
 
+/** 一時候補は当該ペアの未登録SUPPORTING人物に限定し、登録済み事実を上書きしない。 */
+export function marriageCandidatePersons(
+  world:WorldState,pair:readonly [Id,Id],candidates:readonly Person[],
+):readonly Person[]|null{
+  const ids=new Set(world.persons.map(p=>p.personId))
+  for(const p of candidates){
+    if(!p||!pair.includes(p.personId)||p.interactionRole!=='SUPPORTING'||ids.has(p.personId))
+      return null
+    ids.add(p.personId)
+  }
+  return [...world.persons,...candidates]
+}
+
 export function reviewDomesticMarriageEligibility(
-  world:WorldState,pair:readonly [Id,Id],
+  world:WorldState,pair:readonly [Id,Id],candidates:readonly Person[]=[],
 ):DomesticMarriageEligibility{
   if(pair[0]===pair[1]||!pair[0]||!pair[1]||compare(pair[0],pair[1])>0)
     return {status:'DEFER',reasonCode:'INVALID_PAIR'}
-  const persons=new Map(world.persons.map(p=>[p.personId,p]))
+  const view=marriageCandidatePersons(world,pair,candidates)
+  if(!view)return {status:'DEFER',reasonCode:'CANDIDATE_VIEW_INVALID'}
+  const persons=new Map(view.map(p=>[p.personId,p]))
   const a=persons.get(pair[0]),b=persons.get(pair[1])
   if(!a||!b)return {status:'DEFER',reasonCode:'PERSON_UNKNOWN'}
   if(!a.alive||!b.alive)return {status:'REJECT',reasonCode:'PERSON_DECEASED'}
