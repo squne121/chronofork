@@ -124,16 +124,30 @@ export function buildTraces(
   year: number,
   rejectedBy?: readonly string[],
 ): DecisionTrace[] {
+  // traceId → 参照する Event の eventId（events の順）と、紐づく command の有無を一度の走査で索引化する
+  // （従来の Trace ごとの events / commands 全走査と同じ集合・順序）。Draft が無ければ従来どおり何も参照しない。
+  const eventIdsByTrace = new Map<Id, Id[]>()
+  const linkedTraceIds = new Set<Id>()
+  if (outcome.traceDrafts.length > 0) {
+    for (const e of events) {
+      for (const traceId of new Set(e.sourceTraceIds)) {
+        const list = eventIdsByTrace.get(traceId)
+        if (list) list.push(e.eventId)
+        else eventIdsByTrace.set(traceId, [e.eventId])
+      }
+    }
+    for (const c of outcome.commands) linkedTraceIds.add(c.source.sourceTraceId)
+  }
   return outcome.traceDrafts.map((d: DecisionTraceDraft, i) => {
     const traceId = traceIdOf(year, outcome.phase, outcome.ruleId, i)
-    const eventIds = events.filter((e) => e.sourceTraceIds.includes(traceId)).map((e) => e.eventId)
-    const linked = outcome.commands.filter((c) => c.source.sourceTraceId === traceId)
+    const eventIds = [...(eventIdsByTrace.get(traceId) ?? [])]
+    const linked = linkedTraceIds.has(traceId)
     const reasonCodes = [...d.reasonCodes]
     let status = d.status
     if (rejectedBy) {
       if (status === 'ACCEPT') status = 'REJECT'
       reasonCodes.push(...rejectedBy)
-    } else if (linked.length > 0 && eventIds.length === 0) {
+    } else if (linked && eventIds.length === 0) {
       reasonCodes.push('DUPLICATE_COMMAND')
     }
     const base = {

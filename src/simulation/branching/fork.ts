@@ -19,6 +19,18 @@ function deepFreeze<T>(value: T): T {
 }
 const copy = <T>(v: T): T => structuredClone(v)
 
+/**
+ * この API が返した Branch（作成時に複製した自前の値を deepFreeze 済み）。要素は深く凍結され、外部と共有していない。
+ * 親がこの集合に含まれる場合だけ、分岐前の確定履歴を複製せず参照共有する（内容は複製と同一、変更は不可能）。
+ * 含まれない親（呼出側が組み立てた値など）は、従来どおり全体を複製して隔離する。
+ */
+const issuedBranches = new WeakSet<Branch>()
+const issue = (branch: Branch): Branch => {
+  const frozen = deepFreeze(branch)
+  issuedBranches.add(frozen)
+  return frozen
+}
+
 const reject = (code: ForkRejectCode, message: string, issues: readonly StatModifierIssue[] = []): ForkResult => ({ ok: false, code, message, issues })
 const isId = (v: unknown): v is Id => typeof v === 'string' && v !== ''
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
@@ -100,7 +112,7 @@ export function createRootBranch(result: TimelineResult, ledger: StatModifierLed
     if (bad !== null) return reject('INVALID_PARENT', bad)
     const v = validateStatModifierLedger(branch.ledger, { knownPersonIds: personIdsOf(branch.snapshots) })
     if (!v.ok) return reject('INVALID_PARENT_LEDGER', '台帳が不正です', v.issues)
-    return { ok: true, branch: deepFreeze(branch) }
+    return { ok: true, branch: issue(branch) }
   } catch (e) {
     return reject('INVALID_PARENT', `root branch を作れません: ${e instanceof Error ? e.message : String(e)}`)
   }
@@ -195,5 +207,8 @@ function forkUnchecked(input: ForkInput): ForkResult {
     goal: null,
     recompute: { fromYear: forkYear, status: suffix.status, transitions: suffix.transitions, suffixCoverage: suffix.coverage },
   }
-  return { ok: true, branch: deepFreeze(copy(branch)) }
+  if (!issuedBranches.has(parent)) return { ok: true, branch: issue(copy(branch)) }
+  // 構造共有: 親の分岐前要素は深く凍結済み。再計算部分は runTimeline が新たに作って深く凍結した値で、
+  // この関数の外には渡っていない。可変な入力由来の値（ledger・halt・recompute）だけは複製する。
+  return { ok: true, branch: issue({ ...branch, ledger: copy(branch.ledger), halt: copy(branch.halt), recompute: copy(branch.recompute) }) }
 }

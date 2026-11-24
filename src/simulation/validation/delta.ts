@@ -38,17 +38,35 @@ const keyOf = (r: { personIds: readonly [string, string] }): string => {
 }
 
 /**
+ * 呼出側（reducer）が構成上知っている pairTrust の変更。before/after の配列と参照同一のときだけ使う。
+ * - changed: after のうち before に参照が含まれない要素（after 内の順）。
+ * - afterKeysStrictlyAscending: after の人物ペアキーが厳密昇順であることを呼出側が確認・構成済み。
+ * 構造・人物参照・値域の検査は省かず、changed に対して全体検証と同一のコードで行う。
+ */
+export type PairTrustKnownChange = Readonly<{
+  before: readonly PersonPairTrust[] | undefined
+  after: readonly PersonPairTrust[] | undefined
+  changed: readonly PersonPairTrust[]
+  afterKeysStrictlyAscending: boolean
+}>
+
+/**
  * `before` が検証済み（ERROR なし）で、`after` が pairTrust のみ異なるとき、`after` に ERROR が無いことを確認する。
  * - pairTrust 以外の検証結果は pairTrust に依存しない（pairTrust 検査は人物ID・世界年だけを参照する）。
  * - `before` に存在した記録（参照同一）は人物・年が不変なので検証済み。新規/変更された記録だけを、
  *   全体検証と同一の構造検査・整合検査コードで確認する。
  * - 人物ペアの重複は、全記録のキー数と件数の一致で全件確認する。
  */
-export function confirmPairTrustOnlyChangeValid(before: WorldState, after: WorldState): boolean {
+export function confirmPairTrustOnlyChangeValid(before: WorldState, after: WorldState, known?: PairTrustKnownChange): boolean {
   if (before === after || !sameExceptPairTrust(before, after)) return false
   const afterList = after.pairTrust ?? []
-  const known = new Set<object>(before.pairTrust ?? [])
-  const changed = afterList.filter((r) => !known.has(r))
+  const useKnown = known !== undefined && known.before === before.pairTrust && known.after === after.pairTrust
+  let changed: readonly PersonPairTrust[]
+  if (useKnown) changed = known.changed
+  else {
+    const prior = new Set<object>(before.pairTrust ?? [])
+    changed = afterList.filter((r) => !prior.has(r))
+  }
   const sink: Diagnostic[] = []
   const records = parsePairTrustRecords(changed, sink)
   if (sink.length > 0) return false
@@ -57,6 +75,8 @@ export function confirmPairTrustOnlyChangeValid(before: WorldState, after: World
   const flag = () => { clean = false }
   checkPairTrustRecords(records, after.year, (_kind, id) => personIds.has(id) || (flag(), false), flag, (id) => personIds.has(id))
   if (!clean) return false
+  // 人物ペアキー（personIds の JSON）が厳密昇順ならキーは全て相異なり、同一ペア・同一参照の重複は存在しない。
+  if (useKnown && known.afterKeysStrictlyAscending) return true
   return hasNoDuplicatePair(afterList, changed)
 }
 

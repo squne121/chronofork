@@ -1,6 +1,7 @@
 // WorldState の前後差分。確定した実状態差分のみを path/before/after で返す（EventLog ではない）。
 import type { JsonValue, WorldState } from '../../contracts/index.ts'
 import { canonicalize, cloneData } from './canonical.ts'
+import type { PairTrustEdit } from './draft.ts'
 import type { StateChange } from './types.ts'
 
 type Collection = readonly [path: string, items: (w: WorldState) => readonly object[], key: (item: never) => string]
@@ -120,7 +121,12 @@ function pairTrustChangedIds(
   return { ids, a, b }
 }
 
-export function diffWorld(before: WorldState, after: WorldState): StateChange[] {
+/**
+ * @param pairTrustEdit reducer の handler が記録した構成（before/after の pairTrust 配列と参照同一のときだけ使う）。
+ *   構成上、参照が異なる要素は removed（あれば）と inserted の 2 件のみで同じキーを持ち、共有要素は同順・同数。
+ *   これは pairTrustChangedIds が返す結果（キー 1 件、before 側 removed・after 側 inserted）と同一であり、走査を省く。
+ */
+export function diffWorld(before: WorldState, after: WorldState, pairTrustEdit?: PairTrustEdit): StateChange[] {
   const out: StateChange[] = []
   if (before === after) return out
   diffValue('$.year', before.year, after.year, out)
@@ -130,6 +136,11 @@ export function diffWorld(before: WorldState, after: WorldState): StateChange[] 
     // 不変更新: 配列の参照が同一なら内容も同一（全要素の比較を省く）。
     if (itemsBefore === itemsAfter) continue
     if (path === 'pairTrust') {
+      if (pairTrustEdit !== undefined && pairTrustEdit.before === itemsBefore && pairTrustEdit.after === itemsAfter &&
+          pairTrustEdit.removed !== pairTrustEdit.inserted) {
+        diffValue(`$.${path}[${pairTrustKey(pairTrustEdit.inserted)}]`, pairTrustEdit.removed, pairTrustEdit.inserted, out)
+        continue
+      }
       const fast = pairTrustChangedIds(itemsBefore, itemsAfter)
       if (fast !== null) {
         for (const id of [...new Set(fast.ids)].sort()) diffValue(`$.${path}[${id}]`, fast.a.get(id), fast.b.get(id), out)

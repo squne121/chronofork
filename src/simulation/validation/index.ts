@@ -8,6 +8,7 @@ export type { Diagnostic, DiagnosticCode, DiagnosticSeverity, DiagnosticTarget, 
 export { hasErrors } from './diagnostics.ts'
 export { checkWorldIntegrity } from './integrity.ts'
 export { confirmPairTrustOnlyChangeValid } from './delta.ts'
+export type { PairTrustKnownChange } from './delta.ts'
 export { parseWorldState } from './parse.ts'
 export { INITIAL_SCALE, validateInitialScale } from './initial-scale.ts'
 export type { TuningValidationResult } from './tuning-config.ts'

@@ -5,7 +5,7 @@ import { confirmPairTrustOnlyChangeValid, validateWorldState } from '../../valid
 import { checkCommandAuthority, checkOutcomeHeader } from './authority.ts'
 import { canonicalize, cloneData } from './canonical.ts'
 import { diffWorld } from './diff.ts'
-import type { Draft, Handler } from './draft.ts'
+import type { ApplyScope, Draft, Handler } from './draft.ts'
 import { fail } from './draft.ts'
 import {
   controlMandateSet,
@@ -100,11 +100,28 @@ function semanticKey(c: DomainCommand): string {
 const batchFingerprint = (cmds: readonly DomainCommand[]) => canonicalize(cmds.map((c) => c.commandId))
 
 type Committed = Readonly<{ world: WorldState; tx: CommandTransaction; applied: AppliedCommand[] }>
+
+/**
+ * applyOutcome 1 回の呼出し内で、確定した unit の冪等性記録を蓄積する作業用 Map。
+ * 入力 Transaction の Map は変更せず、最初の確定時に一度だけ複製する（unit ごとの全複製を避ける）。
+ * 確定は全検証の通過後にだけ行うため、拒否された unit は記録に触れない。呼出しの外へは最終結果としてのみ返す。
+ */
+type WorkingTx = {
+  commands: Map<Id, string>
+  requests: Map<Id, ReadonlyMap<string, Id>>
+  batches: Map<Id, string>
+  /**
+   * この呼出しで作成・複製した requests の内側 Map。確定は requestId が未記録の場合に限られるため入力側の内側 Map へ
+   * 追記する経路は現状存在しないが、前提が変わっても入力 Transaction を変更しないよう、所有していない Map は複製してから追記する。
+   */
+  ownedRequests: Set<ReadonlyMap<string, Id>>
+}
+type CallState = { scope: ApplyScope; work: WorkingTx | null }
 type UnitOutcome =
   | Readonly<{ status: 'APPLIED'; committed: Committed }>
   | Readonly<{ status: 'REJECTED' | 'DUPLICATE' | 'CONFLICT'; rejections: readonly Rejection[] }>
 
-function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOutcome, unit: Unit): UnitOutcome {
+function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOutcome, unit: Unit, call: CallState): UnitOutcome {
   const cmds = unit.commands
   const withId = (r: Rejection, c: DomainCommand): Rejection => ({ ...r, commandId: c.commandId })
 
@@ -168,10 +185,12 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
   if (pre.length > 0) return { status: 'REJECTED', rejections: pre }
 
   // 3) 作業コピー上で順に適用（状態依存の検証）。コミットまで入力は不変。
-  const draft: Draft = { world, casualties: new Map(tx.casualties), touchedCasualties: new Set() }
+  const draft: Draft = { world, casualties: new Map(tx.casualties), touchedCasualties: new Set(), scope: call.scope }
   const applied: AppliedCommand[] = []
+  let lastEdit: Draft['pairTrustEdit']
   for (const c of cmds) {
     const before = draft.world
+    draft.pairTrustEdit = undefined
     const handler = HANDLERS[c.type as Implemented] as Handler<DomainCommand>
     let r: Rejection | null
     try {
@@ -181,7 +200,8 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
       return { status: 'REJECTED', rejections: [withId(fail('HANDLER_EXCEPTION', `${c.type} の適用中に例外: ${e instanceof Error ? e.message : String(e)}`), c)] }
     }
     if (r) return { status: 'REJECTED', rejections: [withId(r, c)] }
-    const stateChanges = diffWorld(before, draft.world)
+    lastEdit = draft.pairTrustEdit
+    const stateChanges = diffWorld(before, draft.world, lastEdit)
     if (stateChanges.length === 0) {
       return { status: 'REJECTED', rejections: [withId(fail('NO_STATE_CHANGE', `${c.type} は状態を変更しません`), c)] }
     }
@@ -200,7 +220,11 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
   // 構造・列挙値・参照・不変条件のすべてを validateWorldState で検証する（checkWorldIntegrity だけでは見逃す）。
   // unit 開始時点の world は検証済み。pairTrust だけが変わった場合は、変更部分を同一の検査コードで確認して全体の再検証を省く
   // （確認できなければ従来どおり全体検証で正確な診断を得る）。
-  if (!confirmPairTrustOnlyChangeValid(world, draft.world)) {
+  // 単独 command の unit で handler が構成を記録した場合だけ、変更要素と厳密昇順を差分検証へ渡す（構成と参照同一のときのみ有効）。
+  const knownPairTrust = cmds.length === 1 && lastEdit !== undefined && lastEdit.before === world.pairTrust && lastEdit.after === draft.world.pairTrust
+    ? { before: lastEdit.before, after: lastEdit.after, changed: [lastEdit.inserted], afterKeysStrictlyAscending: true }
+    : undefined
+  if (!confirmPairTrustOnlyChangeValid(world, draft.world, knownPairTrust)) {
     const after = validateWorldState(draft.world)
     const introduced = after.diagnostics.filter((d) => d.severity === 'ERROR')
     if (!after.ok) {
@@ -211,20 +235,24 @@ function processUnit(world: WorldState, tx: CommandTransaction, outcome: RuleOut
     }
   }
 
-  // 6) コミット。
-  const commands = new Map(tx.commands)
-  cmds.forEach((c, i) => commands.set(c.commandId, prints[i] as string))
-  const requests = new Map(tx.requests)
-  cmds.forEach((c, i) => {
-    const m = new Map(requests.get(c.source.requestId))
-    m.set(sems[i] as string, c.commandId)
-    requests.set(c.source.requestId, m)
+  // 6) コミット。作業用 Map は呼出し内で初回だけ複製し、以後は確定した unit の記録を追記する。
+  const work = (call.work ??= {
+    commands: new Map(tx.commands), requests: new Map(tx.requests), batches: new Map(tx.batches), ownedRequests: new Set(),
   })
-  const batches = new Map(tx.batches)
-  if (unit.batchId !== undefined) batches.set(unit.batchId, batchFingerprint(cmds))
+  cmds.forEach((c, i) => work.commands.set(c.commandId, prints[i] as string))
+  cmds.forEach((c, i) => {
+    let m = work.requests.get(c.source.requestId) as Map<string, Id> | undefined
+    if (m === undefined || !work.ownedRequests.has(m)) {
+      m = new Map(m)
+      work.ownedRequests.add(m)
+      work.requests.set(c.source.requestId, m)
+    }
+    m.set(sems[i] as string, c.commandId)
+  })
+  if (unit.batchId !== undefined) work.batches.set(unit.batchId, batchFingerprint(cmds))
   return {
     status: 'APPLIED',
-    committed: { world: draft.world, tx: { ...tx, commands, requests, batches, casualties: draft.casualties }, applied },
+    committed: { world: draft.world, tx: { ...tx, commands: work.commands, requests: work.requests, batches: work.batches, casualties: draft.casualties }, applied },
   }
 }
 
@@ -283,12 +311,13 @@ export function applyOutcome(world: WorldState, outcome: RuleOutcome, context: A
 
   let current = world
   let tx = tx0
+  const call: CallState = { scope: { sortedPairTrust: new WeakSet() }, work: null }
   const units: UnitResult[] = []
   const applied: AppliedCommand[] = []
   for (const unit of allUnits) {
     const commandIds = unit.commands.map((c) => c.commandId)
     const base = unit.batchId !== undefined ? { batchId: unit.batchId, commandIds } : { commandIds }
-    const r = processUnit(current, tx, outcome, unit)
+    const r = processUnit(current, tx, outcome, unit, call)
     if (r.status === 'APPLIED') {
       current = r.committed.world
       tx = r.committed.tx

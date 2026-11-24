@@ -80,6 +80,8 @@ function checkOutcome(o: RuleOutcome, ctx: EvaluationContext): string | null {
   }
   if (o.responses !== undefined && !Array.isArray(o.responses)) return 'Outcome.responses が配列ではありません'
   const ids = new Set<Id>()
+  // traceId → 最初の draft 位置（従来の findIndex と同じ先頭一致）。command ごとの全 draft 走査を避ける。
+  const firstIndex = new Map<Id, number>()
   for (const [i, d] of o.traceDrafts.entries()) {
     if (!d || !Array.isArray(d.reasonCodes) || !Array.isArray(d.candidates) || !Array.isArray(d.modifierIds)) {
       return `traceDrafts[${i}] の理由・候補・修正参照が不正です`
@@ -90,12 +92,14 @@ function checkOutcome(o: RuleOutcome, ctx: EvaluationContext): string | null {
     if (d.status !== 'ACCEPT' && d.status !== 'REJECT' && d.status !== 'DEFER') {
       return `traceDrafts[${i}] の status ${String(d.status)} は評価器が出せません（NOT_IMPLEMENTED はランナーが管理）`
     }
-    ids.add(ctx.traceId(i))
+    const traceId = ctx.traceId(i)
+    ids.add(traceId)
+    if (!firstIndex.has(traceId)) firstIndex.set(traceId, i)
   }
   for (const c of o.commands) {
     const s = c?.source
     if (!s || !ids.has(s.sourceTraceId)) return `command ${String(c?.commandId)} の sourceTraceId が traceDrafts に解決できません`
-    const idx = o.traceDrafts.findIndex((_, i) => ctx.traceId(i) === s.sourceTraceId)
+    const idx = firstIndex.get(s.sourceTraceId) ?? -1
     if (o.traceDrafts[idx]?.status !== 'ACCEPT') return `command ${c.commandId} が ACCEPT 以外の判断に紐づいています`
   }
   for (const r of o.requests) {
@@ -288,7 +292,7 @@ function rulerVacateEvidenceError(o: RuleOutcome, year: number, events: readonly
   return null
 }
 
-function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions, priorTraces: readonly DecisionTrace[], marriageQueries: readonly MarriageQuery[], supportingCandidateSnapshot: EvaluationContext['supportingCandidateSnapshot'], marriageCandidateMinAge: number | undefined): EvaluationContext {
+function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: RunOptions, frozenPriorTraces: readonly DecisionTrace[], marriageQueries: readonly MarriageQuery[], supportingCandidateSnapshot: EvaluationContext['supportingCandidateSnapshot'], marriageCandidateMinAge: number | undefined): EvaluationContext {
   const year = world.year
   return Object.freeze<EvaluationContext>({
     year,
@@ -296,7 +300,8 @@ function makeContext(world: WorldState, phase: Phase, ruleId: RuleId, options: R
     ruleId,
     seed: options.seed,
     branchId: options.branchId ?? 'main',
-    priorTraces: deepFreeze(cloneData(priorTraces)),
+    // 確定済み Trace の深い凍結複製（確定時に一度だけ作成）を共有し、配列だけを新たに凍結する。内容は従来の複製と同一。
+    priorTraces: Object.freeze(frozenPriorTraces.slice()),
     marriageQueries: deepFreeze(cloneData(marriageQueries)),
     ...(supportingCandidateSnapshot ? { supportingCandidateSnapshot } : {}),
     ...(marriageCandidateMinAge === undefined ? {} : { marriageCandidateMinAge }),
@@ -377,6 +382,7 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
   let tx = createTransaction({ branchId: options.branchId ?? 'main', year: t })
   const events: EventLogEntry[] = []
   const traces: DecisionTrace[] = []
+  const frozenTraces: DecisionTrace[] = []
   const marriageQueries: MarriageQuery[] = []
   const marriageCandidateMinAge = b004WorldStateEvidence(evaluators['B-004'])?.minAdultAge
   let supportingCandidateSnapshot: EvaluationContext['supportingCandidateSnapshot']
@@ -396,7 +402,7 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
       if (ruleId === 'B-001' && phase === 3) {
         supportingCandidateSnapshot = deepFreeze({ branchId: options.branchId ?? 'main', year: t, world: cloneData(world) })
       }
-      const ctx = makeContext(world, phase, ruleId, options, traces, marriageQueries, supportingCandidateSnapshot, marriageCandidateMinAge)
+      const ctx = makeContext(world, phase, ruleId, options, frozenTraces, marriageQueries, supportingCandidateSnapshot, marriageCandidateMinAge)
       let outcome: RuleOutcome
       try {
         outcome = evaluator(deepFreeze(cloneData(world)), ctx)
@@ -468,7 +474,10 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
       }
       const newEvents = buildEvents(outcome, r, r.world)
       events.push(...newEvents)
-      traces.push(...buildTraces(outcome, newEvents, t))
+      const built = buildTraces(outcome, newEvents, t)
+      traces.push(...built)
+      // 評価器へ渡す読み取り専用の複製。確定した Trace は以後変更しないため、規則ごとの全件複製を避けて共有する。
+      for (const x of built) frozenTraces.push(deepFreeze(cloneData(x)))
       world = r.world
       tx = r.transaction
       if (ruleId === 'A-LEG-01') marriageQueries.length = 0
