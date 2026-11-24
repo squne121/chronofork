@@ -102,7 +102,7 @@ export type LineageRow=Readonly<{
   personId:Id;name:string;birthYear:number;generation:number;
   father:string;mother:string;dynasty:string;alive:boolean
 }>
-/** 1250年に存在しなかった人物の実親子関係と法的王朝帰属。世代は実在する親子辺だけから数える。 */
+/** 観測中の出生で記録された実親子関係と法的王朝帰属。世代は実在する親子辺だけから数える。 */
 export function lineageRows(initial:WorldState,final:WorldState|undefined):readonly LineageRow[]{
   if(!final)return []
   const initialIds=new Set(initial.persons.map(p=>p.personId))
@@ -110,7 +110,9 @@ export function lineageRows(initial:WorldState,final:WorldState|undefined):reado
   const names=namesOf(final)
   const parent=(id:Id|undefined)=>id===undefined?'記録なし':names.person(id)??unresolvedLabel('person',id)
   const dyn=(p:Person)=>p.legalDynasty.status==='DETERMINED'?names.dynasty(p.legalDynasty.dynastyId)??unresolvedLabel('dynasty',p.legalDynasty.dynastyId):'未確定'
-  return final.persons.filter(p=>!initialIds.has(p.personId)&&p.birthYear>=initial.year)
+  // 出生には親参照が必須。人口からの昇格や婚姻時の補助人物登録には親参照がない。
+  return final.persons.filter(p=>!initialIds.has(p.personId)&&p.birthYear>=initial.year&&
+    (p.fatherId!==undefined||p.motherId!==undefined))
     .map(p=>({personId:p.personId,name:names.person(p.personId)??unresolvedLabel('person',p.personId),birthYear:p.birthYear,generation:depths.get(p.personId)??-1,
       father:parent(p.fatherId),mother:parent(p.motherId),dynasty:dyn(p),alive:p.alive}))
     .sort((a,b)=>a.birthYear-b.birthYear||a.personId.localeCompare(b.personId))

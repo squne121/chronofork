@@ -12,7 +12,7 @@ import { evaluateGoal } from '../../../src/simulation/goal.ts'
 import { EXPERIMENTAL_NALVEN_GOAL } from '../../../src/scenario/experimental/index.ts'
 import { compareYear, runPlayComparison } from '../../../src/ui/branch-play-source.ts'
 import type { PlayInput } from '../../../src/ui/branch-play-source.ts'
-import { buildOverview } from '../../../src/ui/integrated-overview.ts'
+import { buildOverview, lineageRows } from '../../../src/ui/integrated-overview.ts'
 import { toDisplayView } from '../../../src/ui/play-view.ts'
 
 const longTest = process.env.CHRONOFORK_LONG_INTEGRATED_UI === '1' ? describe : describe.skip
@@ -83,10 +83,22 @@ longTest('統合モード: UIアダプタと直接実行の同一性(100年・�
       const finalWorld = r.result.snapshots.at(-1)!
       const person = finalWorld.persons.find(p => p.personId === INTEGRATED_SUPPORTING_PERSON_ID)
       expect(person?.interactionRole, label).toBe('SUPPORTING')
-      // 1278年以降にSUPPORTINGを含むB-005判断がある（ここではTraceの存在だけを見る）。
-      const b005 = r.result.decisionTraces.filter(t => t.ruleId === 'B-005' && t.year >= 1278 &&
-        t.actorRef.kind === 'PERSON_PAIR' && t.actorRef.ids.includes(INTEGRATED_SUPPORTING_PERSON_ID))
-      expect(b005.length, label).toBeGreaterThan(0)
+      const registrationEvent = supporting[0]!
+      const registration = registrationEvent.supportingMarriageRegistrations!.find(x => x.registration.person.personId === INTEGRATED_SUPPORTING_PERSON_ID)!
+      const legalTrace = r.result.decisionTraces.find(t => t.traceId === registration.sourceTraceId)
+      expect(registrationEvent.sourceTraceIds, label).toContain(registration.sourceTraceId)
+      expect(legalTrace, label).toMatchObject({ ruleId: 'A-LEG-01', status: 'ACCEPT', year: registrationYear })
+      expect(legalTrace?.eventIds, label).toContain(registrationEvent.eventId)
+      const marriage = r.result.snapshots.find(w => w.year === registrationYear + 1)?.legal.marriages.find(m => m.marriageId === registration.marriageId)
+      expect(marriage?.supportingPopulationEvidenceIds, label).toEqual([registration.registration.sourceEvidenceId, registration.registration.survivorAttestationId])
+      const agreement = r.result.decisionTraces.find(t => `evidence:nextgen-agreement:${t.traceId}` === marriage?.contract?.evidenceId)
+      expect(agreement, label).toMatchObject({ ruleId: 'B-005', status: 'ACCEPT', year: registrationYear, actorRef: { kind: 'PERSON_PAIR', ids: marriage?.personIds } })
+      const births = events.filter(e => e.eventType.split('+').includes('PERSON_BIRTH'))
+      const recordedChildren = new Set(births.flatMap(e => e.stateChanges.flatMap(change =>
+        change.before === null && change.path.startsWith('$.persons[') && change.after && typeof change.after === 'object' && 'personId' in change.after
+          ? [change.after.personId] : [])))
+      expect(new Set(lineageRows(r.initialWorld, finalWorld).map(p => p.personId)), label).toEqual(recordedChildren)
+      expect(recordedChildren, label).not.toContain(INTEGRATED_SUPPORTING_PERSON_ID)
       const count = (type: string) => events.filter(e => e.eventType.split('+').includes(type)).length
       console.info('CHRONOFORK_INTEGRATED_UI_COUNTS=' + JSON.stringify({ branch: label,
         marriage: count('MARRIAGE_REGISTER'), birth: count('PERSON_BIRTH'), death: count('PERSON_DEATH'),
