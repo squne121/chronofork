@@ -32,7 +32,8 @@ describe('interventionTargetIssue（GUI/CLI共通の対象適格性）',()=>{
 describe('表示名は実データと枝の人物IDに基づく',()=>{
   it('同年生まれの別人を区別し、出生Event・介入候補・比較で仮名の内部キーを出さない',()=>{
     const base=createExperimentalWorld()
-    const child={...base.persons[0]!,personId:'child-a',name:'試験用自律児 1260 (marriage:secret)',birthYear:1260}
+    const child={...base.persons[0]!,personId:'child-a',name:'試験用自律児 1260 (marriage:secret)',birthYear:1260,
+      fatherId:base.persons[0]!.personId}
     const twin={...child,personId:'child-b'}
     const world={...base,persons:[...base.persons,child,twin]}
     const resolve=personDisplayNames(world.persons)
