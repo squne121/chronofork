@@ -3,6 +3,7 @@
 - ゲーム仕様の正本は GitHub 内の承認済み仕様（`docs/spec/`、`docs/contracts/`、`docs/decisions/`）。会話の断片や推測で仕様を復元しない。
 - ゲーム仕様の変更にはユーザー承認が必要。技術的な実装判断（構成・ライブラリ・テスト設計）は Claude Code に委任。
 - ゲーム実装の際は、関連する仕様・契約の必要範囲を読む（目安: `docs/spec/mvp-spec.md`（規則）→ `docs/contracts/mvp-implementation-contract.md`・`first-vertical-slice.md`（技術契約・実装順））。すべての作業で全文書の読込は不要。`docs/spec/pending-approvals.md` は未承認で、実装の根拠にしない（根拠のない成功扱いをせず PENDING にする）。
+- 意思決定の検討・記録・統合は [`docs/decisions/README.md`](docs/decisions/README.md) に従う。採用済みの方針は再承認しない。DEC の採番・台帳編集は共通受付ブランチに集約し、各作業ブランチで独立に行わない。
 - LICENSE は未設定。ユーザー承認なしに追加しない。
 
 ## ディレクトリの責務
