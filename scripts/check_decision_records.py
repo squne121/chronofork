@@ -37,6 +37,8 @@ def parse_register(content):
         if not stripped:
             continue
         if not stripped.startswith("|"):
+            if re.search(r"#[0-9]+.*DEC-[0-9]+→[0-9]+", stripped):
+                history.add(("legacy mapping note", stripped))
             table = None
             continue
         cells = [cell.strip() for cell in stripped.strip("|").split("|")]
@@ -64,16 +66,18 @@ def parse_register(content):
                     table = "history"
                 else:
                     if any(label in cell for cell in cells
-                           for label in ("旧ID", "統合ID", "出典PR")):
+                           for label in ("旧ID", "統合ID", "出典PR", "旧記述")):
                         raise ValueError(f"line {number}: invalid mapping header")
                     table = "other"
                 continue
-        if table == "other":
-            if "DEC-" in first or re.fullmatch(r"#[0-9]+", first):
+        if table in ("other", None):
+            id_cells = sum(bool(re.search(r"DEC-", cell)) for cell in cells)
+            if ("DEC-" in first or (id_cells and re.search(r"(?:#|PR\s*)[0-9]+", first))
+                    or id_cells > 1):
                 raise ValueError(f"line {number}: decision or mapping in unknown table")
             for cell in cells[1:]:
-                if "DEC-" in cell:
-                    canonical_id(cell)
+                for token in re.findall(r"DEC-[A-Za-z0-9]+", cell):
+                    canonical_id(token)
             continue
         if table == "history":
             if (len(cells) not in (2, 3) or not all(cells)
@@ -226,6 +230,21 @@ class GuardTests(unittest.TestCase):
                 validate(self.base + "\n| 項目 | 内容 |\n|---|---|\n" + row)
         self.assertEqual(validate(self.base + "\n| 項目 | 関連決定 |\n|---|---|\n"
                                   "| 方針 | DEC-075 |\n")[0], 3)
+
+    def test_stray_mapping_and_natural_reference(self):
+        for text in ("\n本文\n| #125 | DEC-075 | DEC-999 | 対応 |\n",
+                     "\n| PR | 元 | 先 | 内容 |\n|---|---|---|---|\n"
+                     "| PR 125 | DEC-075 | DEC-999 | 対応 |\n",
+                     "\n| 旧記述 | 後継 |\n|---|---|\n| old | DEC-999 |\n"):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                validate(self.base + text)
+        text = self.base + "\n| 項目 | 説明 |\n|---|---|\n| 方針 | DEC-075 を参照 |\n"
+        self.assertEqual(validate(text)[0], 3)
+
+    def test_legacy_mapping_note_retained(self):
+        note = "#125で以前に行ったDEC-075→129、DEC-079→130の再採番は維持する。\n"
+        with self.assertRaisesRegex(ValueError, "history removed"):
+            validate(self.base, self.base + note)
 
     def test_definition_header_and_column_count(self):
         for extra in ("\n| ID | 注意 |\n|---|---|\n| DEC-999 | reference |\n",
