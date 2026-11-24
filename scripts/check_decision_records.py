@@ -42,7 +42,7 @@ def parse_register(content):
         if first == "ID":
             table = "definitions"
             continue
-        if cells[:3] == ["出典PR", "旧ID", "統合ID"]:
+        if cells == ["出典PR", "旧ID", "統合ID", "内容"]:
             table = "aliases"
             continue
         if all(SEPARATOR.fullmatch(cell) for cell in cells):
@@ -53,8 +53,18 @@ def parse_register(content):
             if next_line.startswith("|") and all(
                     SEPARATOR.fullmatch(cell.strip())
                     for cell in next_line.strip("|").split("|")):
-                table = "other"
+                if cells in (["旧記述", "置換する決定", "扱い"],
+                             ["旧記述", "置換先"]):
+                    table = "history"
+                else:
+                    if any(label in cell for cell in cells
+                           for label in ("旧ID", "統合ID", "出典PR")):
+                        raise ValueError(f"line {number}: invalid mapping header")
+                    table = "other"
                 continue
+        if table == "other" and (any("DEC-" in cell for cell in cells)
+                                 or re.fullmatch(r"#[0-9]+", first)):
+            raise ValueError(f"line {number}: decision or mapping in unknown table")
         if KEY.fullmatch(first):
             if table != "definitions":
                 raise ValueError(f"line {number}: DEC definition outside an ID table")
@@ -180,6 +190,24 @@ class GuardTests(unittest.TestCase):
                     "| DEC-000 | bad | 採用 |\n", "\nordinary prose\n| DEC-076 | stray | 採用 |\n"):
             with self.subTest(row=row), self.assertRaises(ValueError):
                 validate(self.base + row)
+
+    def test_unknown_table_rejects_malformed_ids(self):
+        for row in ("| DEC-76 | bad |\n", "| DEC-000 | bad |\n",
+                    "| description | DEC-0076 |\n"):
+            with self.subTest(row=row), self.assertRaisesRegex(ValueError, "unknown table"):
+                validate(self.base + "\n| 項目 | 内容 |\n|---|---|\n" + row)
+
+    def test_misnamed_alias_header_is_rejected(self):
+        for header in ("| 出典PR | 旧ID | 新ID | 内容 |",
+                       "| 出典PR | 旧ID | 統合ID | 備考 |"):
+            with self.subTest(header=header), self.assertRaisesRegex(ValueError, "header"):
+                validate(self.base + "\n" + header + "\n|---|---|---|---|\n"
+                         "| #125 | DEC-075 | DEC-076 | collision |\n")
+
+    def test_alias_rejects_malformed_target(self):
+        for target in ("DEC-76", "DEC-000", "DEC-0076", "DEC-999"):
+            with self.subTest(target=target), self.assertRaises(ValueError):
+                validate(self.new + ALIASES + f"| #125 | DEC-075 | {target} | bad |\n")
 
     def test_alias_must_target_defined_id(self):
         with self.assertRaisesRegex(ValueError, "targets missing DEC-077"):
