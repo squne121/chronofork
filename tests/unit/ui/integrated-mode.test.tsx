@@ -173,6 +173,15 @@ describe('補助人物の婚姻登録イベント', () => {
   it('信頼基礎値の不足を判断保留として示す', () => {
     expect(reasonView(['NO_BASE_TRUST'])).toEqual({ labels: ['2人の信頼基礎値が記録されていないため、候補の判断を保留'], unclassified: [] })
   })
+  it('確定Bの候補・登録・禁親・権限の保留理由を区別する', () => {
+    const view = reasonView(['SUPPORTING_CANDIDATE_BUDGET_EXCEEDED', 'SUPPORTING_REGISTRATION_BUDGET_EXCEEDED',
+      'SUPPORTING_KINSHIP_CLEARANCE_MISMATCH', 'AUTHORITY_RECORD_MISSING'])
+    expect(view.unclassified).toEqual([])
+    expect(view.labels).toEqual([
+      expect.stringContaining('候補数が上限'), expect.stringContaining('登録枠を超える'),
+      expect.stringContaining('禁親確認'), expect.stringContaining('権限の記録がない'),
+    ])
+  })
   it('候補提示と承認の区別を理由に表示する', () => {
     const view = reasonView(['SUPPORTING_CANDIDATE_ONLY', 'NOT_MARRIAGE_APPROVAL', 'OPEN_EVIDENCE_BACKED_CANDIDATES_AT_LIMIT'])
     expect(view.unclassified).toEqual([])

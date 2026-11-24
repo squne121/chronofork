@@ -10,6 +10,8 @@ import { EXPERIMENTAL_NEXTGEN_CONTRACT } from '../../simulation/legal/nextgen-co
 import type { NextgenContractCalibration } from '../../simulation/legal/nextgen-contract.ts'
 import { EXPERIMENTAL_B009_CALIBRATION } from '../../simulation/rules/b/index.ts'
 import type { B001PromotionInput } from '../../simulation/rules/b/index.ts'
+import { B001_SUPPORTING_VERSION } from '../../simulation/rules/b/b001-supporting-marriage.ts'
+import { B005_NEXTGEN_VERSION } from '../../simulation/rules/b/b005-nextgen.ts'
 import { childIdForMarriageYear } from '../../simulation/rules/b/b002-worldstate.ts'
 import { ordinaryMarriageIdForPairYear } from '../../simulation/rules/a/aleg01-ordinary.ts'
 import type { SupportingKinshipClearance } from '../../simulation/rules/a/index.ts'
@@ -156,6 +158,7 @@ export function integratedRunConfigIdentity(): Readonly<Record<string, unknown>>
     promotion: INTEGRATED_PROMOTION,
     supporting: { cohorts: INTEGRATED_SUPPORTING_COHORTS, ...INTEGRATED_SUPPORTING_LIMITS },
     autonomy: INTEGRATED_AUTONOMY, b009: INTEGRATED_B009_CALIBRATION,
+    ruleVersions: { b001Supporting: B001_SUPPORTING_VERSION, b005: B005_NEXTGEN_VERSION },
     spouseDeathDissolution: true,
   }
 }

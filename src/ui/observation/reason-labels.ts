@@ -35,6 +35,9 @@ const LABELS: Readonly<Record<string, string>> = Object.freeze({
   SUPPORTING_CANDIDATE_ONLY: '補助人物の候補を提示したのみ',
   NOT_MARRIAGE_APPROVAL: '婚姻の承認ではない',
   OPEN_EVIDENCE_BACKED_CANDIDATES_AT_LIMIT: '確認記録のある未婚の補助人物候補が上限に達している',
+  SUPPORTING_CANDIDATE_BUDGET_EXCEEDED: '補助人物の候補数が上限を超えたため、候補の判断を保留',
+  SUPPORTING_REGISTRATION_BUDGET_EXCEEDED: '補助人物の登録枠を超えるため、婚姻登録を保留',
+  SUPPORTING_KINSHIP_CLEARANCE_MISMATCH: '補助人物の禁親確認が候補時と婚姻審査時で一致せず、婚姻登録を保留',
   // A-SUC-04 / A-TIT-07 相続・称号
   NO_ESTABLISHED_HEIR: '確立した後継者がいない',
   GAME_02_SUCCESSION_AUTHORITY_UNDETERMINED: '相続の権限を定める規則が未承認のため、後継者は確定しない',
@@ -62,6 +65,7 @@ const LABELS: Readonly<Record<string, string>> = Object.freeze({
   CROWN_CASE_RECORDING_ONLY: '王位の案件を記録するのみ（継承の承認ではない）',
   // A-LEG-01 婚姻登録
   DOMESTIC_MARRIAGE_AUTHORITY_AND_CONSENT_VERIFIED: '婚姻の権限と同意を確認できた',
+  AUTHORITY_RECORD_MISSING: '承認に必要な権限の記録がないため、判断を保留',
   CONFIRMED_SPOUSE_DEATH: '配偶者の死亡を確認できた',
   DEC_058_SPOUSE_DEATH: '配偶者の死亡による婚姻の終了',
 })
