@@ -79,17 +79,9 @@ def parse_register(content):
                     table = "other"
                 continue
         if table in ("other", None):
-            id_cells = sum(bool(re.search(r"DEC-", cell)) for cell in cells)
-            if ("DEC-" in first or (id_cells and re.search(
-                    r"(?:#|PR\s*|pull request\s+)[0-9]+", stripped, re.IGNORECASE))
-                    or id_cells > 1):
+            # Unknown table formats cannot safely distinguish references from mappings.
+            if "DEC-" in stripped:
                 raise ValueError(f"line {number}: decision or mapping in unknown table")
-            for cell in cells[1:]:
-                for token in re.findall(r"DEC-[A-Za-z0-9_/\-]*", cell):
-                    if not KEY.fullmatch(token):
-                        raise ValueError(f"line {number}: invalid decision reference {token}")
-                    for part in token.split("/"):
-                        canonical_id("DEC-" + part.removeprefix("DEC-"))
             continue
         if table == "history":
             if (len(cells) not in (2, 3) or not all(cells)
@@ -245,8 +237,8 @@ class GuardTests(unittest.TestCase):
                     "| description | DEC-0076 |\n"):
             with self.subTest(row=row), self.assertRaises(ValueError):
                 validate(self.base + "\n| 項目 | 内容 |\n|---|---|\n" + row)
-        self.assertEqual(validate(self.base + "\n| 項目 | 関連決定 |\n|---|---|\n"
-                                  "| 方針 | DEC-075 |\n")[0], 3)
+        self.assertEqual(validate(self.base + "\n| 項目 | 内容 |\n|---|---|\n"
+                                  "| 方針 | 説明 |\n")[0], 3)
 
     def test_stray_mapping_and_natural_reference(self):
         for text in ("\n本文\n| #125 | DEC-075 | DEC-999 | 対応 |\n",
@@ -256,7 +248,8 @@ class GuardTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 validate(self.base + text)
         text = self.base + "\n| 項目 | 説明 |\n|---|---|\n| 方針 | DEC-075 を参照 |\n"
-        self.assertEqual(validate(text)[0], 3)
+        with self.assertRaisesRegex(ValueError, "unknown table"):
+            validate(text)
 
     def test_legacy_mapping_note_retained(self):
         note = "#125で以前に行ったDEC-075→129、DEC-079→130の再採番は維持する。\n"
@@ -275,7 +268,9 @@ class GuardTests(unittest.TestCase):
 
     def test_unknown_table_mapping_in_other_cells(self):
         for row in ("| 再採番 | #125: DEC-075 → DEC-999 |\n",
-                    "| 再採番 | #125 | DEC-075/999 |\n"):
+                    "| 再採番 | #125 | DEC-075/999 |\n",
+                    "| 125 | DEC-075 → DEC-999 |\n",
+                    "| 方針 | DEC-075.5 |\n"):
             with self.subTest(row=row), self.assertRaises(ValueError):
                 validate(self.base + "\n| 項目 | 対応 |\n|---|---|\n" + row)
 

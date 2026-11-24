@@ -46,6 +46,8 @@ ChatGPT・Claude Code 共通。GitHub `main` の承認済み仕様・決定・�
 
 `scripts/check_decision_records.py` を既存の必須 CI `quick-check` の一部として実行する。標準ライブラリのみを用い、旧形式の複数 ID 行も検査する。main への台帳変更元、ID 重複・不正な形式・欠番再利用・既存 ID の消失、旧 ID 対応表の重複・参照先・変更／消失を検出する。既存定義の本文変更はログに示す。意味上の妥当性、採用根拠、領域文書内の参照の完全性、未統合 PR 間の衝突はレビューで確認し、CI 成功を代用しない。
 
+台帳内の未対応の表形式に `DEC-` を含めると、単なる参照であっても検査は失敗する。参照と旧 ID 対応を曖昧に見逃さないための制約であり、新しい表形式が必要な場合は検査とテストを併せて対応する。
+
 ```sh
 python3 -I scripts/check_decision_records.py --self-test
 python3 -I scripts/check_decision_records.py
