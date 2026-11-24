@@ -26,8 +26,10 @@ def canonical_id(value):
 
 def parse_register(content):
     """Read definition rows (including legacy grouped IDs), not prose references."""
-    records, aliases = {}, {}
+    records, aliases, history = {}, {}, set()
+    history_targets = []
     table = None
+    columns = 0
     lines = content.splitlines()
     for number, line in enumerate(lines, 1):
         stripped = line.strip()
@@ -40,7 +42,11 @@ def parse_register(content):
         cells = [cell.strip() for cell in stripped.strip("|").split("|")]
         first = cells[0].removeprefix("**").removesuffix("**")
         if first == "ID":
+            if cells not in (["ID", "内容", "状態"], ["ID", "内容", "状態・適用範囲"],
+                             ["ID", "決定・方向性", "分類・適用範囲"], ["ID", "内容"]):
+                raise ValueError(f"line {number}: invalid definition header")
             table = "definitions"
+            columns = len(cells)
             continue
         if cells == ["出典PR", "旧ID", "統合ID", "内容"]:
             table = "aliases"
@@ -62,14 +68,31 @@ def parse_register(content):
                         raise ValueError(f"line {number}: invalid mapping header")
                     table = "other"
                 continue
-        if table == "other" and (any("DEC-" in cell for cell in cells)
-                                 or re.fullmatch(r"#[0-9]+", first)):
-            raise ValueError(f"line {number}: decision or mapping in unknown table")
+        if table == "other":
+            if "DEC-" in first or re.fullmatch(r"#[0-9]+", first):
+                raise ValueError(f"line {number}: decision or mapping in unknown table")
+            for cell in cells[1:]:
+                if "DEC-" in cell:
+                    canonical_id(cell)
+            continue
+        if table == "history":
+            if (len(cells) not in (2, 3) or not all(cells)
+                    or re.search(r"#[0-9]+", first)):
+                raise ValueError(f"line {number}: invalid replacement history")
+            target = cells[1]
+            if target != "未決":
+                match = re.fullmatch(r"(DEC-[0-9]+(?:/(?:DEC-)?[0-9]+)*)(?: G-[0-9]+)?", target)
+                if not match:
+                    raise ValueError(f"line {number}: invalid replacement target")
+                history_targets.extend(canonical_id("DEC-" + part.removeprefix("DEC-"))
+                                       for part in match[1].split("/"))
+            history.add(tuple(cells))
+            continue
         if KEY.fullmatch(first):
             if table != "definitions":
                 raise ValueError(f"line {number}: DEC definition outside an ID table")
-            if len(cells) < 2 or not cells[1]:
-                raise ValueError(f"line {number}: missing decision content")
+            if len(cells) != columns or not all(cells):
+                raise ValueError(f"line {number}: invalid decision columns")
             for part in first.split("/"):
                 decision = canonical_id("DEC-" + part.removeprefix("DEC-"))
                 if decision in records:
@@ -93,14 +116,19 @@ def parse_register(content):
     for key, target in aliases.items():
         if target not in records:
             raise ValueError(f"mapping {key} targets missing {target}")
-    return records, aliases
+    for target in history_targets:
+        if target not in records:
+            raise ValueError(f"replacement targets missing {target}")
+    return records, aliases, history
 
 
 def validate(current, baseline=None, source=None):
-    records, aliases = parse_register(current)
+    records, aliases, history = parse_register(current)
     if baseline is None:
         return len(records), [], []
-    old, old_aliases = parse_register(baseline)
+    old, old_aliases, old_history = parse_register(baseline)
+    if old_history - history:
+        raise ValueError("published replacement history removed or changed")
     missing = sorted(old.keys() - records.keys())
     if missing:
         raise ValueError("published IDs removed: " + ", ".join(missing))
@@ -194,8 +222,28 @@ class GuardTests(unittest.TestCase):
     def test_unknown_table_rejects_malformed_ids(self):
         for row in ("| DEC-76 | bad |\n", "| DEC-000 | bad |\n",
                     "| description | DEC-0076 |\n"):
-            with self.subTest(row=row), self.assertRaisesRegex(ValueError, "unknown table"):
+            with self.subTest(row=row), self.assertRaises(ValueError):
                 validate(self.base + "\n| 項目 | 内容 |\n|---|---|\n" + row)
+        self.assertEqual(validate(self.base + "\n| 項目 | 関連決定 |\n|---|---|\n"
+                                  "| 方針 | DEC-075 |\n")[0], 3)
+
+    def test_definition_header_and_column_count(self):
+        for extra in ("\n| ID | 注意 |\n|---|---|\n| DEC-999 | reference |\n",
+                      "| DEC-076 | missing state |\n"):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                validate(self.base + extra)
+
+    def test_replacement_history_validation_and_retention(self):
+        header = "\n| 旧記述 | 置換する決定 | 扱い |\n|---|---|---|\n"
+        row = "| DEC-002: old | DEC-003 | replaced |\n"
+        baseline = self.base + header + row
+        self.assertEqual(validate(baseline)[0], 3)
+        with self.assertRaisesRegex(ValueError, "history removed"):
+            validate(self.base, baseline)
+        for bad in ("| DEC-002: old | DEC-999 | replaced |\n",
+                    "| #125 / DEC-002 | DEC-003 | mapping |\n"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate(self.base + header + bad)
 
     def test_misnamed_alias_header_is_rejected(self):
         for header in ("| 出典PR | 旧ID | 新ID | 内容 |",
