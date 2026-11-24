@@ -15,12 +15,29 @@ export type DisplayablePerson = Readonly<{
   name: string
   sex: 'MALE' | 'FEMALE'
   birthYear: number
+  interactionRole?: 'KEY' | 'SUPPORTING'
+  supporting?: boolean
 }>
+
+/** 登録時のIDと名前が一致し、正規形式である場合だけ人口由来と判断する。 */
+function isPopulationSupporting(p: DisplayablePerson): boolean {
+  if (p.name !== p.personId || !(p.interactionRole === 'SUPPORTING' || (p.interactionRole === undefined && p.supporting === true))) return false
+  const prefix = 'support:population:'
+  if (!p.personId.startsWith(prefix)) return false
+  try {
+    const value: unknown = JSON.parse(p.personId.slice(prefix.length))
+    return Array.isArray(value) && value.length === 2 && typeof value[0] === 'string' && value[0].length > 0 &&
+      Number.isSafeInteger(value[1]) && value[1] >= 0 && p.personId === prefix + JSON.stringify(value)
+  } catch {
+    return false
+  }
+}
 
 const sexText = (s: 'MALE' | 'FEMALE') => (s === 'MALE' ? '男' : '女')
 
 /** 1人分の基本ラベル（同名の衝突は考慮しない）。 */
 export function baseDisplayName(p: DisplayablePerson): string {
+  if (isPopulationSupporting(p)) return `試験人物（補助・${p.birthYear}年生・${sexText(p.sex)}）`
   const init = /^試験人物(\d+)/.exec(p.name)
   if (init) return '試験人物' + init[1]
   if (p.name.startsWith('試験用自律児')) return `試験人物（${p.birthYear}年生・${sexText(p.sex)}）`

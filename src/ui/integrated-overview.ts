@@ -20,7 +20,8 @@ export const EVENT_CATEGORIES:readonly EventCategory[]=Object.freeze([
   {key:'mandate',label:'統治委任の設定',types:['CONTROL_MANDATE_SET']},
 ])
 const typesOf=(e:EventLogEntry)=>e.eventType.split('+')
-export const inCategory=(e:EventLogEntry,c:EventCategory)=>typesOf(e).some(t=>c.types.includes(t))
+export const inCategory=(e:EventLogEntry,c:EventCategory)=>
+  (c.key==='supporting' && (e.supportingMarriageRegistrations?.length??0)>0) || typesOf(e).some(t=>c.types.includes(t))
 /** 原史探索の最初の一覧: 大量の補助人物登録は表示しないが、全Eventを保持・再表示可能にする。 */
 export const isObservationFocusEvent=(e:EventLogEntry)=>
   EVENT_CATEGORIES.some(c=>c.key!=='supporting'&&inCategory(e,c))
@@ -49,16 +50,17 @@ export function buildOverview(v:PlayView):IntegratedOverview{
     const a0=e0.filter(e=>inCategory(e,category)),a1=e1.filter(e=>inCategory(e,category))
     const a1Only=a1.filter(e=>!m0.has(e.eventId))
     const a0Only=a0.filter(e=>!m1.has(e.eventId))
-    const changed=a1.filter(e=>{const o=m0.get(e.eventId);return o!==undefined&&o!==e&&JSON.stringify(o)!==JSON.stringify(e)})
+    const changed=e1.filter(e=>{const o=m0.get(e.eventId);return o!==undefined&&(inCategory(e,category)||inCategory(o,category))&&o!==e&&JSON.stringify(o)!==JSON.stringify(e)})
     return {category,a0,a1,a1Only,a0Only,changed}
   })
-  // 分類外のEventも差分の有無には含める(全期間のEvent差分。省略された同一Eventは差分ではない)。
-  const outsideDiff=[...e1.filter(e=>!m0.has(e.eventId)),...e0.filter(e=>!m1.has(e.eventId))]
-    .filter(e=>!EVENT_CATEGORIES.some(c=>inCategory(e,c))).length+
-    e1.filter(e=>{const o=m0.get(e.eventId);return o!==undefined&&o!==e&&!EVENT_CATEGORIES.some(c=>inCategory(e,c))&&JSON.stringify(o)!==JSON.stringify(e)}).length
+  // カテゴリへの重複所属や分類の変化に関わらず、実EventのIDごとに一度だけ数える。
   const diffIds=new Set<string>()
-  for(const r of rows)for(const e of [...r.a1Only,...r.a0Only,...r.changed])diffIds.add(e.eventId)
-  const totalDifferences=outsideDiff+diffIds.size
+  for(const e of e0)if(!m1.has(e.eventId))diffIds.add(e.eventId)
+  for(const e of e1){
+    const old=m0.get(e.eventId)
+    if(!old || (old!==e && JSON.stringify(old)!==JSON.stringify(e)))diffIds.add(e.eventId)
+  }
+  const totalDifferences=diffIds.size
   const f0=v.a0.result.snapshots.at(-1),f1=v.a1.result.snapshots.at(-1)
   const finalWorldIdentical=f0&&f1&&f0.year===f1.year?JSON.stringify(f0)===JSON.stringify(f1):null
   const mid=v.modifier.modifierId

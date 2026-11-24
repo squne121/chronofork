@@ -69,23 +69,28 @@ longTest('統合モード: UIアダプタと直接実行の同一性(100年・�
     }
   })
 
-  it('PR #78 の連鎖(1278年SUPPORTING登録→B-005合意→婚姻→B-002出生)を同じ実行で含む', () => {
+  it('1278年の候補は通常の判断を経た婚姻成立時にのみ個別化される', () => {
     if (!c) throw new Error('adapter failed')
     for (const [label, r] of [['A0', c.a0], ['A1', c.a1]] as const) {
       const events = r.result.eventLog
-      const supporting = events.filter(e => e.eventType.split('+').includes('PERSON_SUPPORTING_RECORD'))
-      expect(supporting.map(e => e.year), label).toEqual([1278])
+      const supporting = events.filter(e => e.supportingMarriageRegistrations?.some(x => x.registration.person.personId === INTEGRATED_SUPPORTING_PERSON_ID))
+      expect(supporting, label).toHaveLength(1)
+      const registrationYear = supporting[0]!.year
+      expect(registrationYear, label).toBeGreaterThanOrEqual(1278)
+      expect(supporting.every(e => e.eventType.split('+').includes('MARRIAGE_REGISTER')), label).toBe(true)
+      expect(events.some(e => e.eventType.split('+').includes('PERSON_SUPPORTING_RECORD')), label).toBe(false)
+      expect(r.result.snapshots.filter(w => w.year <= registrationYear).every(w => !w.persons.some(p => p.personId === INTEGRATED_SUPPORTING_PERSON_ID)), label).toBe(true)
       const finalWorld = r.result.snapshots.at(-1)!
       const person = finalWorld.persons.find(p => p.personId === INTEGRATED_SUPPORTING_PERSON_ID)
       expect(person?.interactionRole, label).toBe('SUPPORTING')
-      // 1278年以降にSUPPORTINGを含むB-005合意がある(婚姻成立は固定せず、実Traceの存在だけ見る)。
+      // 1278年以降にSUPPORTINGを含むB-005判断がある（ここではTraceの存在だけを見る）。
       const b005 = r.result.decisionTraces.filter(t => t.ruleId === 'B-005' && t.year >= 1278 &&
         t.actorRef.kind === 'PERSON_PAIR' && t.actorRef.ids.includes(INTEGRATED_SUPPORTING_PERSON_ID))
       expect(b005.length, label).toBeGreaterThan(0)
       const count = (type: string) => events.filter(e => e.eventType.split('+').includes(type)).length
       console.info('CHRONOFORK_INTEGRATED_UI_COUNTS=' + JSON.stringify({ branch: label,
         marriage: count('MARRIAGE_REGISTER'), birth: count('PERSON_BIRTH'), death: count('PERSON_DEATH'),
-        dissolve: count('MARRIAGE_DISSOLVE'), supporting: count('PERSON_SUPPORTING_RECORD'),
+        dissolve: count('MARRIAGE_DISSOLVE'), supporting: supporting.length,
         titleTransfer: count('LEGAL_TITLE_TRANSFER'), mandate: count('CONTROL_MANDATE_SET'),
         pendingSuccession1350: finalWorld.legal.cases.filter(x => x.kind === 'SUCCESSION' && x.status === 'PENDING').length,
         goal: r.result.technicalGoal?.status, events: events.length, traces: r.result.decisionTraces.length }))

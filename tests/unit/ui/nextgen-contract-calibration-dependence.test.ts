@@ -6,7 +6,7 @@ import {describe,it,expect} from 'vitest'
 import {runPlayBaseline} from '../../../src/ui/branch-play-source.ts'
 import {
  createExperimentalIntegratedWorld,createExperimentalOrdinaryLegalTrial,
- INTEGRATED_NEXTGEN_CONTRACT,INTEGRATED_TRUST_BASE,INTEGRATED_SUPPORTING_CLEARANCES,INTEGRATED_PROMOTION,
+ INTEGRATED_NEXTGEN_CONTRACT,INTEGRATED_TRUST_BASE,INTEGRATED_SUPPORTING_CANDIDATE_TRUST_BASE,INTEGRATED_SUPPORTING_CLEARANCES,INTEGRATED_PROMOTION,
  INTEGRATED_SUPPORTING_COHORTS,INTEGRATED_AUTONOMY,INTEGRATED_B009_CALIBRATION,INTEGRATED_SEED,INTEGRATED_ATTESTED_PERSON_ID,
  INTEGRATED_WITNESSED_SON_ID,EXPERIMENTAL_NALVEN_GOAL,
 } from '../../../src/scenario/experimental/index.ts'
@@ -31,7 +31,7 @@ function evaluatorsWith(contract:NextgenContractCalibration){
  return (startWorld:WorldState,ledger:readonly StatModifier[]):EvaluatorMap=>{
   const trial=createExperimentalOrdinaryLegalTrial()
   const cfg=createAutonomousCalibrationEvaluators({
-   branchStartWorld:startWorld,ledger,trustBase:INTEGRATED_TRUST_BASE,
+   branchStartWorld:startWorld,ledger,trustBase:INTEGRATED_TRUST_BASE,supportingCandidateTrustBase:INTEGRATED_SUPPORTING_CANDIDATE_TRUST_BASE,
    nextgenMarriage:{book:trial.book,laws:trial.laws,calibration:contract,supportingKinshipClearances:INTEGRATED_SUPPORTING_CLEARANCES},
    reviewedLegal:{book:trial.book,ordinaryLaws:trial.laws},spouseDeathDissolution:true,promotion:INTEGRATED_PROMOTION,
    supportingMarriage:{cohorts:INTEGRATED_SUPPORTING_COHORTS,maxRecordsPerYear:1,maxAliveSupporting:1,perCohortSamples:1,maximumPreviewAge:65},
@@ -43,7 +43,7 @@ function evaluatorsWith(contract:NextgenContractCalibration){
 }
 const runA0=(contract:NextgenContractCalibration)=>{
  const w=createExperimentalIntegratedWorld()
- const timeline=runTimeline(w,{seed:INTEGRATED_SEED,branchId:'A0-calib',evaluators:evaluatorsWith(contract)(w,[]),
+ const timeline=runTimeline(w,{seed:INTEGRATED_SEED,branchId:'A0-play',evaluators:evaluatorsWith(contract)(w,[]),
   goal:{dynastyId:'dynasty-nalven'},technicalGoalEvaluation:true})
  return {w,timeline}
 }
@@ -88,8 +88,12 @@ describeLong('校正依存性: INTEGRATED_NEXTGEN_CONTRACT と EXPERIMENTAL_NEXT
   if(!base.ok)throw new Error(base.code)
   const {timeline}=runA0(INTEGRATED_NEXTGEN_CONTRACT)
   expect(timeline.status).toBe('COMPLETED')
-  expect(JSON.stringify(timeline.eventLog)).toBe(JSON.stringify(base.a0.result.eventLog))
-  expect(JSON.stringify(timeline.decisionTraces)).toBe(JSON.stringify(base.a0.result.decisionTraces))
+  for (const [actual, expected] of [[timeline.eventLog, base.a0.result.eventLog], [timeline.decisionTraces, base.a0.result.decisionTraces]] as const) {
+   expect(actual.length).toBe(expected.length)
+   for (let i = 0; i < actual.length; i++) {
+    expect(JSON.stringify(actual[i])).toBe(JSON.stringify(expected[i]))
+   }
+  }
  })
 
  it('既定係数での短い再計算（観測）: A0は1269年でなく1270年に婚姻(同一ペア)しNOT_ACHIEVED。同じ第1介入のA1もACHIEVED',()=>{

@@ -14,6 +14,7 @@ const LABELS: Readonly<Record<string, string>> = Object.freeze({
   KINSHIP_UNREVIEWED: '血縁関係が記録されており、婚姻適格性の審査は行われていない',
   SCORE_AT_OR_ABOVE_THRESHOLD: '2人の信頼値が採用の閾値以上',
   SCORE_BELOW_THRESHOLD: '2人の信頼値が採用の閾値未満',
+  NO_BASE_TRUST: '2人の信頼基礎値が記録されていないため、候補の判断を保留',
   // B-005 契約交渉
   B004_NOT_ACCEPTED: '婚姻候補として採用されなかったため、契約交渉に進まない',
   COMMON_ANCESTOR_WITHIN_TWO_GENERATIONS: '共通の祖先が2世代以内にいると記録され、契約交渉は成立しない',
@@ -31,6 +32,9 @@ const LABELS: Readonly<Record<string, string>> = Object.freeze({
   SUPPORTING_RECORD_BUDGET_EXCEEDED: '補助人物の登録枠を超えるため、供給されない',
   SEEKER_JURISDICTION_UNVERIFIED: '相手を探す人物の管轄が確認できないため、供給されない',
   SUPPORTING_SUPPLY_DEFERRED: '補助人物の供給は見送られた',
+  SUPPORTING_CANDIDATE_ONLY: '補助人物の候補を提示したのみ',
+  NOT_MARRIAGE_APPROVAL: '婚姻の承認ではない',
+  OPEN_EVIDENCE_BACKED_CANDIDATES_AT_LIMIT: '確認記録のある未婚の補助人物候補が上限に達している',
   // A-SUC-04 / A-TIT-07 相続・称号
   NO_ESTABLISHED_HEIR: '確立した後継者がいない',
   GAME_02_SUCCESSION_AUTHORITY_UNDETERMINED: '相続の権限を定める規則が未承認のため、後継者は確定しない',

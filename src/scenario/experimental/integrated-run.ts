@@ -95,6 +95,11 @@ export const INTEGRATED_TRUST_BASE: readonly PairTrustBase[] = Object.freeze([
   Object.freeze({ personIds: Object.freeze([...INTEGRATED_PAIR] as [string, string]), value: 80 }),
 ]) as readonly PairTrustBase[]
 
+/** 未登録候補のペアに限る独立した試験信頼値。法的適格性や婚姻成立の証拠ではない。 */
+export const INTEGRATED_SUPPORTING_CANDIDATE_TRUST_BASE: readonly PairTrustBase[] = Object.freeze([
+  Object.freeze({ personIds: Object.freeze([INTEGRATED_WITNESSED_SON_ID, INTEGRATED_SUPPORTING_PERSON_ID] as [string, string]), value: 35 }),
+]) as readonly PairTrustBase[]
+
 /** 比較用介入: P2/P5の信頼のみ -20 / 1250〜1254。出生・婚姻・相続の成功を固定しない。 */
 export const INTEGRATED_TRUST_REDUCTION: StatModifier = Object.freeze({
   modifierId: 'trial:issue71:pair-trust-minus-20',
@@ -121,6 +126,7 @@ export function createExperimentalIntegratedEvaluators(
   const trial = createExperimentalOrdinaryLegalTrial()
   const cfg = createAutonomousCalibrationEvaluators({
     branchStartWorld: startWorld, ledger, trustBase: INTEGRATED_TRUST_BASE,
+    supportingCandidateTrustBase: INTEGRATED_SUPPORTING_CANDIDATE_TRUST_BASE,
     nextgenMarriage: {
       book: trial.book, laws: trial.laws, calibration: INTEGRATED_NEXTGEN_CONTRACT,
       supportingKinshipClearances: INTEGRATED_SUPPORTING_CLEARANCES,
@@ -146,7 +152,8 @@ export function integratedRunConfigIdentity(): Readonly<Record<string, unknown>>
   return {
     book: trial.book, laws: trial.laws,
     nextgenContract: INTEGRATED_NEXTGEN_CONTRACT, supportingClearances: INTEGRATED_SUPPORTING_CLEARANCES,
-    trustBase: INTEGRATED_TRUST_BASE, promotion: INTEGRATED_PROMOTION,
+    trustBase: INTEGRATED_TRUST_BASE, supportingCandidateTrustBase: INTEGRATED_SUPPORTING_CANDIDATE_TRUST_BASE,
+    promotion: INTEGRATED_PROMOTION,
     supporting: { cohorts: INTEGRATED_SUPPORTING_COHORTS, ...INTEGRATED_SUPPORTING_LIMITS },
     autonomy: INTEGRATED_AUTONOMY, b009: INTEGRATED_B009_CALIBRATION,
     spouseDeathDissolution: true,
