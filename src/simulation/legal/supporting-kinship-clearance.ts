@@ -12,10 +12,12 @@ export type SupportingKinshipClearance=Readonly<{
   validUntilYear:Year
   sourceEvidenceId:Id
   provenance:'CALIBRATION_ONLY'
+/** 既存の票は確認済み。工程2Bの抽象調査では否定結果も保持する。 */
+abstractFinding?:'PROHIBITED'|'UNVERIFIED'
 }>
 export type SupportingKinshipStatus=
   | Readonly<{status:'CLEARED';reasonCode:'SUPPORTING_KINSHIP_REVIEW_MATCHED';clearanceId:Id|null;clearanceRecordKey:string|null}>
-  | Readonly<{status:'DEFER';reasonCode:'SUPPORTING_KINSHIP_CLEARANCE_MISSING'|'SUPPORTING_KINSHIP_CLEARANCE_AMBIGUOUS'|'CANDIDATE_VIEW_INVALID'|'PERSON_UNKNOWN'}>
+  | Readonly<{status:'DEFER';reasonCode:'SUPPORTING_KINSHIP_CLEARANCE_MISSING'|'SUPPORTING_KINSHIP_CLEARANCE_AMBIGUOUS'|'ABSTRACT_KINSHIP_PROHIBITED'|'ABSTRACT_KINSHIP_INVESTIGATION_INCOMPLETE'|'CANDIDATE_VIEW_INVALID'|'PERSON_UNKNOWN'}>
 
 const present=(value:unknown):value is Id=>typeof value==='string'&&value.trim().length>0
 export const isIndependentKinshipSource=(id:unknown,populationEvidenceIds:readonly Id[]):boolean=>
@@ -34,6 +36,7 @@ export function validateSupportingKinshipClearances(
       c.personIds[0]>=c.personIds[1]||!present(c.countryId)||
       !Number.isSafeInteger(c.checkedYear)||!Number.isSafeInteger(c.validUntilYear)||
       c.validUntilYear<=c.checkedYear||c.provenance!=='CALIBRATION_ONLY'||
+      (c.abstractFinding!==undefined&&c.abstractFinding!=='PROHIBITED'&&c.abstractFinding!=='UNVERIFIED')||
       seen.has(c.clearanceId))issues.push('SUPPORTING_CLEARANCE_INVALID:'+i)
     if(c?.clearanceId)seen.add(c.clearanceId)
   }
@@ -68,6 +71,8 @@ export function reviewSupportingKinshipClearance(
     !isIndependentKinshipSource(record.sourceEvidenceId,[...populationEvidenceIds,
       ...world.legal.marriages.flatMap(m=>m.supportingPopulationEvidenceIds??[])]))
     return {status:'DEFER',reasonCode:'SUPPORTING_KINSHIP_CLEARANCE_MISSING'}
+  if(record.abstractFinding!==undefined)return {status:'DEFER',reasonCode:record.abstractFinding==='PROHIBITED'
+    ?'ABSTRACT_KINSHIP_PROHIBITED':'ABSTRACT_KINSHIP_INVESTIGATION_INCOMPLETE'}
   return {status:'CLEARED',reasonCode:'SUPPORTING_KINSHIP_REVIEW_MATCHED',
     clearanceId:record.clearanceId,clearanceRecordKey:canonicalize(record)}
 }

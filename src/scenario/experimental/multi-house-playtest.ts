@@ -33,7 +33,7 @@ export const MULTI_HOUSE_EXTRA_SEEDS = Object.freeze([20260202, 20260303]) as re
 export const MULTI_HOUSE_GOAL = Object.freeze({ dynastyId: NALVEN_DYNASTY_ID })
 
 /** エルディア4地方の有力層集団 → 供給源となる所属家門（各集団の支持が最大の家門）。CALIBRATION_ONLY。 */
-const SUPPLY_GROUPS = Object.freeze([
+export const MULTI_HOUSE_SUPPLY_GROUPS = Object.freeze([
   { groupId: 'group-central-elite', houseId: 'house-nalven', key: 'central' },
   { groupId: 'group-west-elite', houseId: 'house-vargas', key: 'west' },
   { groupId: 'group-east-elite', houseId: 'house-cardon', key: 'east' },
@@ -63,7 +63,7 @@ const TEST_LATER_SURVIVOR_RECORDS: ReadonlyMap<Id, Id> = new Map([
 
 function buildCohorts(): SupportingMarriageCohort[] {
   const out: SupportingMarriageCohort[] = []
-  for (const g of SUPPLY_GROUPS) {
+  for (const g of MULTI_HOUSE_SUPPLY_GROUPS) {
     for (const birthYear of MULTI_HOUSE_SUPPLY.initialBirthYears) {
       for (const sex of ['MALE', 'FEMALE'] as const) {
         const id = `multi-house:initial:${g.key}:${birthYear}:${sex.toLowerCase()}`
@@ -243,12 +243,16 @@ export function multiHouseRunConfigIdentity(): Readonly<Record<string, unknown>>
 
 /** identityの短い比較用ダイジェスト(FNV-1a 2系統の連結, 暗号用途ではない)。キー順に依存しない正規化JSONから算出。 */
 export function multiHouseRunConfigDigest(): string {
+  return digestMultiHouseIdentity(multiHouseRunConfigIdentity())
+}
+
+export function digestMultiHouseIdentity(identity: Readonly<Record<string, unknown>>): string {
   const canon = (v: unknown): unknown =>
     Array.isArray(v) ? v.map(canon)
       : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, canon(x)]))
         : v
-  const text = JSON.stringify(canon(multiHouseRunConfigIdentity()))
+  const text = JSON.stringify(canon(identity))
   let h1 = 0x811c9dc5, h2 = 0x01000193 ^ 0xdeadbeef
   for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i)

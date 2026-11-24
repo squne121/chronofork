@@ -4,6 +4,7 @@ import type { PersonBirthCommand, PersonDeathCommand, PersonPromotionCommand, Su
 import type { Draft, Handler } from './draft.ts'
 import { fail, findPerson } from './draft.ts'
 import type { Rejection } from './types.ts'
+import { countRegisteredSupportingBirths, supportingBirthBucketKey } from '../../population/supporting-marriage.ts'
 
 const slotIndex = (w: WorldState, groupId: string, year: number) =>
   w.demographics.cohortSlots.findIndex((s) => s.groupId === groupId && s.year === year)
@@ -112,8 +113,8 @@ export const personSupportingRecord: Handler<SupportingPersonRegistration> = (d,
     if(p.birthYear<1250||!record||c.cohortSize>record.anonymousBirths)
       return fail('LEGAL_BASIS_MISSING','過去C004匿名出生枠の記録がありません')
     // 別コホートが同じ集団・出生年の匿名出生枠を共有するため、記録済みの補助人物数も数える。
-    const recorded=w.persons.filter(x=>x.originGroupId===p.originGroupId&&
-      x.birthYear===p.birthYear&&x.personId.startsWith('support:population:')).length
+    const key=supportingBirthBucketKey(p.originGroupId,p.birthYear)
+    const recorded=countRegisteredSupportingBirths(w.persons).get(key)??0
     if(recorded>=record.anonymousBirths)
       return fail('COHORT_CAPACITY_CONFLICT','同じ集団・出生年の匿名出生枠を使い切っています')
   }else return fail('INVALID_COMMAND','人口出生出典の種類が不正です')

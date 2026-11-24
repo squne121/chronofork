@@ -1,7 +1,7 @@
 // DEC-061: 非操作対象の婚姻相手候補をPopulationGroupの内訳から抽象的に提示する。
 // 候補はPerson/婚姻/出生/Eventではない。B-005の双方意思・A-LEG-01の承認と禁親審査が別途必要。
 // 個別氏名・王朝所属は生成しない。出自階層・数・年齢分布はCALIBRATION_ONLYで正式史実ではない。
-import type { Id, WorldState, Year } from '../contracts/index.ts'
+import type { Id, Person, WorldState, Year } from '../contracts/index.ts'
 import { START_YEAR } from '../contracts/index.ts'
 import { drawRandom } from '../random.ts'
 
@@ -84,6 +84,19 @@ const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0
 
 export const supportingCandidateId=(cohortId:Id,ordinal:number):Id=>
   'support:population:'+JSON.stringify([cohortId,ordinal])
+
+export const supportingBirthBucketKey = (groupId: Id, year: Year): string => JSON.stringify([groupId, year])
+
+/** 登録済みのslotは死亡後も出生枠を返却しない。reducerと抽象供給で同じ数え方を用いる。 */
+export function countRegisteredSupportingBirths(persons: readonly Person[]): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>()
+  for (const p of persons) {
+    if (!p.personId.startsWith('support:population:')) continue
+    const key = supportingBirthBucketKey(p.originGroupId, p.birthYear)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
 
 /** 外部入力は事前に検証。集団人数だけで性別/年齢/身分を補完しない。 */
 export function validateSupportingMarriageCohorts(

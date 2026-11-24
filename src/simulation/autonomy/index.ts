@@ -22,7 +22,8 @@ import { EXPERIMENTAL_TUNING } from '../tuning.ts'
 import type { TuningConfig } from '../tuning.ts'
 import { checkAutonomyCalibration, EXPERIMENTAL_AUTONOMY } from './config.ts'
 import type { AutonomyCalibration } from './config.ts'
-import { createSupportingCandidateResolver } from './supporting-candidate-view.ts'
+import { createAbstractSupportingCandidateScope, createSupportingCandidateResolver } from './supporting-candidate-view.ts'
+import type { AbstractMarriageSupplyConfig } from './abstract-marriage-supply.ts'
 
 export { EXPERIMENTAL_AUTONOMY, validateAutonomyCalibration } from './config.ts'
 export type { AutonomyCalibration, AutonomyCalibrationIssue } from './config.ts'
@@ -40,6 +41,7 @@ export type AutonomousEvaluatorInput = Readonly<{
   promotion?: B001PromotionInput
   /** DEC-061: 重要人物昇格とは別の、人口内訳から少数SUPPORTING人物を記録する試験入力。 */
   supportingMarriage?: B001SupportingInput
+  abstractMarriageSupply?: AbstractMarriageSupplyConfig
   /** 未登録候補ペアの明示的信頼。省略時はNO_BASEで保留。 */
   supportingCandidateTrustBase?: readonly PairTrustBase[]
   /** DEC-058: B-003で確定した当年の配偶者死亡を婚姻の法的終了へ接続。既定false。 */
@@ -83,9 +85,17 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     (JSON.stringify(input.nextgenMarriage.book)!==JSON.stringify(input.reviewedLegal.book) ||
      JSON.stringify(input.nextgenMarriage.laws)!==JSON.stringify(input.reviewedLegal.ordinaryLaws)))
     return {ok:false,issues:['NEXTGEN_LEGAL_EVIDENCE_MISMATCH']}
+  if(input.abstractMarriageSupply && (!input.nextgenMarriage || input.supportingMarriage ||
+    input.supportingCandidateTrustBase || input.nextgenMarriage.supportingKinshipClearances || input.promotion))
+    return {ok:false,issues:['ABSTRACT_MARRIAGE_SUPPLY_REQUIRES_INDEPENDENT_NEXTGEN_MODE']}
+  if(input.abstractMarriageSupply && !Array.isArray(input.branchStartWorld.demographics?.anonymousBirthHistory))
+    return {ok:false,issues:['ANONYMOUS_BIRTH_HISTORY_REQUIRED']}
+  let annual: ReturnType<typeof createAbstractSupportingCandidateScope> | undefined
+  try { if(input.abstractMarriageSupply)annual=createAbstractSupportingCandidateScope(input.abstractMarriageSupply,autonomy.marriage.minAdultAge) }
+  catch(e) {return {ok:false,issues:[String(e)]}}
   const supporting=input.supportingMarriage?createB001SupportingMarriageEvaluator(input.supportingMarriage):undefined
   if(supporting&&!supporting.ok)return {ok:false,issues:[...supporting.issues]}
-  const resolver=input.supportingMarriage?createSupportingCandidateResolver(input.supportingMarriage):undefined
+  const resolver=annual?annual.resolve:input.supportingMarriage?createSupportingCandidateResolver(input.supportingMarriage):undefined
   const candidateTrust=input.supportingCandidateTrustBase??[]
   const candidateIds=Array.isArray(candidateTrust)?candidateTrust.flatMap(p=>
     Array.isArray(p?.personIds)?p.personIds.filter((id:unknown):id is string=>typeof id==='string'):[]):[]
@@ -110,6 +120,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     }
   } else if (promotion?.ok) b001=promotion.evaluator
   else if (supporting?.ok) b001=supporting.evaluator
+  else if (annual) b001=annual.evaluate
   const reviewed=input.reviewedLegal?createReviewedLegalEvaluators(input.reviewedLegal):undefined
   if(reviewed&&!reviewed.ok)return {ok:false,issues:[...reviewed.issues]}
   const crown=createCrownSuccessionEvaluators(

@@ -1,7 +1,7 @@
 // DEC-058: B-005双方合意の当年Traceを再検証し、DEC-057の法制権限を通してのみ婚姻を登録。
 // 出生児の王朝所属はここで指定しない（A-DYN-02が唯一の明示契約条項から後年確定する）。
 import type { Id, SupportingPersonRegistration, WorldState } from '../../contracts/index.ts'
-import { supportingPopulationEvidenceIds, inspectSupportingCandidateSupply, supportingRankingBlock } from '../../autonomy/supporting-candidate-view.ts'
+import { supportingAnnualMarriageEvidence, supportingPopulationEvidenceIds, inspectSupportingCandidateSupply, supportingRankingBlock } from '../../autonomy/supporting-candidate-view.ts'
 import type { SupportingCandidateResolver } from '../../autonomy/supporting-candidate-view.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
@@ -33,7 +33,7 @@ export type NextgenMarriageFactory=
   | Readonly<{ok:true;evaluator:RuleEvaluator}>
   | Readonly<{ok:false;issues:readonly string[]}>
 
-const supportingEvidence = new WeakMap<RuleEvaluator, Readonly<{resolve: SupportingCandidateResolver | undefined; clearanceKey: (year:number,pairs:ReadonlyMap<string,string>)=>string}>>()
+const supportingEvidence = new WeakMap<RuleEvaluator, Readonly<{resolve: SupportingCandidateResolver | undefined; clearanceKey: (ctx:EvaluationContext,pairs:ReadonlyMap<string,string>)=>string}>>()
 export const aLeg01SupportingEvidence = (evaluator: RuleEvaluator | undefined) =>
   evaluator && supportingEvidence.get(evaluator)
 
@@ -47,6 +47,7 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
   issues.push(...validateSupportingKinshipClearances(clearances))
   if(issues.length>0)return {ok:false,issues}
   const stableClearances=structuredClone(clearances) as SupportingKinshipClearance[]
+  const clearancesFor=(ctx:EvaluationContext)=>supportingAnnualMarriageEvidence(resolveSupporting,ctx)?.clearances??stableClearances
   const book=structuredClone(input.book) as LegalEvidenceBook
   const laws=structuredClone(input.laws) as OrdinaryLaw[]
   const evaluator:RuleEvaluator=(world:WorldState,ctx:EvaluationContext)=>{
@@ -55,6 +56,8 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
         {code:'RULE_MISMATCH',message:'A-LEG-01 Phase3'}])
     const reviews:OrdinaryMarriageReview[]=[]
     const registrations:SupportingPersonRegistration[]=[]
+    const yearClearances=clearancesFor(ctx)
+    const populationEvidenceIds=supportingPopulationEvidenceIds(resolveSupporting,ctx)
     const supply=inspectSupportingCandidateSupply(resolveSupporting,world,ctx)
     const {candidates:resolved}=supply
     const deferReasons=new Map<Id,string>()
@@ -71,7 +74,7 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
       if(eligibility.status!=='ELIGIBLE'){deferReasons.set(query.source.requestId,eligibility.reasonCode);continue}
       // B-005とA-LEG-01は同じ当事者別証拠を再審査。違う証拠IDでのすり替えは認めない。
       const clearance=reviewSupportingKinshipClearance(
-        world,pair,eligibility.countryId,ctx.year,stableClearances,temporary,supportingPopulationEvidenceIds(resolveSupporting))
+        world,pair,eligibility.countryId,ctx.year,yearClearances,temporary,populationEvidenceIds)
       if(clearance.status!=='CLEARED'){deferReasons.set(query.source.requestId,clearance.reasonCode);continue}
       if(query.source.year!==ctx.year||query.source.phase!==3||query.source.sourceRuleId!=='B-005')continue
       const b5=(ctx.priorTraces??[]).filter(t=>t.traceId===query.source.sourceTraceId)
@@ -172,7 +175,7 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
     }
   }
   supportingEvidence.set(evaluator, Object.freeze({
-    resolve: resolveSupporting, clearanceKey: (year:number,pairs:ReadonlyMap<string,string>)=>supportingClearanceKey(stableClearances,year,pairs),
+    resolve: resolveSupporting, clearanceKey: (ctx:EvaluationContext,pairs:ReadonlyMap<string,string>)=>supportingClearanceKey(clearancesFor(ctx),ctx.year,pairs),
   }))
   return {ok:true,evaluator}
 }

@@ -1,9 +1,11 @@
-// B001のTraceは出典そのものではない。エンジンの供給時snapshotと固定入力から再実行して照合する。
+// B001のTraceは出典そのものではない。エンジンの供給時snapshotと構成入力から再実行して照合する。
 import type { Id, Person, SupportingPersonRegistration, WorldState } from '../contracts/index.ts'
 import { supportingCandidateId } from '../population/supporting-marriage.ts'
 import type { EvaluationContext } from '../engine/evaluators.ts'
 import { B001_SUPPORTING_VERSION, createB001SupportingMarriageEvaluator } from '../rules/b/b001-supporting-marriage.ts'
 import type { B001SupportingInput } from '../rules/b/b001-supporting-marriage.ts'
+import { abstractSupportingPerson, createAnnualMarriageSupply } from './abstract-marriage-supply.ts'
+import type { AbstractMarriageSupplyConfig, AnnualMarriageSupply } from './abstract-marriage-supply.ts'
 
 export type ResolvedSupportingCandidate = Readonly<{seekerId:Id; person:Person; registration:SupportingPersonRegistration; traceId:Id; maxRecordsPerYear:number; maxAliveSupporting:number}>
 export type SupportingCandidateResolver = (world:WorldState,ctx:EvaluationContext)=>readonly ResolvedSupportingCandidate[]
@@ -19,11 +21,14 @@ export const supportingRankingBlock = (supply:SupplyInspection,pair:readonly [Id
   !supply.verified?'SUPPORTING_SUPPLY_UNVERIFIED':
     pair.some(id=>supply.budgetBlockedActors.has(id))?'SUPPORTING_CANDIDATE_BUDGET_EXCEEDED':null
 const populationResolvers = new WeakMap<SupportingCandidateResolver, Readonly<{
-  evidenceIds: readonly Id[]
+  evidenceIds: (ctx: EvaluationContext) => readonly Id[]
+  annual?: AnnualMarriageSupply
   inspect: (world:WorldState,ctx:EvaluationContext)=>SupplyInspection
 }>>()
-export const supportingPopulationEvidenceIds = (resolver: SupportingCandidateResolver | undefined): readonly Id[] =>
-  (resolver && populationResolvers.get(resolver)?.evidenceIds) ?? []
+export const supportingPopulationEvidenceIds = (resolver: SupportingCandidateResolver | undefined, ctx: EvaluationContext): readonly Id[] =>
+  (resolver && populationResolvers.get(resolver)?.evidenceIds(ctx)) ?? []
+export const supportingAnnualMarriageEvidence = (resolver: SupportingCandidateResolver | undefined, ctx: EvaluationContext) =>
+  resolver && populationResolvers.get(resolver)?.annual?.(ctx)
 export const inspectSupportingCandidateSupply = (
   resolver: SupportingCandidateResolver | undefined, world:WorldState, ctx:EvaluationContext,
 ):SupplyInspection => resolver ? populationResolvers.get(resolver)?.inspect(world,ctx) ?? unverified
@@ -34,14 +39,28 @@ export const isPopulationSupportingResolver = (resolve: SupportingCandidateResol
 
 /** 取得不能または照合失敗時は候補を返さない。呼出側は未登録者の信頼も別途検証する。 */
 export function createSupportingCandidateResolver(input:B001SupportingInput):SupportingCandidateResolver {
-  const fixed=structuredClone(input)
-  const factory=createB001SupportingMarriageEvaluator(fixed)
-  if(!factory.ok)throw new RangeError('INVALID_SUPPORTING_INPUT:'+factory.issues.join(','))
+  if(typeof input==='function')throw new RangeError('INVALID_SUPPORTING_INPUT')
+  return createCandidateResolver(input)
+}
+
+/** B-004/B-005/A-LEG-01はこのresolverで同一の供給元に束縛する。ルール別の差替え口は設けない。 */
+export function createAbstractSupportingCandidateScope(config: AbstractMarriageSupplyConfig, marriageMinAge: number):
+  Readonly<{resolve: SupportingCandidateResolver; evaluate: ReturnType<AnnualMarriageSupply>['evaluate']}> {
+  const annual=createAnnualMarriageSupply(config,marriageMinAge)
+  return {resolve:createCandidateResolver(annual),evaluate:(world,ctx)=>annual(ctx).evaluate(world,ctx)}
+}
+
+function createCandidateResolver(input:B001SupportingInput|AnnualMarriageSupply):SupportingCandidateResolver {
+  const fixed=typeof input==='function'?undefined:structuredClone(input)
+  const factory=fixed&&createB001SupportingMarriageEvaluator(fixed)
+  if(factory&&!factory.ok)throw new RangeError('INVALID_SUPPORTING_INPUT:'+factory.issues.join(','))
+  const current=typeof input==='function'?input:()=>({input:fixed!,evaluate:factory!.evaluator})
   const inspect = (world:WorldState,ctx:EvaluationContext):SupplyInspection=>{
     const snapshot=ctx.supportingCandidateSnapshot
     if(!snapshot||snapshot.branchId!==ctx.branchId||snapshot.year!==ctx.year||
       snapshot.world.year!==ctx.year||world.year!==ctx.year)return unverified
-    const replay=factory.evaluator(snapshot.world,{...ctx,ruleId:'B-001',phase:3})
+    const {input: fixed, evaluate}=current(ctx)
+    const replay=evaluate(snapshot.world,{...ctx,ruleId:'B-001',phase:3})
     const actual=(ctx.priorTraces??[]).filter(t=>t.ruleId==='B-001'&&t.phase===3&&
       t.year===ctx.year&&t.ruleVersion===B001_SUPPORTING_VERSION)
     // 確定TraceはselectedCandidateIdの挿入順がdraftと異なるため、キー順を正規化して比較する。
@@ -69,10 +88,7 @@ export function createSupportingCandidateResolver(input:B001SupportingInput):Sup
       const trace=actual.find(t=>keyOfTrace(t)===draftKey(d))
       if(!cohort||typeof ordinal!=='number'||!Number.isSafeInteger(ordinal)||ordinal<0||ordinal>=cohort.memberCount||
         supportingCandidateId(cohort.cohortId,ordinal)!==v.supportingCandidateId||!trace)continue
-      const person:Person={personId:v.supportingCandidateId,name:v.supportingCandidateId,
-        interactionRole:'SUPPORTING',sex:cohort.sex,birthYear:cohort.birthYear,alive:true,
-        originGroupId:cohort.groupId,houseId:cohort.affiliationHouseId,
-        legalDynasty:{status:'UNDETERMINED',reasonCodes:['SUPPORTING_CANDIDATE_UNREGISTERED']}}
+      const person=abstractSupportingPerson(v.supportingCandidateId,cohort)
       const registration:SupportingPersonRegistration={person,cohortId:cohort.cohortId,
         cohortSize:cohort.memberCount,memberOrdinal:ordinal,sourceEvidenceId:cohort.sourceEvidenceId,
         familyPoolId:cohort.familyPoolId,birthBacking:cohort.source,
@@ -100,8 +116,8 @@ export function createSupportingCandidateResolver(input:B001SupportingInput):Sup
     return {candidates:result,verified:true,budgetBlockedActors}
   }
   const resolve:SupportingCandidateResolver=(world,ctx)=>inspect(world,ctx).candidates
-  const evidenceIds=Object.freeze(fixed.cohorts.flatMap(c =>
-    c?.survivorAttestationId ? [c.sourceEvidenceId, c.survivorAttestationId] : c?.sourceEvidenceId?[c.sourceEvidenceId]:[]))
-  populationResolvers.set(resolve,{evidenceIds,inspect})
+  const evidenceIds=(ctx:EvaluationContext)=>current(ctx).input.cohorts.flatMap(c =>
+    c?.survivorAttestationId ? [c.sourceEvidenceId, c.survivorAttestationId] : c?.sourceEvidenceId?[c.sourceEvidenceId]:[])
+  populationResolvers.set(resolve,{evidenceIds,inspect,...(typeof input==='function'?{annual:input}:{})})
   return resolve
 }

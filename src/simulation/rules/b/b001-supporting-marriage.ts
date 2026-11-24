@@ -78,7 +78,8 @@ export function createB001SupportingMarriageEvaluator(input: B001SupportingInput
     if(countryId===undefined)return false
     const matching=(clearanceByPair.get(JSON.stringify(cmp(a, b) <= 0 ? [a, b] : [b, a])) ?? [])
       .filter(c => c.countryId === countryId && c.checkedYear <= year && year < c.validUntilYear)
-    return matching.length===1&&isIndependentKinshipSource(matching[0]!.sourceEvidenceId,populationEvidenceIds)
+    return matching.length===1&&matching[0]!.abstractFinding===undefined&&
+      isIndependentKinshipSource(matching[0]!.sourceEvidenceId,populationEvidenceIds)
   }
   const evaluator: RuleEvaluator = (world: WorldState, ctx: EvaluationContext): RuleOutcome => {
     if (ctx.ruleId !== 'B-001' || ctx.phase !== 3 || ctx.year !== world.year) {

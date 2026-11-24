@@ -151,7 +151,7 @@ function supportingRegistrationCheck(
         const eligibility = reviewDomesticMarriageEligibility(world, pair, people)
         if (eligibility.status === 'ELIGIBLE') related.set(JSON.stringify(pair), eligibility.countryId)
       }
-      if (negotiationEvidence.clearanceKey(ctx.year, related) !== legalEvidence.clearanceKey(ctx.year, related)) {
+      if (negotiationEvidence.clearanceKey(ctx, related) !== legalEvidence.clearanceKey(ctx, related)) {
         return 'B-005とA-LEG-01の補助人物禁親台帳が一致しません'
       }
     }

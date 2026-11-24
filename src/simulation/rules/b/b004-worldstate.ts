@@ -1,6 +1,7 @@
 // B-004: 明示ペア一覧ではなく、当年WorldStateの生存・未婚・試験成人から縁談候補を再探索。
 // pair.trustがない人物組はNO_BASE/DEFERを維持。ここで婚姻適格性・法的権限は制定しない。
 import type { Id, PairTrustBase, RuleOutcome, WorldState } from '../../contracts/index.ts'
+import { supportingAnnualMarriageEvidence } from '../../autonomy/supporting-candidate-view.ts'
 import type { SupportingCandidateResolver } from '../../autonomy/supporting-candidate-view.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
@@ -24,7 +25,7 @@ export function createB004WorldStateEvaluator(
 ):RuleEvaluator {
   const match=checkAutonomyCalibration(input).marriage
   const resolveSupporting = supporting?.resolve
-  const candidateTrust = structuredClone(supporting?.trustBase ?? [])
+  const fixedCandidateTrust = structuredClone(supporting?.trustBase ?? [])
   const evaluator: RuleEvaluator = (world:WorldState,ctx:EvaluationContext):RuleOutcome=>{
     if(ctx.ruleId!=='B-004'||ctx.phase!==3||ctx.year!==world.year){
       throw new EvaluationFailure('B-004は当年フェーズ3でのみ評価可能',[{code:'RULE_MISMATCH',message:String(ctx.ruleId)}])
@@ -75,6 +76,7 @@ export function createB004WorldStateEvaluator(
     const candidatePairs=eligible.map(s=>normalizePersonPair(s.seekerId,s.person.personId)).filter(p=>p!==null)
     const keys=new Set(candidatePairs.map(pairKey))
     const known=new Set([...world.persons.map(p=>p.personId),...eligible.map(s=>s.person.personId)])
+    const candidateTrust=supportingAnnualMarriageEvidence(resolveSupporting,ctx)?.trustBase??fixedCandidateTrust
     const candidateView=createPairTrustView({base:candidateTrust.filter(b=>keys.has(pairKey(b.personIds))),ledger:[],knownPersonIds:known})
     if(!candidateView.ok)throw new EvaluationFailure('補助候補の明示信頼が不正',candidateView.issues.map(i=>({code:i.code,message:i.message})))
     const candidateEvaluator=createB004CalibrationEvaluator({pairs:candidatePairs,view:candidateView.view,calibration})
