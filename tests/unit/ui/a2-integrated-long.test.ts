@@ -182,14 +182,27 @@ describeLong('Issue #71: A0 NOT_ACHIEVED→A1 ACHIEVED（第1介入のみ）→A
   expect(A0.decisionTraces.some(t=>t.modifierIds.includes(m1)||t.modifierIds.includes(m2))).toBe(false)
  })
 
- it('(2) A1→A2差分: WorldState・Eventは同一。DecisionTraceはm2を記録するB-004/B-005のTrace(第2対象ペア)だけが異なる',()=>{
+ it('(2) A1→A2差分: WorldState・Eventは同一。DecisionTraceはB-001の枝出典と第2対象ペアへのm2だけが異なる',()=>{
   // 実測した比較結果のみを断言する（JSON直列化の完全一致）。
   expect(JSON.stringify(A2.snapshots)).toBe(JSON.stringify(A1.snapshots))
   expect(JSON.stringify(A2.eventLog)).toBe(JSON.stringify(A1.eventLog))
   expect(A2.decisionTraces.map(t=>t.traceId)).toEqual(A1.decisionTraces.map(t=>t.traceId))
   const diff=A1.decisionTraces.map((t,i)=>({t,u:A2.decisionTraces[i]!})).filter(x=>JSON.stringify(x.t)!==JSON.stringify(x.u))
-  expect(diff.length).toBeGreaterThan(0)
-  for(const {t,u} of diff){
+  const supplyDiff=diff.filter(({t})=>t.ruleId==='B-001')
+  expect(supplyDiff.length).toBeGreaterThan(0)
+  for(const {t,u} of supplyDiff){
+   // 候補提示の出典は実行枝のIDを持つ。A1/A2それぞれのIDを照合し、他の入力・判断・参照はすべて同一でなければならない。
+   expect(t.year).toBeGreaterThanOrEqual(YEAR)
+   expect(t.modifierIds).toEqual([])
+   const withBranch=t.candidates.filter(c=>Object.hasOwn(c.inputs,'candidateBranchId'))
+   expect(withBranch.length).toBeGreaterThan(0)
+   expect(withBranch.every(c=>c.inputs.candidateBranchId===A1.branchId)).toBe(true)
+   expect(u).toStrictEqual({...t,candidates:t.candidates.map(c=>Object.hasOwn(c.inputs,'candidateBranchId')
+    ?{...c,inputs:{...c.inputs,candidateBranchId:A2.branchId}}:c)})
+  }
+  const interventionDiff=diff.filter(({t})=>t.ruleId!=='B-001')
+  expect(interventionDiff.length).toBeGreaterThan(0)
+  for(const {t,u} of interventionDiff){
    expect(['B-004','B-005']).toContain(t.ruleId)
    expect(pairOf(t)).toBe(pairKey(secondPair))
    expect(t.modifierIds).toEqual([])
@@ -201,7 +214,7 @@ describeLong('Issue #71: A0 NOT_ACHIEVED→A1 ACHIEVED（第1介入のみ）→A
    expect(u.candidates.map(x=>x.reasonCodes)).toEqual(t.candidates.map(x=>x.reasonCodes))
   }
   // m2を参照するTraceはすべて上の差分Traceに一致する（他のTraceにm2は現れない）。
-  expect(A2.decisionTraces.filter(t=>t.modifierIds.includes(m2)).length).toBe(diff.length)
+  expect(A2.decisionTraces.filter(t=>t.modifierIds.includes(m2)).length).toBe(interventionDiff.length)
  })
 
  it('(2) 観測（本seed・本第2ペアのみ）: 対象ペアの基礎信頼が下限-100で、-200を足しても実効信頼は-100のまま',()=>{
