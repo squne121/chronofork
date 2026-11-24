@@ -89,6 +89,18 @@ it('統合A0の実婚姻は一覧・詳細・対象フィルタで補助人物�
   expect(technical.open).toBe(false)
   expect(technical.textContent).toContain(support.personId)
   expect(technical.textContent).toContain(marriage.contract!.evidenceId)
+
+  cleanup()
+  show(event, before, after, traces, agreement.traceId)
+  const trace = screen.getByTestId('trace-detail')
+  const tech = trace.querySelector('details')!
+  expect(tech.open).toBe(false)
+  expect(tech.textContent).toContain(agreement.selectedCandidateId)
+  expect(tech.textContent).toContain('support:population:')
+  const normal = trace.cloneNode(true) as HTMLElement
+  normal.querySelector('details')!.remove()
+  expect(normal.textContent).not.toContain('support:population:')
+  expect(normal.textContent).toContain(label)
 })
 
 it('統合年内表示は確定した登録を解決し、参照だけでは登録や名前を作らない', () => {

@@ -5,6 +5,8 @@ test.skip(!integrated, 'CHRONOFORK_E2E_INTEGRATED=1で実100年A0を計算する
 
 test('実A0の候補提示・成立時個別化・同年の婚姻表示・翌年の死別を辿れる', async ({ page }) => {
   test.setTimeout(5 * 60_000)
+  page.setDefaultTimeout(20_000)
+  await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto('/')
   await page.getByTestId('obs-start').click()
   await expect(page.getByTestId('obs-year-label')).toHaveText('1250年初', { timeout: 180_000 })

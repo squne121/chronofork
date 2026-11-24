@@ -70,14 +70,14 @@ function refLabel(index: WorldIndex, person: PersonName, r: TargetRef): string {
   return kind ? resolvedRefLabel(index, person, kind, r.id) ?? unresolvedLabel(UNRESOLVED_KIND[kind], r.id) : unresolvedLabel('other', r.id)
 }
 
-function RefView({ r, index, person, worldIndex, onSelect }: { r: TargetRef; index: WorldIndex; person: PersonName; worldIndex: WorldIndex; onSelect: (s: Selection) => void }) {
+function RefView({ r, index, person, worldIndex, birthYear, onSelect }: { r: TargetRef; index: WorldIndex; person: PersonName; worldIndex: WorldIndex; birthYear?: number | undefined; onSelect: (s: Selection) => void }) {
   if (r.kind === 'PERSON_PAIR') return <span>{refLabel(index, person, r)}</span>
   const kind = REF_KIND[r.kind]
   const label = kind && resolvedRefLabel(index, person, kind, r.id)
   if (!kind || label === undefined) return <span className="missing">{refLabel(index, person, r)}</span>
   // 年内に登録された人物を含め、参照が確認できても年初snapshotにいなければ年初の人物詳細は開かない。
   if (kind === 'person' && !worldIndex.person(r.id)) {
-    return <span>{label}（この年の年初の人物記録はありません）</span>
+    return <span>{label}（{birthYear === undefined ? 'この年の年初の人物記録はありません' : `${birthYear}年生まれ・この年の年初にはまだ世界にいません`}）</span>
   }
   return (
     <button type="button" className="link" onClick={() => onSelect({ kind, id: r.id })}>
@@ -282,7 +282,9 @@ function EventDetail({
           <ul className="inline-list">
             {event.involvedRefs.map((r) => (
               <li key={refKey(r)}>
-                <RefView r={r} index={refIndex} person={names.person} worldIndex={index} onSelect={onSelect} />
+                <RefView r={r} index={refIndex} person={names.person} worldIndex={index}
+                  birthYear={event.eventType === 'PERSON_BIRTH' && r.kind === 'PERSON' && refIndex.person(r.id)?.birthYear === event.year ? event.year : undefined}
+                  onSelect={onSelect} />
               </li>
             ))}
           </ul>
@@ -390,18 +392,7 @@ function TraceDetail({
         <dt>理由コード</dt>
         <dd>{trace.reasonCodes.join('、') || 'なし'}</dd>
         <dt>候補と入力</dt>
-        <dd>
-          <ul>
-            {trace.candidates.map((c) => (
-              <li key={c.candidateId}>
-                {c.candidateId}
-                {c.candidateId === trace.selectedCandidateId ? '（採用）' : ''}
-                {' '}
-                {c.eligible ? '適格' : '不適格'}: {Object.entries(c.inputs).map(([k, v]) => `${k}=${formatJson(v as never)}`).join('、')}
-              </li>
-            ))}
-          </ul>
-        </dd>
+        <dd>{trace.candidates.length}件（元の候補ID・入力は開発・検証情報）</dd>
         <dt>対応する Event（eventIds）</dt>
         <dd>
           <ul className="inline-list">
@@ -429,6 +420,14 @@ function TraceDetail({
           <dt>順参照の一致</dt>
           <dd data-testid="trace-forwardlink">{ok ? '一致（Event.sourceTraceIds がこの Trace を含む）' : '不一致または未確認'}</dd>
         </dl>
+        <ul>
+          {trace.candidates.map((c) => (
+            <li key={c.candidateId}>
+              {c.candidateId}{c.candidateId === trace.selectedCandidateId ? '（採用）' : ''}{' '}
+              {c.eligible ? '適格' : '不適格'}: {Object.entries(c.inputs).map(([k, v]) => `${k}=${formatJson(v)}`).join('、')}
+            </li>
+          ))}
+        </ul>
       </details>
     </>
   )

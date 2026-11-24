@@ -43,10 +43,12 @@ export function eventPersonRecords(events: readonly EventLogEntry[]): Displayabl
     for (const { path, before, after } of e.stateChanges) {
       if (before !== null || !isObj(after) || typeof after.personId !== 'string' ||
         path !== `$.persons[${after.personId}]` || typeof after.name !== 'string' ||
-        (after.sex !== 'MALE' && after.sex !== 'FEMALE') || typeof after.birthYear !== 'number') continue
+        (after.sex !== 'MALE' && after.sex !== 'FEMALE')) continue
       const role = after.interactionRole
-      if (!types.includes('PERSON_BIRTH') && role !== 'SUPPORTING') continue
-      people.push({ personId: after.personId, name: after.name, sex: after.sex, birthYear: after.birthYear,
+      // 出生Eventの年は出生年の根拠になるが、成立時登録の年から出生年は補わない。
+      const birthYear = typeof after.birthYear === 'number' ? after.birthYear : e.eventType === 'PERSON_BIRTH' ? e.year : undefined
+      if (birthYear === undefined || (!types.includes('PERSON_BIRTH') && role !== 'SUPPORTING')) continue
+      people.push({ personId: after.personId, name: after.name, sex: after.sex, birthYear,
         ...(role === 'KEY' || role === 'SUPPORTING' ? { interactionRole: role } : {}) })
     }
   }
