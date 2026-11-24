@@ -25,7 +25,9 @@ function refsOfCommand(c: DomainCommand, world: WorldState): TargetRef[] {
   }
   switch (c.type) {
     case 'MARRIAGE_REGISTER':
-      return [{ kind: 'PERSON_PAIR', ids: [c.marriage.personIds[0], c.marriage.personIds[1]] }]
+      return [{ kind: 'PERSON_PAIR', ids: [c.marriage.personIds[0], c.marriage.personIds[1]] },
+        ...(c.supportingPerson ? [{ kind: 'PERSON' as const, id: c.supportingPerson.person.personId },
+          { kind: 'GROUP' as const, id: c.supportingPerson.person.originGroupId }] : [])]
     case 'MARRIAGE_DISSOLVE':
       return [{ kind: 'PERSON', id: c.deceasedPersonId }]
     case 'LEGAL_DYNASTY_SET':
@@ -86,6 +88,11 @@ export function buildEvents(outcome: RuleOutcome, result: ApplyResult, worldAfte
     if (!first) continue
     const refs = new Map<string, TargetRef>()
     for (const r of cmds.flatMap((c) => refsOfCommand(c, worldAfter))) refs.set(refKey(r), r)
+    const supportingMarriageRegistrations = cmds.flatMap(c =>
+      c.type === 'MARRIAGE_REGISTER' && c.supportingPerson !== undefined ? [{
+        commandId: c.commandId, requestId: c.source.requestId, sourceTraceId: c.source.sourceTraceId,
+        marriageId: c.marriage.marriageId, registration: c.supportingPerson,
+      }] : [])
     events.push({
       eventId: eventIdOf(first.source.year, first.source.phase, outcome.ruleId, first.commandId),
       semanticEventKey: semanticEventKeyOf(
@@ -101,6 +108,7 @@ export function buildEvents(outcome: RuleOutcome, result: ApplyResult, worldAfte
       involvedRefs: [...refs.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, r]) => r),
       stateChanges: cmds.flatMap((c) => changesById.get(c.commandId) ?? []),
       sourceTraceIds: [...new Set(cmds.map((c) => c.source.sourceTraceId))].sort(),
+      ...(supportingMarriageRegistrations.length ? { supportingMarriageRegistrations } : {}),
     })
   }
   return cloneData(events)

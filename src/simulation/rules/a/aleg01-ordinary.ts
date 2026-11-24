@@ -3,7 +3,7 @@
 // 成年・近親の法規範は未承認なので、新しい年齢閾値や親族禁止範囲をここで追加しない。
 import type {
   ControllerRef, CrossDomainResponse, DecisionTraceDraft, Id, MarriageRegisterCommand,
-  RuleOutcome, WorldState, Year,
+  RuleOutcome, SupportingPersonRegistration, WorldState, Year,
 } from '../../contracts/index.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
@@ -36,6 +36,8 @@ export type OrdinaryMarriageInput = Readonly<{
   book: LegalEvidenceBook
   laws: readonly OrdinaryLaw[]
   reviews: readonly OrdinaryMarriageReview[]
+  /** 当年の次世代審査が独立に検証した候補。通常経路では指定しない。 */
+  supportingRegistrations?: readonly SupportingPersonRegistration[]
 }>
 export type OrdinaryMarriageFactory =
   | Readonly<{ok:true;evaluator:RuleEvaluator}>
@@ -65,6 +67,7 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
   const lawBook=structuredClone(input.book) as LegalEvidenceBook
   const laws=structuredClone(input.laws) as OrdinaryLaw[]
   const reviews=structuredClone(input.reviews) as OrdinaryMarriageReview[]
+  const supportingRegistrations=structuredClone(input.supportingRegistrations??[]) as SupportingPersonRegistration[]
   const evaluator:RuleEvaluator=(world:WorldState,ctx:EvaluationContext):RuleOutcome=>{
     if(ctx.ruleId!=='A-LEG-01'||ctx.phase!==3||ctx.year!==world.year) {
       throw new EvaluationFailure('通常婚姻の年次境界が不一致',[{code:'RULE_MISMATCH',message:'A-LEG-01はPhase3'}])
@@ -81,7 +84,11 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
     const reserved=new Set<Id>()
     for(const q of queries){
       const pair=q.payload.personIds
-      const [a,b]=pair.map(id=>world.persons.find(p=>p.personId===id))
+      const registrations=supportingRegistrations.filter(r=>pair.includes(r.person.personId))
+      const supporting=registrations.length===1&&!world.persons.some(p=>p.personId===registrations[0]!.person.personId)
+        ?registrations[0]:undefined
+      const [a,b]=pair.map(id=>world.persons.find(p=>p.personId===id)??
+        (supporting?.person.personId===id?supporting.person:undefined))
       const hA=a&&world.houses.find(h=>h.houseId===a.houseId)
       const hB=b&&world.houses.find(h=>h.houseId===b.houseId)
       const countryId=hA?.countryId&&hA.countryId===hB?.countryId?hA.countryId:null
@@ -153,6 +160,7 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
           sourceIntentId:q.source.sourceTraceId},
         marriage:{marriageId,personIds:pair,
           registeredYear:ctx.year,status:'ACTIVE',...(contract?{contract}:{} )},
+        ...(supporting?{supportingPerson:supporting}:{}),
       })
     }
     return {ruleId:ctx.ruleId,phase:ctx.phase,commands,requests:[],responses,deferred:[],traceDrafts}

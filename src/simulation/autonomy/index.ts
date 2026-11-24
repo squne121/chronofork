@@ -22,6 +22,7 @@ import { EXPERIMENTAL_TUNING } from '../tuning.ts'
 import type { TuningConfig } from '../tuning.ts'
 import { checkAutonomyCalibration, EXPERIMENTAL_AUTONOMY } from './config.ts'
 import type { AutonomyCalibration } from './config.ts'
+import { createSupportingCandidateResolver } from './supporting-candidate-view.ts'
 
 export { EXPERIMENTAL_AUTONOMY, validateAutonomyCalibration } from './config.ts'
 export type { AutonomyCalibration, AutonomyCalibrationIssue } from './config.ts'
@@ -39,6 +40,8 @@ export type AutonomousEvaluatorInput = Readonly<{
   promotion?: B001PromotionInput
   /** DEC-061: 重要人物昇格とは別の、人口内訳から少数SUPPORTING人物を記録する試験入力。 */
   supportingMarriage?: B001SupportingInput
+  /** 未登録候補ペアの明示的信頼。省略時はNO_BASEで保留。 */
+  supportingCandidateTrustBase?: readonly PairTrustBase[]
   /** DEC-058: B-003で確定した当年の配偶者死亡を婚姻の法的終了へ接続。既定false。 */
   spouseDeathDissolution?: boolean
   /** 明示されたCALIBRATION_ONLY権限に限る後年相続審査・新委任（既定は非適用）。 */
@@ -80,15 +83,21 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     (JSON.stringify(input.nextgenMarriage.book)!==JSON.stringify(input.reviewedLegal.book) ||
      JSON.stringify(input.nextgenMarriage.laws)!==JSON.stringify(input.reviewedLegal.ordinaryLaws)))
     return {ok:false,issues:['NEXTGEN_LEGAL_EVIDENCE_MISMATCH']}
-  const marriage=input.nextgenMarriage?createALeg01NextgenEvaluator(input.nextgenMarriage)
+  const supporting=input.supportingMarriage?createB001SupportingMarriageEvaluator(input.supportingMarriage):undefined
+  if(supporting&&!supporting.ok)return {ok:false,issues:[...supporting.issues]}
+  const resolver=input.supportingMarriage?createSupportingCandidateResolver(input.supportingMarriage):undefined
+  const candidateTrust=input.supportingCandidateTrustBase??[]
+  const candidateIds=Array.isArray(candidateTrust)?candidateTrust.flatMap(p=>
+    Array.isArray(p?.personIds)?p.personIds.filter((id:unknown):id is string=>typeof id==='string'):[]):[]
+  const candidateTrustCheck=createPairTrustView({base:candidateTrust,ledger:[],knownPersonIds:new Set(candidateIds)})
+  if(!candidateTrustCheck.ok)return {ok:false,issues:candidateTrustCheck.issues.map(x=>x.code+':'+x.path)}
+  const marriage=input.nextgenMarriage?createALeg01NextgenEvaluator({...input.nextgenMarriage,supportingCandidateResolver:resolver})
     :input.ordinaryMarriage?createALeg01OrdinaryEvaluator(input.ordinaryMarriage)
     : createALeg01CalibrationEvaluator(input.marriageEvidence??[])
   if(!marriage.ok)return {ok:false,issues:marriage.issues.map(x=>typeof x==='string'?x:x.code+':'+x.path)}
   const marriageEvaluator=input.spouseDeathDissolution?withSpouseDeathDissolution(marriage.evaluator):marriage.evaluator
   const promotion=input.promotion?createB001PromotionEvaluator(input.promotion):undefined
   if(promotion&&!promotion.ok)return {ok:false,issues:[...promotion.issues]}
-  const supporting=input.supportingMarriage?createB001SupportingMarriageEvaluator(input.supportingMarriage):undefined
-  if(supporting&&!supporting.ok)return {ok:false,issues:[...supporting.issues]}
   // 両方のB-001評価器が選択された場合も、各CommandのTraceは同一Outcome内で一意にする。
   let b001: RuleEvaluator | undefined
   if (promotion?.ok && supporting?.ok) {
@@ -115,10 +124,11 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     'B-002':createB002WorldStateEvaluator(autonomy),
     'A-DYN-02':createADyn02EvidenceEvaluator(),
     ...(b001?{'B-001':b001}:{}),
-    'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,input.ledger),
+    'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,input.ledger,
+      resolver?{resolve:resolver,trustBase:candidateTrust}:undefined),
     'B-005':input.nextgenMarriage
       ?createB005NextgenEvaluator(input.nextgenMarriage.calibration,
-        input.nextgenMarriage.supportingKinshipClearances)
+        input.nextgenMarriage.supportingKinshipClearances,resolver)
       :createB005CalibrationEvaluator(),
     'A-LEG-01':marriageEvaluator,
     ...(reviewed?.ok?reviewed.evaluators:{}),

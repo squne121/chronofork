@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createExperimentalWorld, createExperimentalOrdinaryLegalTrial, NALVEN_DYNASTY_ID } from '../../../src/scenario/experimental/index.ts'
 import type { Person, WorldState } from '../../../src/simulation/contracts/index.ts'
 import { reviewDomesticMarriageEligibility } from '../../../src/simulation/legal/nextgen-marriage.ts'
+import { reviewSupportingKinshipClearance, validateSupportingKinshipClearances } from '../../../src/simulation/legal/supporting-kinship-clearance.ts'
 import {
   chooseNextgenContract, negotiatedMarriageContract, EXPERIMENTAL_NEXTGEN_CONTRACT,
 } from '../../../src/simulation/legal/nextgen-contract.ts'
@@ -79,6 +80,38 @@ describe('DEC-058 / 国内次世代の婚姻適格性・双方向契約選択',(
       ...EXPERIMENTAL_NEXTGEN_CONTRACT,consentThreshold:900,
     })
     expect(no).toMatchObject({status:'DEFER',reasonCode:'NO_BILATERAL_CONSENT'})
+  })
+  it('未登録補助候補を登録後と同じ法的審査に通し、証拠なしでは禁親確認を保留する',()=>{
+    const candidate:Person={...world.persons.find(p=>p.personId===P5)!,
+      personId:'support-test',interactionRole:'SUPPORTING'}
+    const pair:[string,string]=[P2,candidate.personId]
+    const registered:WorldState={...world,persons:[...world.persons,candidate]}
+    expect(reviewDomesticMarriageEligibility(world,pair,[candidate]))
+      .toEqual(reviewDomesticMarriageEligibility(registered,pair))
+    expect(chooseNextgenContract(world,pair,40,undefined,[candidate]))
+      .toEqual(chooseNextgenContract(registered,pair,40))
+    expect(reviewSupportingKinshipClearance(world,pair,'country-eldia',1250,[],[candidate]))
+      .toMatchObject({status:'DEFER',reasonCode:'SUPPORTING_KINSHIP_CLEARANCE_MISSING'})
+    const evidence=[{clearanceId:'clearance',personIds:pair,countryId:'country-eldia',
+      checkedYear:1250,validUntilYear:1251,sourceEvidenceId:'source',provenance:'CALIBRATION_ONLY' as const}]
+    expect(reviewSupportingKinshipClearance(world,pair,'country-eldia',1250,evidence,[candidate]))
+      .toEqual(reviewSupportingKinshipClearance(registered,pair,'country-eldia',1250,evidence))
+    const blank=[{...evidence[0]!,sourceEvidenceId:' \t '}]
+    expect(validateSupportingKinshipClearances(blank)).toEqual(['SUPPORTING_CLEARANCE_INVALID:0'])
+    expect(reviewSupportingKinshipClearance(world,pair,'country-eldia',1250,blank,[candidate]))
+      .toMatchObject({status:'DEFER',reasonCode:'SUPPORTING_KINSHIP_CLEARANCE_MISSING'})
+    expect(reviewSupportingKinshipClearance(world,pair,'country-eldia',1250,[]))
+      .toMatchObject({status:'DEFER',reasonCode:'PERSON_UNKNOWN'})
+    expect(world.persons.some(p=>p.personId===candidate.personId)).toBe(false)
+  })
+  it('候補ビューは登録人物の上書き、重複、ペア外を拒否する',()=>{
+    const candidate:Person={...world.persons.find(p=>p.personId===P5)!,personId:'support-test',interactionRole:'SUPPORTING'}
+    const pair:[string,string]=[P2,candidate.personId]
+    for(const candidates of [[candidate,candidate],[{...candidate,personId:P2}],[{...candidate,personId:'other'}]]){
+      expect(reviewDomesticMarriageEligibility(world,pair,candidates)).toMatchObject({status:'DEFER',reasonCode:'CANDIDATE_VIEW_INVALID'})
+      expect(chooseNextgenContract(world,pair,40,undefined,candidates)).toMatchObject({status:'DEFER',reasonCode:'CANDIDATE_VIEW_INVALID'})
+      expect(reviewSupportingKinshipClearance(world,pair,'country-eldia',1250,[],candidates)).toMatchObject({status:'DEFER',reasonCode:'CANDIDATE_VIEW_INVALID'})
+    }
   })
   it('P2/P5既存の2件の試験契約候補も、A-LEG01で勝手に優先されない',()=>{
     const trial=prepared()

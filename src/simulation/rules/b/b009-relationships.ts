@@ -20,6 +20,12 @@ export type B009Calibration=Readonly<{
   houseSupportWeight?:number
   /** 同家門の人物ペアに対する試験加点。既定0。 */
   sameHouseBonus?:number
+  /**
+   * 試験用: 明示基礎値のない新規ペアの初期値へ、人物ペアIDの決定的ハッシュ由来の 0〜spread の加算を行う。
+   * 同条件の人物(同家門・同集団・同年生まれ等)の全ペアが同点になり、B-005の「同率をID順で解消しない」
+   * 相互最優先が成立しなくなる状況を避けるための個体差。婚姻・出生の成否や相手を決めない。既定0(従来動作)。
+   */
+  initialTrustSpread?:number
 }>
 export const EXPERIMENTAL_B009_CALIBRATION:B009Calibration=Object.freeze({
   status:'CALIBRATION_ONLY',initialTrust:0,annualDelta:1,maxPairs:500,
@@ -41,9 +47,18 @@ export function validateB009Calibration(c:B009Calibration):B009ValidationResult{
   if(!Number.isSafeInteger(c.maxPairs)||c.maxPairs<1||c.maxPairs>10000)issues.push('PAIR_BUDGET_INVALID')
   if(!Number.isSafeInteger(c.houseSupportWeight??0)||(c.houseSupportWeight??0)<0||(c.houseSupportWeight??0)>10)issues.push('HOUSE_SUPPORT_WEIGHT_INVALID')
   if(!Number.isSafeInteger(c.sameHouseBonus??0)||Math.abs(c.sameHouseBonus??0)>20)issues.push('SAME_HOUSE_BONUS_INVALID')
+  if(!Number.isSafeInteger(c.initialTrustSpread??0)||(c.initialTrustSpread??0)<0||(c.initialTrustSpread??0)>40||
+     (Number.isSafeInteger(c.initialTrust)&&c.initialTrust+(c.initialTrustSpread??0)>PAIR_TRUST_DEFINITION.max))issues.push('INITIAL_TRUST_SPREAD_INVALID')
   return issues.length===0 ? {ok:true,config:Object.freeze({...c})} : {ok:false,issues}
 }
 const cmp=(a:string,b:string)=>a<b?-1:a>b?1:0
+/** FNV-1a 32bit。pairKey(ID昇順の符号化)だけから決まるため枝・走査順・年に依存しない。 */
+const pairSpread=(key:string,spread:number):number=>{
+  if(spread===0)return 0
+  let h=0x811c9dc5
+  for(let i=0;i<key.length;i++)h=Math.imul(h^key.charCodeAt(i),0x01000193)>>>0
+  return h%(spread+1)
+}
 
 export function createB009WorldStateEvaluator(
   initialBase:readonly PairTrustBase[], calibration:B009Calibration=EXPERIMENTAL_B009_CALIBRATION,
@@ -91,7 +106,7 @@ export function createB009WorldStateEvaluator(
           {code:'RELATION_ALREADY_UPDATED',message:key},
         ])
       }
-      const prev=old?.value??initial.get(key)??c.initialTrust
+      const prev=old?.value??initial.get(key)??c.initialTrust+pairSpread(key,c.initialTrustSpread??0)
       // 相互の出身集団が、相手のHouseを自家門に比べてどれだけ支持するか。
       // 集団支持はbpsで、合計を1000で割った試験ポイントを用いる（最大±20）。
       const groupA=world.groups.find(g=>g.groupId===a.originGroupId)

@@ -69,17 +69,16 @@ const fork=rootBranch.ok?forkHistory({
 }):null
 
 const quantify=(r:Readonly<Pick<typeof root,'snapshots'|'eventLog'|'decisionTraces'>>)=>{
-  const supporting=new Set(r.snapshots.at(-1)?.persons.filter(p=>p.interactionRole==='SUPPORTING')
-    .map(p=>p.personId)??[])
   const events=r.eventLog
-  const latePairs=r.decisionTraces.filter(t=>t.year>=1290&&t.ruleId==='B-004'&&
-    t.actorRef.kind==='PERSON_PAIR'&&t.actorRef.ids.some(id=>supporting.has(id))).length
+  const c004Offers=r.decisionTraces.filter(t=>t.ruleId==='B-001'&&t.status==='ACCEPT'&&
+    t.candidates[0]?.inputs['populationSource']==='C004_COHORT').length
   const marriages=events.filter(e=>e.eventType==='MARRIAGE_REGISTER').length
   const births=events.filter(e=>e.eventType==='PERSON_BIRTH').length
   const legal=events.filter(e=>e.eventType==='LEGAL_DYNASTY_SET').length
   return {
-    supportingRegistered:events.filter(e=>e.eventType==='PERSON_SUPPORTING_RECORD').length,
-    lateSupportingB004Pairs:latePairs,marriages,births,legalDynastySets:legal,
+    supportingRegistered:events.filter(e=>e.eventType==='MARRIAGE_REGISTER')
+      .flatMap(e=>e.supportingMarriageRegistrations??[]).length,
+    c004Offers,marriages,births,legalDynastySets:legal,
     successionCases:events.filter(e=>e.eventType==='LEGAL_CASE_SET').length,
     titleTransfers:events.filter(e=>e.eventType==='LEGAL_TITLE_TRANSFER').length,
     technicalGoal:evaluateGoal(r.snapshots.at(-1)!,{dynastyId:NALVEN_DYNASTY_ID}).status,
@@ -110,9 +109,12 @@ describe('Issue #83: C004由来補助婚姻供給と厳格Goalの100年A0/A1実�
     expect(root.technicalGoal).toEqual(
       evaluateGoal(root.snapshots.at(-1)!,{dynastyId:NALVEN_DYNASTY_ID}))
     const a0Metrics=quantify(root),a1Metrics=quantify(a1)
-    // 少なくとも試験A0で補助Personが実WorldStateに記録されることを実証する。
-    expect(a0Metrics.supportingRegistered).toBeGreaterThan(0)
-    expect(root.snapshots.at(-1)!.persons.some(p=>p.interactionRole==='SUPPORTING')).toBe(true)
+    // 信頼・個別禁親の台帳のない構成では、供給できても成立・個別化しない。
+    expect(a0Metrics.c004Offers).toBeGreaterThan(0)
+    for(const [history,metrics] of [[root,a0Metrics],[a1,a1Metrics]] as const){
+      expect(metrics.supportingRegistered).toBe(0)
+      expect(history.snapshots.at(-1)!.persons.some(p=>p.interactionRole==='SUPPORTING')).toBe(false)
+    }
     // 件数・結果は事前固定せず、診断としてCIに残す（実測・非権威）。
     console.info('DEC061_CALIBRATION_ONLY_100YEAR_METRICS',
       JSON.stringify({seed:SEED,A0:a0Metrics,A1:a1Metrics}))

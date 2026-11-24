@@ -6,16 +6,7 @@ import {createExperimentalWorld,createExperimentalOrdinaryLegalTrial,NALVEN_DYNA
 import type {WorldState} from '../../../src/simulation/contracts/index.ts'
 import {runTimeline} from '../../../src/simulation/engine/index.ts'
 import {evaluateGoal} from '../../../src/simulation/goal.ts'
-import {createCalibrationEvaluators} from '../../../src/simulation/rules/c/index.ts'
-import {EXPERIMENTAL_TUNING} from '../../../src/simulation/tuning.ts'
-import {
-  createB001SupportingMarriageEvaluator,createB002WorldStateEvaluator,
-  createB004WorldStateEvaluator,createB005NextgenEvaluator,
-} from '../../../src/simulation/rules/b/index.ts'
-import {createALeg01NextgenEvaluator,createADyn02EvidenceEvaluator}
-  from '../../../src/simulation/rules/a/index.ts'
-import {createPairTrustView} from '../../../src/simulation/intervention/index.ts'
-import {EXPERIMENTAL_AUTONOMY} from '../../../src/simulation/autonomy/index.ts'
+import {createAutonomousCalibrationEvaluators,EXPERIMENTAL_AUTONOMY} from '../../../src/simulation/autonomy/index.ts'
 import type {SupportingMarriageCohort} from '../../../src/simulation/population/supporting-marriage.ts'
 import {supportingCandidateId} from '../../../src/simulation/population/supporting-marriage.ts'
 import type {SupportingKinshipClearance} from '../../../src/simulation/rules/a/index.ts'
@@ -44,37 +35,21 @@ const clearance:SupportingKinshipClearance={
   sourceEvidenceId:'trial:R01:kinship-source-distinct-from-census',
   provenance:'CALIBRATION_ONLY',
 }
-const supplied=createB001SupportingMarriageEvaluator({
-  cohorts:[cohort],maxRecordsPerYear:1,maxAliveSupporting:1,
-  perCohortSamples:1,maximumPreviewAge:60,
-})
-if(!supplied.ok)throw new Error('R01_LONGRUN_SUPPLY_INVALID')
-const b001=supplied.evaluator
-// この「将来の匿名者との信頼ベース」はテスト専用に明示注入した関係校正値であり
-// 史実関係・人物の存在・婚姻成功を予めWorldStateへ登録するものではない。
-const trust=createPairTrustView({
-  base:[{personIds:pair,value:40}],ledger:[],
-  knownPersonIds:new Set([...initial.persons.map(p=>p.personId),supportingId]),
-})
-if(!trust.ok)throw new Error('R01_LONGRUN_TRUST_INVALID')
-const view=trust.view
+const supportingMarriage={cohorts:[cohort],maxRecordsPerYear:1,maxAliveSupporting:1,
+  perCohortSamples:1,maximumPreviewAge:60}
 const auto={...EXPERIMENTAL_AUTONOMY,birth:{
   ...EXPERIMENTAL_AUTONOMY.birth,
   minMotherAge:18,maxMotherAge:20,minFatherAge:18,chancePermille:1000,
 }}
 function evaluators(clearances:readonly SupportingKinshipClearance[]){
-  const legal=createALeg01NextgenEvaluator({book:trial.book,laws:trial.laws,
-    supportingKinshipClearances:clearances})
-  if(!legal.ok)throw new Error('R01_LONGRUN_LEGAL_INVALID:'+legal.issues.join(','))
-  return {
-    ...createCalibrationEvaluators(EXPERIMENTAL_TUNING),
-    'B-001':b001,
-    'B-002':createB002WorldStateEvaluator(auto),
-    'A-DYN-02':createADyn02EvidenceEvaluator(),
-    'B-004':createB004WorldStateEvaluator(view,auto),
-    'B-005':createB005NextgenEvaluator(undefined,clearances),
-    'A-LEG-01':legal.evaluator,
-  }
+  const result=createAutonomousCalibrationEvaluators({branchStartWorld:world,ledger:[],trustBase:[],
+    supportingMarriage,supportingCandidateTrustBase:[{personIds:pair,value:40}],
+    nextgenMarriage:{book:trial.book,laws:trial.laws,supportingKinshipClearances:clearances},
+    // この長期対照では従来どおり自然死を分離し、補助婚姻と出生だけを比較する。
+    autonomy:{...auto,death:{...auto.death,basePermille:0,maxPermille:0}},
+  })
+  if(!result.ok)throw new Error('R01_LONGRUN_CONFIG_INVALID:'+result.issues.join(','))
+  return result.evaluators
 }
 function history(clearances:readonly SupportingKinshipClearance[]){
   return runTimeline(world,{
@@ -94,18 +69,19 @@ describe('R01: 同じ1250〜1350年の実年次計算で補助婚姻と子の記
     expect(withProof.status).toBe('COMPLETED')
     expect(withProof.snapshots).toHaveLength(101)
     expect(withProof.snapshots.at(-1)?.year).toBe(1350)
-    const b001Event=events(withProof,'PERSON_SUPPORTING_RECORD')
     const marriages=events(withProof,'MARRIAGE_REGISTER')
     const births=events(withProof,'PERSON_BIRTH')
-    expect(b001Event).toHaveLength(1)
-    expect(b001Event[0]?.year).toBe(1268)
     const marriage=withProof.snapshots.at(-1)!.legal.marriages.find(
       m=>pairIs(m.personIds,pair))
     expect(marriage).toBeDefined()
     expect(marriage?.registeredYear).toBe(1268)
     const registered=marriages.find(e=>e.year===1268&&e.involvedRefs.some(ref=>
       ref.kind==='PERSON_PAIR'&&pairIs(ref.ids,pair)))
-    expect(registered).toBeDefined()
+    expect(marriages.flatMap(e=>e.supportingMarriageRegistrations??[])).toHaveLength(1)
+    expect(registered?.supportingMarriageRegistrations).toMatchObject([{marriageId:marriage?.marriageId,registration:{
+      person:{personId:supportingId},cohortId:cohort.cohortId,sourceEvidenceId:cohort.sourceEvidenceId,
+      survivorAttestationId:cohort.survivorAttestationId,
+    }}])
     const b005=withProof.decisionTraces.find(t=>t.year===1268&&t.ruleId==='B-005'&&
       t.actorRef.kind==='PERSON_PAIR'&&pairIs(t.actorRef.ids,pair))
     expect(b005?.status).toBe('ACCEPT')
@@ -129,7 +105,7 @@ describe('R01: 同じ1250〜1350年の実年次計算で補助婚姻と子の記
     expect(withProof.autonomousHistory.status).toBe('NOT_ESTABLISHED')
     expect(withProof.technicalGoal).toEqual(evaluateGoal(final,{dynastyId:NALVEN_DYNASTY_ID}))
     console.info('R01_SUPPORTING_LONGRUN_CALIBRATION_ONLY',JSON.stringify({
-      seed,years:withProof.transitions,supportRecordYear:b001Event[0]?.year,
+      seed,years:withProof.transitions,supportRecordYear:registered?.year,
       legalMarriageYear:marriage?.registeredYear,
       childBirthYears:children.map(p=>p.birthYear),contractDynasty:contractDynasty??null,
       actualGoal:withProof.technicalGoal?.status,
