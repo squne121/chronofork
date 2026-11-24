@@ -1,6 +1,6 @@
 // 型付き WorldState の整合性検証。入力を変更せず、診断だけを返す。
 // 検証中に相続・承認・税権移管・人口補正を自動実行しない（PENDING/UNDETERMINED は正当な状態として許容する）。
-import type { Id, PersonPairTrust, WorldState } from '../contracts/index.ts'
+import type { Id, Person, PersonPairTrust, WorldState } from '../contracts/index.ts'
 import { GOAL_YEAR, START_YEAR } from '../contracts/index.ts'
 import { PAIR_TRUST_DEFINITION } from '../intervention/stat-registry.ts'
 import type { Diagnostic, DiagnosticCode, DiagnosticSeverity } from './diagnostics.ts'
@@ -25,6 +25,8 @@ export function checkPairTrustRecords(
   add: (code: DiagnosticCode, path: string, message: string, target?: { kind: string; id: Id } | null) => void,
   /** 既知の人物IDなら true。true のとき ref は副作用なく true を返すため呼出を省く（ref の結果・診断は不変）。 */
   isKnownPerson?: (id: Id) => boolean,
+  /** 必要時評価モデルでのみ、実登録と寿命から関係アンカーの年も検査する。 */
+  demandPerson?: (id: Id) => Person | undefined,
 ): void {
   // 人物ペアの重複判定。JSON.stringify(personIds) の文字列化を毎件行わず、ID（検証済みの文字列）の入れ子集合で判定する。
   const seenPairs = new Map<Id, Set<Id>>()
@@ -43,13 +45,20 @@ export function checkPairTrustRecords(
     if (!Number.isSafeInteger(r.value) || r.value < PAIR_TRUST_DEFINITION.min || r.value > PAIR_TRUST_DEFINITION.max) {
       add('OUT_OF_RANGE', pairPath(i) + '.value', 'pair.trust基礎値が校正値域外です', pairOwner(r))
     }
+    const left = demandPerson?.(a), right = demandPerson?.(b)
+    if (left && right && (left.firstPairTrustYear === undefined || right.firstPairTrustYear === undefined ||
+      r.lastUpdatedYear < Math.max(left.firstPairTrustYear, right.firstPairTrustYear) ||
+      r.lastUpdatedYear >= Math.min(left.deathYear ?? Infinity, right.deathYear ?? Infinity) ||
+      (left.interactionRole === 'SUPPORTING' && right.interactionRole === 'SUPPORTING'))) {
+      add('OUT_OF_RANGE', `${pairPath(i)}.lastUpdatedYear`, 'B-009の共存・登録位相と整合しない関係値です', pairOwner(r))
+    }
     if (!Number.isSafeInteger(r.lastUpdatedYear) || r.lastUpdatedYear < START_YEAR || r.lastUpdatedYear > worldYear) {
       add('OUT_OF_RANGE', pairPath(i) + '.lastUpdatedYear', '信頼関係の更新年が世界の年次と整合しません', pairOwner(r))
     }
   }
 }
 
-export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
+export function checkWorldIntegrity(world: WorldState, yearStart = false): Diagnostic[] {
   const out: Diagnostic[] = []
   const add = (
     code: DiagnosticCode,
@@ -189,10 +198,28 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
 
   // --- B-009 人物ペア関係（WorldStateの年次基礎値。modifierは介入台帳のまま）---
   const personIds = ids.get('PERSON')
-  checkPairTrustRecords(world.pairTrust ?? [], world.year, ref, add, (id) => personIds?.has(id) === true)
+  const personById = new Map(world.persons.map((x) => [x.personId, x]))
+  if ((world.pairTrustDrift === undefined) !== (world.pairTrustModelKey === undefined)) {
+    add('OUT_OF_RANGE', '$.pairTrustModelKey', '関係モデルの照合キーと定数ドリフトは同時に指定してください')
+  }
+  const demand = world.pairTrustDrift !== undefined
+  if (demand ? world.pairTrustThroughYear !== world.year - 1 : world.pairTrustThroughYear !== undefined) {
+    add('OUT_OF_RANGE', '$.pairTrustThroughYear', '連続確定した評価の境界と年初の年が一致しません')
+  }
+  const pairTrustYear = yearStart && demand ? world.year - 1 : world.year
+  checkPairTrustRecords(world.pairTrust ?? [], pairTrustYear, ref, add, (id) => personIds?.has(id) === true,
+    demand ? id => personById.get(id) : undefined)
+  const supportingRegistration = new Map<Id, number>()
+  if (demand) for (const marriage of world.legal.marriages) {
+    if (marriage.supportingPopulationEvidenceIds === undefined) continue
+    for (const id of marriage.personIds) {
+      if (personById.get(id)?.interactionRole === 'SUPPORTING') {
+        supportingRegistration.set(id, Math.min(supportingRegistration.get(id) ?? Infinity, marriage.registeredYear))
+      }
+    }
+  }
 
   // --- 人物 ---
-  const personById = new Map(world.persons.map((x) => [x.personId, x]))
   world.persons.forEach((x, i) => {
     const p = `$.persons[${i}]`
     const o = { kind: 'PERSON', id: x.personId }
@@ -203,6 +230,13 @@ export function checkWorldIntegrity(world: WorldState): Diagnostic[] {
     if (x.bloodlineDynastyId !== undefined) ref('DYNASTY', x.bloodlineDynastyId, `${p}.bloodlineDynastyId`, o)
     if (x.legalDynasty.status === 'DETERMINED') ref('DYNASTY', x.legalDynasty.dynastyId, `${p}.legalDynasty.dynastyId`, o)
     intYear(x.birthYear, `${p}.birthYear`, o)
+    const first = x.firstPairTrustYear
+    const registration = supportingRegistration.get(x.personId)
+    if (demand ? first === undefined || !Number.isSafeInteger(first) || first < Math.max(START_YEAR, x.birthYear) ||
+      first > world.year + Number(x.interactionRole === 'SUPPORTING') ||
+      (x.interactionRole === 'SUPPORTING' && first !== (registration === undefined ? START_YEAR : registration + 1)) : first !== undefined) {
+      add('OUT_OF_RANGE', `${p}.firstPairTrustYear`, '関係モデルに対応する登録位相の起点が必要です', o)
+    }
     if (x.deathYear !== undefined) intYear(x.deathYear, `${p}.deathYear`, o)
     if (x.alive && x.deathYear !== undefined) add('ALIVE_STATE_CONTRADICTION', `${p}.deathYear`, '生存者に deathYear があります', o)
     if (!x.alive && x.deathYear === undefined) add('ALIVE_STATE_CONTRADICTION', `${p}.deathYear`, '死亡者に deathYear がありません', o)

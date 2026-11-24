@@ -254,9 +254,10 @@ function legalDynasty(d: Sink, v: unknown, p: string): LegalDynastyState {
 function person(d: Sink, v: unknown, p: string): Person {
   const o = obj(d, v, p, [
     'personId', 'name', 'sex', 'birthYear', 'alive', 'deathYear', 'originGroupId', 'houseId',
-    'fatherId', 'motherId', 'bloodlineDynastyId', 'legalDynasty', 'interactionRole',
+    'fatherId', 'motherId', 'bloodlineDynastyId', 'legalDynasty', 'interactionRole', 'firstPairTrustYear',
   ])
   const deathYear = optNum(d, o, 'deathYear', p)
+  const firstPairTrustYear = optNum(d, o, 'firstPairTrustYear', p)
   const fatherId = optStr(d, o, 'fatherId', p)
   const motherId = optStr(d, o, 'motherId', p)
   const bloodlineDynastyId = optStr(d, o, 'bloodlineDynastyId', p)
@@ -271,6 +272,7 @@ function person(d: Sink, v: unknown, p: string): Person {
     houseId: str(d, o, 'houseId', p),
     legalDynasty: legalDynasty(d, o['legalDynasty'], `${p}.legalDynasty`),
     ...(deathYear === undefined ? {} : { deathYear }),
+    ...(firstPairTrustYear === undefined ? {} : { firstPairTrustYear }),
     ...(fatherId === undefined ? {} : { fatherId }),
     ...(motherId === undefined ? {} : { motherId }),
     ...(bloodlineDynastyId === undefined ? {} : { bloodlineDynastyId }),
@@ -467,11 +469,16 @@ export function parsePairTrustRecords(list: unknown, d: Sink): PersonPairTrust[]
 export function parseWorldState(input: unknown, d: Sink): WorldState {
   const p = '$'
   const o = obj(d, input, p, [
-    'year', 'countries', 'regions', 'groups', 'houses', 'persons', 'pairTrust', 'titles', 'legal',
+    'year', 'countries', 'regions', 'groups', 'houses', 'persons', 'pairTrust', 'pairTrustDrift', 'pairTrustModelKey', 'pairTrustThroughYear', 'titles', 'legal',
     'resources', 'demographics', 'deferred',
   ])
   const lo = obj(d, o['legal'], '$.legal', ['dynasties', 'marriages', 'cases', 'controlMandates', 'taxMandates'])
   const dem = obj(d, o['demographics'], '$.demographics', ['cohortSlots','anonymousBirthHistory'])
+  const drift = optNum(d, o, 'pairTrustDrift', p)
+  const modelKey = optStr(d, o, 'pairTrustModelKey', p)
+  const throughYear = optNum(d, o, 'pairTrustThroughYear', p)
+  if (drift !== undefined && drift !== 0 && drift !== 1)
+    push(d, 'OUT_OF_RANGE', '$.pairTrustDrift', '定数ドリフトは0または1が必要です')
   return {
     year: num(d, o, 'year', p),
     countries: arr(d, o, 'countries', p, (v, q) => country(d, v, q)),
@@ -479,6 +486,9 @@ export function parseWorldState(input: unknown, d: Sink): WorldState {
     groups: arr(d, o, 'groups', p, (v, q) => group(d, v, q)),
     houses: arr(d, o, 'houses', p, (v, q) => house(d, v, q)),
     persons: arr(d, o, 'persons', p, (v, q) => person(d, v, q)),
+    ...(drift === 0 || drift === 1 ? {pairTrustDrift: drift} : {}),
+    ...(modelKey === undefined ? {} : {pairTrustModelKey: modelKey}),
+    ...(throughYear === undefined ? {} : {pairTrustThroughYear: throughYear}),
     ...(o['pairTrust'] === undefined ? {} : { pairTrust: arr(d, o, 'pairTrust', p, (v, q) => personPairTrust(d, v, q)) }),
     titles: arr(d, o, 'titles', p, (v, q) => title(d, v, q)),
     legal: {

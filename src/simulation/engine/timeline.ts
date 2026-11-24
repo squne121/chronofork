@@ -6,7 +6,7 @@ import type { GoalOptions } from '../goal.ts'
 import { evaluateGoal } from '../goal.ts'
 import { rngVersion } from '../random.ts'
 import { RULE_REGISTRY } from '../rule-registry.ts'
-import { validateWorldState } from '../validation/index.ts'
+import { validateYearStartWorldState } from '../validation/index.ts'
 import { cloneData } from './reducer/canonical.ts'
 import type { AutonomousHistory, RuleCoverage, RunHalt, RunOptions, TimelineResult } from './types.ts'
 import { deepFreeze, runYear } from './year.ts'
@@ -88,7 +88,7 @@ export function runTimeline(initial: WorldState, options: TimelineOptions): Time
     })
   }
 
-  const valid = validateWorldState(initial)
+  const valid = validateYearStartWorldState(initial)
   if (!valid.ok || initial.year < START_YEAR || initial.year > GOAL_YEAR) {
     return finish([], [], [], {
       code: valid.ok ? 'YEAR_OUT_OF_RANGE' : 'INVALID_INPUT_WORLD',

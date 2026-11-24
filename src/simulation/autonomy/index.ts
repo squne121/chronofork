@@ -52,6 +52,8 @@ export type AutonomousEvaluatorInput = Readonly<{
   tuning?: TuningConfig
   b004Calibration?: B004Calibration
   b009Calibration?: B009Calibration
+  /** DEC-179: 旧全ペア評価とは別の明示オプトイン。 */
+  demandDrivenPairTrust?: true
 }>
 export type AutonomousEvaluatorResult =
   | Readonly<{ ok: true; evaluators: EvaluatorMap }>
@@ -78,6 +80,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   const known=new Set(input.branchStartWorld.persons.map(p=>p.personId))
   const trust=createPairTrustView({base:input.trustBase,ledger:input.ledger,knownPersonIds:known})
   if(!trust.ok)return {ok:false,issues:trust.issues.map(x=>x.code+':'+x.path)}
+  const ledger = input.demandDrivenPairTrust ? structuredClone(input.ledger) : input.ledger
   if(input.ordinaryMarriage && input.marriageEvidence?.length) return {ok:false,issues:['CANNOT_MIX_SYNTHETIC_MARRIAGE_WITH_ORDINARY']}
   if(input.nextgenMarriage && (input.ordinaryMarriage || input.marriageEvidence?.length))
     return {ok:false,issues:['CANNOT_MIX_NEXTGEN_WITH_OTHER_MARRIAGE_MODES']}
@@ -131,11 +134,12 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   const evaluators:EvaluatorMap={
     ...createCalibrationEvaluators(input.tuning??EXPERIMENTAL_TUNING),
     'B-003':createB003WorldStateEvaluator(autonomy),
-    'B-009':createB009WorldStateEvaluator(input.trustBase,input.b009Calibration),
+    'B-009':createB009WorldStateEvaluator(input.trustBase,input.b009Calibration,
+      input.demandDrivenPairTrust ? {marriage: autonomy.marriage, ledger} : undefined),
     'B-002':createB002WorldStateEvaluator(autonomy),
     'A-DYN-02':createADyn02EvidenceEvaluator(),
     ...(b001?{'B-001':b001}:{}),
-    'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,input.ledger,
+    'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,ledger,
       resolver?{resolve:resolver,trustBase:candidateTrust}:undefined),
     'B-005':input.nextgenMarriage
       ?createB005NextgenEvaluator(input.nextgenMarriage.calibration,

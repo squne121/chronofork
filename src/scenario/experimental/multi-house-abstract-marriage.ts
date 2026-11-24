@@ -5,8 +5,9 @@ import type { AbstractMarriageSupplyConfig } from '../../simulation/autonomy/abs
 import type { EvaluatorMap } from '../../simulation/engine/index.ts'
 import { ABSTRACT_MARRIAGE_BACKGROUND_VERSION } from '../../simulation/population/abstract-marriage-background.ts'
 import { rngVersion } from '../../simulation/random.ts'
+import { B009_DEMAND_RULE_VERSION, b009DemandModelKey, createB009DemandObserver } from '../../simulation/rules/b/index.ts'
 import {
-  digestMultiHouseIdentity, multiHouseRunConfigIdentity, MULTI_HOUSE_RUN_CONDITIONS,
+  createMultiHouseWorld, digestMultiHouseIdentity, multiHouseRunConfigIdentity, MULTI_HOUSE_RUN_CONDITIONS,
   MULTI_HOUSE_AUTONOMY, MULTI_HOUSE_B009_CALIBRATION, MULTI_HOUSE_NEXTGEN_CONTRACT,
   MULTI_HOUSE_SUPPLY, MULTI_HOUSE_SUPPLY_GROUPS, MULTI_HOUSE_TRUST_BASE,
 } from './multi-house-playtest.ts'
@@ -40,13 +41,22 @@ export const MULTI_HOUSE_ABSTRACT_MARRIAGE = Object.freeze({
 const ABSTRACT_B009_CALIBRATION = Object.freeze({...MULTI_HOUSE_B009_CALIBRATION, maxPairs: 8192})
 
 export function createMultiHouseAbstractEvaluators(startWorld: WorldState, ledger: readonly StatModifier[] = []): EvaluatorMap {
+  return createAbstractEvaluators(startWorld, ledger)
+}
+
+function createAbstractEvaluators(startWorld: WorldState, ledger: readonly StatModifier[], drift?: 0 | 1): EvaluatorMap {
+  const calibration = drift === undefined ? ABSTRACT_B009_CALIBRATION : demandCalibration(drift)
+  const modelKey = drift === undefined ? undefined : b009DemandModelKey(MULTI_HOUSE_TRUST_BASE, calibration)
+  if (startWorld.pairTrustDrift !== drift || startWorld.pairTrustModelKey !== modelKey)
+    throw new RangeError('MULTI_HOUSE_PAIR_TRUST_MODEL_MISMATCH')
   const trial = createExperimentalOrdinaryLegalTrial()
   const result = createAutonomousCalibrationEvaluators({
     branchStartWorld: startWorld, ledger, trustBase: MULTI_HOUSE_TRUST_BASE,
     nextgenMarriage: {book: trial.book, laws: trial.laws, calibration: MULTI_HOUSE_NEXTGEN_CONTRACT},
     reviewedLegal: {book: trial.book, ordinaryLaws: trial.laws},
     spouseDeathDissolution: true, abstractMarriageSupply: MULTI_HOUSE_ABSTRACT_MARRIAGE,
-    autonomy: MULTI_HOUSE_AUTONOMY, b009Calibration: ABSTRACT_B009_CALIBRATION,
+    autonomy: MULTI_HOUSE_AUTONOMY, b009Calibration: calibration,
+    ...(drift === undefined ? {} : {demandDrivenPairTrust: true}),
   })
   if (!result.ok) throw new Error('INVALID_MULTI_HOUSE_ABSTRACT_EVALUATORS:' + result.issues.join('; '))
   return result.evaluators
@@ -62,4 +72,38 @@ export function multiHouseAbstractRunConfigIdentity(): Readonly<Record<string, u
 
 export function multiHouseAbstractRunConfigDigest(): string {
   return digestMultiHouseIdentity(multiHouseAbstractRunConfigIdentity())
+}
+
+// 工程2Eの独立構成。annualDelta=0は反証用であり、既定の校正を置き換えない。
+export const MULTI_HOUSE_DEMAND_CONFIG_ID = 'experimental-multi-house-v2-demand-relations'
+const demandConfigId = (drift: 0 | 1) => drift === 1 ? MULTI_HOUSE_DEMAND_CONFIG_ID : MULTI_HOUSE_DEMAND_CONFIG_ID + '-drift-0'
+function demandCalibration(drift: 0 | 1) {
+  if (drift !== 0 && drift !== 1) throw new RangeError('INVALID_PAIR_TRUST_DRIFT')
+  return {...ABSTRACT_B009_CALIBRATION, annualDelta: drift}
+}
+
+export function createMultiHouseDemandWorld(drift: 0 | 1 = 1): WorldState {
+  const world = createMultiHouseWorld()
+  const calibration = demandCalibration(drift)
+  return {...world, pairTrustDrift: calibration.annualDelta, pairTrustModelKey: b009DemandModelKey(MULTI_HOUSE_TRUST_BASE, calibration),
+    pairTrustThroughYear: world.year - 1, persons: world.persons.map(p => ({...p, firstPairTrustYear: world.year}))}
+}
+
+export function createMultiHouseDemandEvaluators(startWorld: WorldState, ledger: readonly StatModifier[] = [], drift: 0 | 1 = 1): EvaluatorMap {
+  return createAbstractEvaluators(startWorld, ledger, demandCalibration(drift).annualDelta)
+}
+
+/** 基礎値の観測。介入の確定や過去イベントの生成はしない。 */
+export function createMultiHouseDemandTrustObserver(drift: 0 | 1 = 1) {
+  return createB009DemandObserver(MULTI_HOUSE_TRUST_BASE, demandCalibration(drift))
+}
+
+export function multiHouseDemandRunConfigIdentity(drift: 0 | 1 = 1): Readonly<Record<string, unknown>> {
+  const shared = multiHouseAbstractRunConfigIdentity()
+  return {...shared, configId: demandConfigId(drift), world: createMultiHouseDemandWorld(drift), b009: demandCalibration(drift),
+    ruleVersions: {...shared.ruleVersions as Record<string, unknown>, b009: B009_DEMAND_RULE_VERSION}}
+}
+
+export function multiHouseDemandRunConfigDigest(drift: 0 | 1 = 1): string {
+  return digestMultiHouseIdentity(multiHouseDemandRunConfigIdentity(drift))
 }

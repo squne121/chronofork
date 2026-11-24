@@ -18,10 +18,11 @@ import { drawRandom } from '../random.ts'
 import { aLeg01SupportingEvidence } from '../rules/a/aleg01-nextgen.ts'
 import { unwrapSpouseDeathDissolution } from '../rules/a/aleg01-spouse-death.ts'
 import { b004WorldStateEvidence } from '../rules/b/b004-worldstate.ts'
+import { b009DemandEvaluatorKey } from '../rules/b/b009-relationships.ts'
 import { b005SupportingEvidence } from '../rules/b/b005-nextgen.ts'
 import { reviewDomesticMarriageEligibility } from '../legal/nextgen-marriage.ts'
 import { getRule } from '../rule-registry.ts'
-import { validateWorldState } from '../validation/index.ts'
+import { validateWorldState, validateYearStartWorldState } from '../validation/index.ts'
 import type { Diagnostic } from '../validation/index.ts'
 import { DEFAULT_EVALUATORS } from './evaluators.ts'
 import { EvaluationFailure } from './evaluators.ts'
@@ -357,9 +358,10 @@ function closeYear(world: WorldState): { world: WorldState } | { code: HaltCode;
   }
   const next:WorldState={
     ...world,year:t+1,
+    ...(world.pairTrustModelKey === undefined ? {} : {pairTrustThroughYear:t}),
     demographics:{cohortSlots:[],...(history!==undefined?{anonymousBirthHistory:history}:{})},
   }
-  const nv = validateWorldState(next)
+  const nv = validateYearStartWorldState(next)
   if (!nv.ok) {
     return { code: 'YEAR_VALIDATION_ERROR', message: `${t + 1} 年初の WorldState 検証に ERROR があります`, diagnostics: nv.diagnostics.filter((d) => d.severity === 'ERROR') }
   }
@@ -372,11 +374,18 @@ export function runYear(input: WorldState, options: RunOptions): YearRunResult {
   if (!Number.isInteger(t) || t < START_YEAR || t >= GOAL_YEAR) {
     return halted(input, t, executed, { code: 'YEAR_OUT_OF_RANGE', message: `年次処理の対象は ${START_YEAR}〜${GOAL_YEAR - 1} 年です（${GOAL_YEAR} 年は評価専用）: ${t}` })
   }
-  const valid = validateWorldState(input)
+  const valid = validateYearStartWorldState(input)
   if (!valid.ok) {
     return halted(input, t, executed, { code: 'INVALID_INPUT_WORLD', message: '入力 WorldState が不正です', diagnostics: valid.diagnostics.filter((d) => d.severity === 'ERROR') })
   }
   const evaluators: EvaluatorMap = { ...DEFAULT_EVALUATORS, ...options.evaluators }
+  // 記録されない関係も規定どおりの連続年が根拠。B-009未実行のまま年を進めない。
+  const pairTrustModelKey = valid.world?.pairTrustModelKey
+  if (pairTrustModelKey !== undefined && b009DemandEvaluatorKey(evaluators['B-009']) !== pairTrustModelKey) {
+    return halted(input, t, executed, {code:'EVALUATION_FAILED', phase:3, ruleId:'B-009',
+      message:'保存状態に対応する必要時B-009評価器がありません',
+      evaluatorDiagnostics:[{code:'B009_MODEL_MISMATCH',message:pairTrustModelKey}]})
+  }
 
   let world: WorldState = cloneData(valid.world as WorldState)
   let tx = createTransaction({ branchId: options.branchId ?? 'main', year: t })

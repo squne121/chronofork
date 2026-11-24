@@ -16,7 +16,8 @@ export const personPairTrustSet: Handler<PersonPairTrustSetCommand> = (d, c) => 
   if (typeof a !== 'string' || typeof b !== 'string' || a === '' || b === '' || a >= b) {
     return fail('INVALID_COMMAND', '人物IDは空でない相異なる2件を昇順で指定します')
   }
-  if (!w.persons.some(p=>p.personId===a) || !w.persons.some(p=>p.personId===b)) {
+  const left = w.persons.find(p => p.personId === a), right = w.persons.find(p => p.personId === b)
+  if (!left || !right) {
     return fail('NOT_FOUND', '関係値の対象人物がWorldStateに存在しません', [a,b])
   }
   if (!Number.isSafeInteger(relation.value) ||
@@ -25,6 +26,12 @@ export const personPairTrustSet: Handler<PersonPairTrustSetCommand> = (d, c) => 
   }
   if (relation.lastUpdatedYear !== w.year) {
     return fail('YEAR_MISMATCH', '人物関係のlastUpdatedYearは当年と一致する必要があります')
+  }
+  if (w.pairTrustDrift !== undefined && (!left.alive || !right.alive ||
+    left.firstPairTrustYear === undefined || right.firstPairTrustYear === undefined ||
+    Math.max(left.firstPairTrustYear, right.firstPairTrustYear) > w.year ||
+    (left.interactionRole === 'SUPPORTING' && right.interactionRole === 'SUPPORTING'))) {
+    return fail('INVALID_COMMAND', 'B-009位相で評価対象となる実登録ペアではありません', [a,b])
   }
   const current = w.pairTrust ?? []
   // 高速経路: この呼出し内で厳密昇順と確認済みの配列なら、全走査せず二分探索で同じ位置を求める。

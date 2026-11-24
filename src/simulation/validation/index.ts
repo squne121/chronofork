@@ -20,10 +20,19 @@ export { validateTuningConfig } from './tuning-config.ts'
  * 相続・承認・税権移管・人口補正は実行しない。
  */
 export function validateWorldState(input: unknown): ValidationResult {
+  return validate(input, false)
+}
+
+/** 年初入力・保存再開・観測では、進行中の位相が持てる当年の関係値を受け取らない。 */
+export function validateYearStartWorldState(input: unknown): ValidationResult {
+  return validate(input, true)
+}
+
+function validate(input: unknown, yearStart: boolean): ValidationResult {
   const diagnostics: Diagnostic[] = []
   const parsed: WorldState = parseWorldState(input, diagnostics)
   // 構造が壊れている入力は整合検証に進まない（不確かな値に基づく誤診断を避ける）。
-  if (!hasErrors(diagnostics)) diagnostics.push(...checkWorldIntegrity(parsed))
+  if (!hasErrors(diagnostics)) diagnostics.push(...checkWorldIntegrity(parsed, yearStart))
   const ok = !hasErrors(diagnostics)
   return { ok, world: ok ? parsed : null, diagnostics }
 }

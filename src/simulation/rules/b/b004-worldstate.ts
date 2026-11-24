@@ -17,6 +17,24 @@ const worldStateEvaluators = new WeakMap<RuleEvaluator, Readonly<{resolve:Suppor
 export const b004WorldStateEvidence = (evaluator: RuleEvaluator | undefined) =>
   evaluator && worldStateEvaluators.get(evaluator)
 
+/** B-009とB-004の登録済み候補探索を共有する。信頼、介入、法的審査では絞らない。 */
+export function registeredMarriageCandidates(world: WorldState, minAdultAge: number) {
+  const married=new Set<Id>(world.legal.marriages.filter(m=>m.status==='ACTIVE').flatMap(m=>[...m.personIds]))
+  const adults=world.persons.filter(p=>p.alive&&!married.has(p.personId)&&world.year-p.birthYear>=minAdultAge)
+    .sort((a,b)=>cmp(a.personId,b.personId))
+  const men=adults.filter(p=>p.sex==='MALE'),women=adults.filter(p=>p.sex==='FEMALE')
+  const keyWomen=women.filter(p=>p.interactionRole!=='SUPPORTING')
+  const n=men.length*women.length-
+    men.filter(p=>p.interactionRole==='SUPPORTING').length*(women.length-keyWomen.length)
+  return {married, adults, count:n, pairs: () => {
+    const pairs: [Id,Id][]=[]
+    for(const a of men)for(const b of a.interactionRole==='SUPPORTING'?keyWomen:women){
+      pairs.push(cmp(a.personId,b.personId)<0?[a.personId,b.personId]:[b.personId,a.personId])
+    }
+    return pairs
+  }}
+}
+
 /** 人物の存在・年齢・婚姻状態から毎年候補を導出。超過は黙って捨てず停止する。 */
 export function createB004WorldStateEvaluator(
   view:PairTrustView, input:AutonomyCalibration, calibration?:B004Calibration,
@@ -30,13 +48,8 @@ export function createB004WorldStateEvaluator(
     if(ctx.ruleId!=='B-004'||ctx.phase!==3||ctx.year!==world.year){
       throw new EvaluationFailure('B-004は当年フェーズ3でのみ評価可能',[{code:'RULE_MISMATCH',message:String(ctx.ruleId)}])
     }
-    const married=new Set<Id>(world.legal.marriages.filter(m=>m.status==='ACTIVE').flatMap(m=>[...m.personIds]))
-    const adults=world.persons.filter(p=>p.alive&&!married.has(p.personId)&&ctx.year-p.birthYear>=match.minAdultAge)
-      .sort((a,b)=>cmp(a.personId,b.personId))
-    const men=adults.filter(p=>p.sex==='MALE'),women=adults.filter(p=>p.sex==='FEMALE')
-    const n=men.length*women.length-
-      men.filter(p=>p.interactionRole==='SUPPORTING').length*
-      women.filter(p=>p.interactionRole==='SUPPORTING').length
+    const candidates=registeredMarriageCandidates(world, match.minAdultAge)
+    const {married,adults,count:n}=candidates
     if(!Number.isSafeInteger(n)||n>match.maxCandidatePairs){
       throw new EvaluationFailure('WorldState由来の縁談候補が校正予算を超過しました',[
         {code:'PAIR_BUDGET_EXCEEDED',message:n+' > '+match.maxCandidatePairs},
@@ -51,18 +64,25 @@ export function createB004WorldStateEvaluator(
     if(n+eligible.length>match.maxCandidatePairs)throw new EvaluationFailure('縁談候補が校正予算を超過しました',[
       {code:'PAIR_BUDGET_EXCEEDED',message:String(n+eligible.length)},
     ])
-    const pairs: [Id,Id][]=[]
-    for(const a of men)for(const b of women){
-      if(a.interactionRole==='SUPPORTING'&&b.interactionRole==='SUPPORTING')continue
-      pairs.push(cmp(a.personId,b.personId)<0?[a.personId,b.personId]:[b.personId,a.personId])
-    }
+    const pairs=candidates.pairs()
     // B-009実行後の年次WorldStateに信頼が存在すれば、動的基礎値＋当年介入を一度だけ解決する。
     // B-009を注入しない従来の試験では、元の静的PairTrustViewをそのまま利用する。
     let activeView=view
-    if(world.pairTrust!==undefined){
+    if(world.pairTrust!==undefined || world.pairTrustDrift!==undefined){
+      let base=world.pairTrust??[]
+      if(world.pairTrustDrift!==undefined){
+        const current=new Map(base.filter(r=>r.lastUpdatedYear===ctx.year).map(r=>[pairKey(r.personIds),r]))
+        base=pairs.map(ids=>{
+          const record=current.get(pairKey(ids))
+          if(!record)throw new EvaluationFailure('登録済み候補の当年B-009基礎値がありません',[
+            {code:'REQUIRED_RELATION_MISSING',message:pairKey(ids)},
+          ])
+          return record
+        })
+      }
       const known=new Set(world.persons.map(p=>p.personId))
       const resolved=createPairTrustView({
-        base:world.pairTrust.map(r=>({personIds:r.personIds,value:r.value})),
+        base:base.map(r=>({personIds:r.personIds,value:r.value})),
         ledger,
         knownPersonIds:known,
       })

@@ -52,7 +52,7 @@ export type PairTrustKnownChange = Readonly<{
 
 /**
  * `before` が検証済み（ERROR なし）で、`after` が pairTrust のみ異なるとき、`after` に ERROR が無いことを確認する。
- * - pairTrust 以外の検証結果は pairTrust に依存しない（pairTrust 検査は人物ID・世界年だけを参照する）。
+ * - pairTrust 以外の検証結果は pairTrust に依存しない（pairTrust 検査は人物・世界年だけを参照する）。
  * - `before` に存在した記録（参照同一）は人物・年が不変なので検証済み。新規/変更された記録だけを、
  *   全体検証と同一の構造検査・整合検査コードで確認する。
  * - 人物ペアの重複は、全記録のキー数と件数の一致で全件確認する。
@@ -71,9 +71,11 @@ export function confirmPairTrustOnlyChangeValid(before: WorldState, after: World
   const records = parsePairTrustRecords(changed, sink)
   if (sink.length > 0) return false
   const personIds = new Set<Id>(after.persons.map((p) => p.personId))
+  const demandPersons = after.pairTrustDrift === undefined ? undefined : new Map(after.persons.map(p => [p.personId, p]))
   let clean = true
   const flag = () => { clean = false }
-  checkPairTrustRecords(records, after.year, (_kind, id) => personIds.has(id) || (flag(), false), flag, (id) => personIds.has(id))
+  checkPairTrustRecords(records, after.year, (_kind, id) => personIds.has(id) || (flag(), false), flag, (id) => personIds.has(id),
+    demandPersons && (id => demandPersons.get(id)))
   if (!clean) return false
   // 人物ペアキー（personIds の JSON）が厳密昇順ならキーは全て相異なり、同一ペア・同一参照の重複は存在しない。
   if (useKnown && known.afterKeysStrictlyAscending) return true

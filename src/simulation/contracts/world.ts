@@ -60,6 +60,8 @@ export type Person = Readonly<{
   interactionRole?: 'KEY' | 'SUPPORTING'
   sex: 'MALE' | 'FEMALE'
   birthYear: Year
+  /** 初めてB-009の位相に登録済みとなる年。必要時評価モデルだけが保持する。 */
+  firstPairTrustYear?: Year
   alive: boolean
   deathYear?: Year
   originGroupId: Id // 人口の内訳（人口へ再加算しない）
@@ -228,6 +230,12 @@ export type WorldState = Readonly<{
   persons: readonly Person[]
   /** B-009年次確定の関係値。省略時は旧WorldStateと互換（旧試験では未計算）。 */
   pairTrust?: readonly PersonPairTrust[]
+  /** DEC-179定数ドリフトモデル。省略は旧方式。保存再開時の係数混同を拒否する。 */
+  pairTrustDrift?: 0 | 1
+  /** 必要時評価の規則版・校正・明示初期値の照合キー。 */
+  pairTrustModelKey?: string
+  /** 年次runnerが確定した連続評価の最終年度。年初ではyear - 1。 */
+  pairTrustThroughYear?: Year
   titles: readonly Title[]
   legal: LegalState
   resources: readonly ResourceAccount[]

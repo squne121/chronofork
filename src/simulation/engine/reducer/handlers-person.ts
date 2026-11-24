@@ -1,6 +1,6 @@
 // B の出生（Person 登録）と共通死亡 reducer。人口の増減は C① の枠確定と POPULATION_* のみが行い、
 // ここでは個別 Person の登録・死亡確定と枠の請求済み数の更新だけを行う（人口へ再加算しない: 契約 §4）。
-import type { PersonBirthCommand, PersonDeathCommand, PersonPromotionCommand, SupportingPersonRegistration, WorldState } from '../../contracts/index.ts'
+import type { Person, PersonBirthCommand, PersonDeathCommand, PersonPromotionCommand, SupportingPersonRegistration, WorldState } from '../../contracts/index.ts'
 import type { Draft, Handler } from './draft.ts'
 import { fail, findPerson } from './draft.ts'
 import type { Rejection } from './types.ts'
@@ -26,6 +26,10 @@ function claimSlot(d: Draft, groupId: string, kind: 'birth' | 'death'): Rejectio
   return null
 }
 
+// 登録Commandの入力ではなく、確定した登録の位相から起点を付ける。
+const recordPerson = (w: WorldState, p: Person, firstPairTrustYear: number): Person =>
+  w.pairTrustDrift === undefined ? p : {...p, firstPairTrustYear}
+
 export const personBirth: Handler<PersonBirthCommand> = (d, c) => {
   const w = d.world
   const p = c.person
@@ -45,7 +49,7 @@ export const personBirth: Handler<PersonBirthCommand> = (d, c) => {
   if (!w.groups.some((g) => g.groupId === c.cohortGroupId)) return fail('NOT_FOUND', `集団 ${c.cohortGroupId} が存在しません`, [c.cohortGroupId])
   const slot = claimSlot(d, c.cohortGroupId, 'birth')
   if (slot) return slot
-  d.world = { ...d.world, persons: [...d.world.persons, p] }
+  d.world = { ...d.world, persons: [...d.world.persons, recordPerson(w, p, w.year)] }
   return null
 }
 
@@ -75,7 +79,7 @@ export const personPromote: Handler<PersonPromotionCommand> = (d, c) => {
   const alive=w.persons.filter(x=>x.alive&&x.originGroupId===g.groupId).length
   if(c.cohortSize>g.population||alive>=g.population)
     return fail('COHORT_CAPACITY_CONFLICT','集団の人口には未記名者の空きがありません')
-  d.world={...w,persons:[...w.persons,p]}
+  d.world={...w,persons:[...w.persons,recordPerson(w, p, w.year)]}
   return null
 }
 
@@ -131,7 +135,7 @@ export const personSupportingRecord: Handler<SupportingPersonRegistration> = (d,
   if (c.cohortSize > group.population || living >= group.population) {
     return fail('COHORT_CAPACITY_CONFLICT', '人口集団の未記名者の空きがありません')
   }
-  d.world = { ...w, persons: [...w.persons, p] } // 人口の一次値は変更しない
+  d.world = { ...w, persons: [...w.persons, recordPerson(w, p, w.year + 1)] } // 人口の一次値は変更しない
   return null
 }
 
@@ -146,6 +150,7 @@ export const personDeath: Handler<PersonDeathCommand> = (d, c) => {
     const r = claimSlot(d, person.originGroupId, 'death')
     if (r) return r
   } else {
+    if (w.pairTrustDrift !== undefined) return fail('INVALID_COMMAND', '定数ドリフト実験構成では戦死の評価位相を未定義とする')
     // 戦死は損耗の確定（台帳 CASUALTY → 人口通知）に含まれる記名者に限る。人口は POPULATION_CASUALTY が一度だけ減らす。
     if (c.casualtyId === undefined) return fail('CASUALTY_NOT_BACKED', '戦死には casualtyId が必要です')
     const rec = d.casualties.get(c.casualtyId)
