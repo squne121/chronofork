@@ -8,8 +8,8 @@ import type { CasualtyRecord, Rejection, RejectionCode } from './types.ts'
  */
 export type ApplyScope = {
   /**
-   * 人物ペアキー（pairTrustKey）が厳密昇順（重複なし）であることを、この呼出し内で全件確認した、
-   * またはその配列へキー位置に 1 件だけ挿入・置換して作った pairTrust 配列。
+   * 人物ペアキー（pairTrustKey）が厳密昇順（重複なし）で、かつ全要素のキャッシュ済みキーが現在の personIds と
+   * 一致することを、この呼出し内で全件確認した、またはその配列へキー位置に 1 件だけ挿入・置換して作った pairTrust 配列。
    */
   sortedPairTrust: WeakSet<readonly PersonPairTrust[]>
 }

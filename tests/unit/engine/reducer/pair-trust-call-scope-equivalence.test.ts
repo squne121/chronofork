@@ -171,3 +171,21 @@ describe('applyOutcome: 呼出し内の pairTrust 高速経路は unit ごとの
     expect(r.world.pairTrust?.map(key)).toEqual([rel(a, b, 0), rel(a, d, 0), rel(c, d, 0)].map(key).sort())
   })
 })
+
+describe('呼出しをまたぐキー記憶の陳腐化（独立レビュー指摘）', () => {
+  it('前の呼出し後に入力要素の personIds が書き換えられても、高速経路を使わず従来と同じ結果（重複を作らない）', () => {
+    const [a, b, c, d, x, y] = ids as [string, string, string, string, string, string]
+    const e: { personIds: [string, string]; value: number; lastUpdatedYear: number } = { personIds: [a, b], value: 1, lastUpdatedYear: Y - 1 }
+    const w: WorldState = { ...base, pairTrust: [e] }
+    const set = (p: string, q: string, tag: string): DomainCommand =>
+      ({ type: 'PERSON_PAIR_TRUST_SET', commandId: 'cmd:' + tag, source: src(tag), relation: rel(p, q, 3) })
+    expect(applyOutcome(w, outcome('B-009', 3, [set(a, c, 't0')]), { transaction: tx0() }).status).toBe('APPLIED')
+    e.personIds = [c, d] // 呼出側による入力の書き換え（キー記憶は [a,b] のまま）
+    const units = [[set(x, y, 't1')], [set(c, d, 't2')]]
+    const fast = applyOutcome(w, outcome('B-009', 3, units.flat()), { transaction: tx0() })
+    const ref = oneByOne(w, units, tx0())
+    expect(fast.units.map(unitView)).toEqual(ref.units)
+    expect(JSON.stringify(fast.world)).toBe(JSON.stringify(ref.world))
+    expect(fast.world.pairTrust!.filter((r) => r.personIds[0] === c && r.personIds[1] === d)).toHaveLength(1)
+  })
+})
