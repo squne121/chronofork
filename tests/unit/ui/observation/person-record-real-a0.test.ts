@@ -64,6 +64,46 @@ describe('seed 20260101 の実A0：1281年生人物の記録', () => {
     expect(names.some(n => /当主|嫡男|娘|王\b/.test(n))).toBe(false)
     expect(new Set(names).size).toBe(names.length)
   })
+  it('実出生・初期人物・C004由来の成立時個別化を区別する', () => {
+    const initial = res.snapshots[0]!.persons[0]!
+    expect(byId.get(initial.personId)?.birthEvidence).toEqual({ kind: 'BEFORE_OBSERVATION' })
+    expect(father.birthEvidence).toMatchObject({ kind: 'BIRTH_EVENT', year: 1251 })
+
+    const marriage = res.eventLog.find(e => e.supportingMarriageRegistrations?.length)!
+    const { registration, marriageId } = marriage.supportingMarriageRegistrations![0]!
+    const person = byId.get(registration.person.personId)!
+    expect(person).toMatchObject({ birthYear: 1260, firstYear: 1311, birthEvidence: {
+      kind: 'MARRIAGE_REGISTRATION', birthBacking: 'C004_COHORT', year: 1310, eventId: marriage.eventId,
+    } })
+    expect(person.childIds).toEqual([])
+    expect(person.marriages).toContainEqual(expect.objectContaining({ marriageId, registeredYear: 1310, dissolvedYear: 1311, status: 'DISSOLVED' }))
+    expect(person.judgments).toContainEqual(expect.objectContaining({ ruleId: 'B-002', fromYear: 1311, status: 'DEFER',
+      reasonCodes: expect.arrayContaining(['PARENTS_UNAVAILABLE']) }))
+    const dissolution = res.eventLog.find(e => e.year === 1311 && e.eventType.includes('MARRIAGE_DISSOLVE') &&
+      e.stateChanges.some(c => c.path.includes(marriageId)))!
+    expect(res.decisionTraces.some(t => dissolution.sourceTraceIds.includes(t.traceId) &&
+      t.ruleId === 'A-LEG-01' && t.status === 'ACCEPT' && t.reasonCodes.includes('CONFIRMED_SPOUSE_DEATH'))).toBe(true)
+  })
+  it('実B-001のGROUP候補提示を探索者にだけ帰属し、元Traceを開ける形で重複を除く', () => {
+    const trace = res.decisionTraces.find(t => t.ruleId === 'B-001' && t.actorRef.kind === 'GROUP' &&
+      t.reasonCodes.includes('SUPPORTING_CANDIDATE_ONLY'))!
+    const c = trace.candidates.find(c => c.candidateId === trace.selectedCandidateId)!
+    const seeker = String(c.inputs.seekerPersonId)
+    const preview = String(c.inputs.supportingCandidateId)
+    expect(trace.year).toBe(1278)
+    expect(res.snapshots.find(w => w.year === trace.year)!.persons.some(p => p.personId === preview)).toBe(false)
+    const people = buildPersonRecords(res.snapshots, res.eventLog, [trace, trace], [])
+    expect(people.filter(p => p.judgments.length).map(p => p.personId)).toEqual([seeker])
+    expect(people.find(p => p.personId === seeker)?.judgments).toEqual([expect.objectContaining({
+      status: 'ACCEPT', count: 1, fromYear: 1278, firstTraceId: trace.traceId, lastTraceId: trace.traceId,
+      reasonCodes: expect.arrayContaining(['NOT_MARRIAGE_APPROVAL']),
+    })])
+    const wrongGroup = { ...trace, actorRef: { kind: 'GROUP' as const, id: '別の集団' } }
+    const noSupplyEvidence = { ...trace, reasonCodes: ['CALIBRATION_ONLY'] }
+    const wrongSelection = { ...trace, selectedCandidateId: '存在しない候補' }
+    expect(buildPersonRecords(res.snapshots, res.eventLog, [wrongGroup, noSupplyEvidence, wrongSelection], [])
+      .every(p => p.judgments.length === 0)).toBe(true)
+  })
   it('実A0に現れる理由コードは辞書化され、未分類は通常表示に出ない', () => {
     const codes = new Set(res.decisionTraces.filter(t => ['B-004', 'B-005', 'B-002', 'A-SUC-04', 'A-TIT-07'].includes(t.ruleId)).flatMap(t => t.reasonCodes))
     const unclassified = [...codes].filter(c => reasonView([c]).unclassified.length > 0)

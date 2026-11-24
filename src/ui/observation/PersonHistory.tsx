@@ -33,7 +33,7 @@ const yearsText = (s: Pick<JudgmentSpan, 'fromYear' | 'toYear'>) => (s.fromYear 
 /** 結果を判断の種類ごとに言い換えた見出し。理由コードに無いことは書かない。 */
 function outcomeLabel(s: JudgmentSpan): string {
   const codes = new Set(s.reasonCodes)
-  if (s.ruleId === 'B-001') return s.status === 'ACCEPT' ? '候補が供給された' : '候補の供給が見送られた'
+  if (s.ruleId === 'B-001') return s.status === 'ACCEPT' ? '人口集団から候補が提示された' : '候補の供給が見送られた'
   if (s.ruleId === 'B-004') {
     if (s.status === 'REJECT') return '婚姻候補として不採用'
     if (s.status === 'DEFER') return '婚姻候補として保留（候補にならなかった）'
@@ -96,7 +96,7 @@ export function PersonHistory(p: PersonHistoryProps) {
       ? `信頼値 ${s.trustMin === s.trustMax ? s.trustMin : s.trustMin + '〜' + s.trustMax}／採用の閾値 ${s.threshold}` : undefined
     const ages = s.motherAge !== undefined ? `母 ${s.motherAge}歳${s.fatherAge === undefined ? '' : '・父 ' + s.fatherAge + '歳'}（判断時点の記録）` : undefined
     return <li key={s.firstTraceId + s.status}>
-      <strong>{yearsText(s)}（判断{s.count}件）：{outcomeLabel(s)}</strong><span className="note"> {RULE_LABEL[s.ruleId]}・記録上の判断：{STATUS_LABEL[s.status]}</span>
+      <strong>{yearsText(s)}（判断{s.count}件）：{outcomeLabel(s)}</strong><span className="note"> {RULE_LABEL[s.ruleId]}・記録上の判断：{s.ruleId === 'B-001' && s.status === 'ACCEPT' ? '提示' : STATUS_LABEL[s.status]}</span>
       <div className="note">{[...v.labels, ...(v.unclassified.length > 0 ? ['未分類の理由が' + v.unclassified.length + '件（技術詳細）'] : []),
         ...(kin ? [kin] : []), ...(trust ? [trust] : []), ...(ages ? [ages] : [])].join('。') || '通常表示できる理由の記録なし'}</div>
       <div className="obs-related-links">{traceButton(s)}</div>
@@ -106,6 +106,7 @@ export function PersonHistory(p: PersonHistoryProps) {
   const marriedYearsText = (m: PersonRecord['marriages'][number]) => m.dissolvedYear === undefined
     ? `${m.registeredYear}年〜（観測終了時も継続）` : `${m.registeredYear}〜${m.dissolvedYear}年`
   const notAppeared = p.currentYear < rec.firstYear
+  const birth = rec.birthEvidence
 
   return <section className="obs-history" data-testid="person-history" aria-label="この世界線の観測期間内の履歴">
     <h4>この世界線の観測期間内の履歴（1250〜1350年・原史A0）</h4>
@@ -117,9 +118,14 @@ export function PersonHistory(p: PersonHistoryProps) {
     <dl className="obs-history-facts">
       <dt>生没</dt>
       <dd data-testid="history-life">{rec.birthYear}年生{rec.deathYear === undefined ? '・観測期間内は存命' : '・' + rec.deathYear + '年没'}
-        {rec.birthEventId !== undefined
-          ? <button type="button" disabled={p.disabled} onClick={() => p.onOpenEvent(rec.birthEventId!, rec.birthYear)}>出生の記録を開く</button>
-          : <span className="note">（観測開始前の出生で、出生Eventはありません）</span>}
+        {birth.kind === 'BIRTH_EVENT' &&
+          <button type="button" disabled={p.disabled} onClick={() => p.onOpenEvent(birth.eventId, birth.year)}>出生の記録を開く</button>}
+        {birth.kind === 'BEFORE_OBSERVATION' && <span className="note">（観測開始前の出生で、出生Eventはありません）</span>}
+        {birth.kind === 'UNCONFIRMED' && <span className="note">（出生・個別化の根拠を確認できません）</span>}
+        {birth.kind === 'MARRIAGE_REGISTRATION' && <>
+          <span className="note">（{birth.birthBacking === 'C004_COHORT' ? 'C004の匿名出生コホート' : '初期人口のコホート'}に由来し、{birth.year}年の婚姻成立時に個別化。個人の出生Eventはありません。年初記録の初出は{rec.firstYear}年初。）</span>
+          <button type="button" disabled={p.disabled} onClick={() => p.onOpenEvent(birth.eventId, birth.year)}>婚姻成立時の個別化の記録を開く</button>
+        </>}
         {rec.deathEventId !== undefined && rec.deathYear !== undefined &&
           <button type="button" disabled={p.disabled} data-testid="history-death-link" onClick={() => p.onOpenEvent(rec.deathEventId!, rec.deathYear!)}>死亡の記録を開く</button>}
       </dd>
@@ -148,26 +154,28 @@ export function PersonHistory(p: PersonHistoryProps) {
 
     <div data-testid="history-judgments">
       <h5>婚姻・出生が成立しなかった理由（記録された判断）</h5>
-      {candidateSpans.length === 0 && rec.marriages.length === 0 && <p className="missing" data-testid="history-no-candidate">
+      {candidateSpans.length === 0 && rec.marriages.length === 0 && !supplySpans.some(s => s.status === 'ACCEPT') && <p className="missing" data-testid="history-no-candidate">
         <strong>婚姻候補の記録なし。</strong>この人物を含む婚姻候補の判断記録が、観測期間にありません。
         候補が供給されなかったのか、候補の列挙前に対象外とされたのか、記録が不足しているのかは、この記録からは区別できません。
         原因は断定せず、世界構成（候補となる人物の有無）の確認が必要な箇所として残します。</p>}
       {supplySpans.length > 0 && <section data-testid="history-supply">
         <h6>婚姻相手の候補の供給（記録された判断）</h6>
         <ul>{supplySpans.map(spanLine)}</ul>
-        <p className="note">供給が見送られた理由は上記の記録のとおりです。人物間信頼の調整が候補の供給に影響するかは、この記録からは確認できません。候補の供給は世界構成・試遊データ側の確認事項です。</p>
+        <p className="note">候補の提示は婚姻の承認や個人の登録ではありません。人物間信頼の調整が候補の供給に影響するかは、この記録からは確認できません。候補の供給は世界構成・試遊データ側の確認事項です。</p>
       </section>}
       {[...spansByPartner.entries()].map(([partnerId, spans]) => {
         const kin = spans.find(s => s.knownKinship)?.knownKinship
         const b4 = spans.filter(s => s.ruleId === 'B-004')
         const firstB4 = b4[0]
+        const partner = recOf(partnerId)
         return <details key={partnerId} className="obs-history-partner" data-testid="history-partner">
           <summary>{partnerId ? name(partnerId) : '相手の記録なし'}
             {kin && <span className="note">（記録上の続柄：{KINSHIP_LABEL[kin] ?? '未分類'}）</span>}
             <span className="note">・{yearsText({ fromYear: Math.min(...spans.map(x => x.fromYear)), toYear: Math.max(...spans.map(x => x.toYear)) })}・{outcomeLabel((b4.length > 0 ? b4 : spans).at(-1)!)}</span></summary>
           {partnerId && <div>{link(partnerId, '相手')}</div>}
           <ul>{spans.map(spanLine)}</ul>
-          {p.onIntervene && firstB4 && partnerId && firstB4.fromYear < 1350 && !kin &&
+          {p.onIntervene && firstB4 && partner && !rec.supporting && !partner.supporting &&
+            Math.max(rec.firstYear, partner.firstYear) <= firstB4.fromYear && firstB4.fromYear < 1350 && !kin &&
             !spans.some(x => x.reasonCodes.includes('COMMON_ANCESTOR_WITHIN_TWO_GENERATIONS')) &&
             <button type="button" disabled={p.disabled} data-testid="history-intervene-pair"
               onClick={() => p.onIntervene!(firstB4.fromYear, rec.personId, partnerId)}>

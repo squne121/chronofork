@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import type { DecisionTrace, EventLogEntry, Id, TargetRef } from '../simulation/contracts/index.ts'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { DecisionTrace, EventLogEntry, Id, TargetRef, WorldState } from '../simulation/contracts/index.ts'
 import type { TimelineResult } from '../simulation/engine/index.ts'
 import type { EntityKind, Selection, WorldIndex } from './inspection-source.ts'
-import { describeEvent, unresolvedLabel } from './event-summary.ts'
+import { describeEvent, eventPersonRecords, marriageAgreementTrace, unresolvedLabel } from './event-summary.ts'
 import type { EventNames } from './event-summary.ts'
+import { baseDisplayName, personIdTag } from './observation/person-display.ts'
+import type { DisplayablePerson } from './observation/person-display.ts'
 import { formatDelta, formatJson, numericChanges } from './timeline-source.ts'
 import type { TraceIndex } from './timeline-source.ts'
 
@@ -26,42 +28,73 @@ function refKey(r: TargetRef): string {
   return r.kind === 'PERSON_PAIR' ? `PERSON_PAIR:${r.ids.join('+')}` : `${r.kind}:${r.id}`
 }
 
-const UNRESOLVED_KIND = { person: 'person', group: 'group', region: 'region', title: 'other' } as const
-/** 通常表示用の参照名。解決できなければ生IDを出さず、名前を創作しない未確認ラベルにする（元のIDはEvent/Trace/技術詳細に残る）。 */
-function refLabel(index: WorldIndex, kind: EntityKind, id: Id): string {
-  const link = index.link(kind, id)
-  return link.resolved ? link.label : unresolvedLabel(UNRESOLVED_KIND[kind], id)
+type PersonName = EventNames['person']
+// 既存の記名表記は維持し、IDがそのまま名前の人口由来人物にだけ共通表示名を適用する。
+const historyBaseName = (p: DisplayablePerson) => p.name === p.personId ? baseDisplayName(p) : p.name
+
+function historyPersonNames(events: readonly EventLogEntry[], index: WorldIndex, snapshots: readonly WorldState[] = []): PersonName {
+  const people = new Map(eventPersonRecords(events).map(p => [p.personId, p]))
+  const ids = new Set<Id>()
+  for (const w of snapshots) for (const p of w.persons) ids.add(p.personId)
+  for (const e of events) for (const r of e.involvedRefs) {
+    if (r.kind === 'PERSON') ids.add(r.id)
+    if (r.kind === 'PERSON_PAIR') for (const id of r.ids) ids.add(id)
+  }
+  for (const id of ids) {
+    const p = index.person(id)
+    if (p) people.set(id, p)
+  }
+  const base = new Map<Id, string>()
+  const counts = new Map<string, number>()
+  for (const p of people.values()) {
+    const label = historyBaseName(p)
+    base.set(p.personId, label)
+    counts.set(label, (counts.get(label) ?? 0) + 1)
+  }
+  return (id) => {
+    const p = index.person(id)
+    const label = base.get(id) ?? (p ? historyBaseName(p) : undefined)
+    return label !== undefined && (counts.get(label) ?? 0) > 1 ? `${label}・識別${personIdTag(id)}` : label
+  }
 }
 
-function RefView({ r, index, worldIndex, onSelect }: { r: TargetRef; index: WorldIndex; worldIndex: WorldIndex; onSelect: (s: Selection) => void }) {
-  if (r.kind === 'PERSON_PAIR') return <span>{r.ids.map((id) => refLabel(index, 'person', id)).join('・')}</span>
+const UNRESOLVED_KIND = { person: 'person', group: 'group', region: 'region', title: 'other' } as const
+function resolvedRefLabel(index: WorldIndex, person: PersonName, kind: EntityKind, id: Id): string | undefined {
+  if (kind === 'person') return person(id)
+  const link = index.link(kind, id)
+  return link.resolved ? link.label : undefined
+}
+function refLabel(index: WorldIndex, person: PersonName, r: TargetRef): string {
+  if (r.kind === 'PERSON_PAIR') return r.ids.map(id => person(id) ?? unresolvedLabel('person', id)).join('・')
   const kind = REF_KIND[r.kind]
-  if (!kind) return <span>{unresolvedLabel('other', r.id)}</span>
-  const link = index.link(kind, r.id)
-  if (!link.resolved) return <span className="missing">{refLabel(index, kind, r.id)}</span>
-  // 表示年の年初にはまだ存在しない人物（その年に生まれた子）: 実在は確認済みだが年初の詳細は無い。
+  return kind ? resolvedRefLabel(index, person, kind, r.id) ?? unresolvedLabel(UNRESOLVED_KIND[kind], r.id) : unresolvedLabel('other', r.id)
+}
+
+function RefView({ r, index, person, worldIndex, onSelect }: { r: TargetRef; index: WorldIndex; person: PersonName; worldIndex: WorldIndex; onSelect: (s: Selection) => void }) {
+  if (r.kind === 'PERSON_PAIR') return <span>{refLabel(index, person, r)}</span>
+  const kind = REF_KIND[r.kind]
+  const label = kind && resolvedRefLabel(index, person, kind, r.id)
+  if (!kind || label === undefined) return <span className="missing">{refLabel(index, person, r)}</span>
+  // 年内に登録された人物を含め、参照が確認できても年初snapshotにいなければ年初の人物詳細は開かない。
   if (kind === 'person' && !worldIndex.person(r.id)) {
-    const born = index.person(r.id)?.birthYear
-    return <span>{link.label}（{born !== undefined ? `${born}年生まれ・` : ''}この年の年初にはまだ世界にいません）</span>
+    return <span>{label}（この年の年初の人物記録はありません）</span>
   }
   return (
     <button type="button" className="link" onClick={() => onSelect({ kind, id: r.id })}>
-      {link.label}
+      {label}
     </button>
   )
 }
 
 export type TargetOption = Readonly<{ key: string; ref: TargetRef; label: string }>
 
-export function targetOptions(events: readonly EventLogEntry[], index: WorldIndex): readonly TargetOption[] {
+export function targetOptions(events: readonly EventLogEntry[], index: WorldIndex, person = historyPersonNames(events, index)): readonly TargetOption[] {
   const seen = new Map<string, TargetOption>()
   for (const e of events) {
     for (const r of e.involvedRefs) {
       const key = refKey(r)
       if (seen.has(key)) continue
-      const kind = r.kind === 'PERSON_PAIR' ? undefined : REF_KIND[r.kind]
-      const label = r.kind === 'PERSON_PAIR' ? r.ids.map((id) => refLabel(index, 'person', id)).join('・') : kind ? refLabel(index, kind, r.id) : unresolvedLabel('other', r.id)
-      seen.set(key, { key, ref: r, label })
+      seen.set(key, { key, ref: r, label: refLabel(index, person, r) })
     }
   }
   return [...seen.values()].sort((a, b) => a.key.localeCompare(b.key))
@@ -90,10 +123,11 @@ type Props = Readonly<{
 }>
 
 export function HistoryPanel(p: Props) {
-  const { history, index } = p
+  const { history, index, refIndex, allEvents, result } = p
   const event = p.eventId ? history.event(p.eventId) : undefined
   const trace = p.traceId ? history.trace(p.traceId) : undefined
-  const options = targetOptions(p.allEvents, p.refIndex)
+  const person = useMemo(() => historyPersonNames(allEvents, refIndex, result.snapshots), [allEvents, refIndex, result.snapshots])
+  const options = useMemo(() => targetOptions(allEvents, refIndex, person), [allEvents, refIndex, person])
   const [typeFilter, setTypeFilter] = useState('')
   const types = [...new Set(p.allEvents.map((e) => e.eventType))].sort()
   // 別枝へ切り替えた結果、種別が存在しなくなっても選択表示と一覧を一致させる。
@@ -102,7 +136,7 @@ export function HistoryPanel(p: Props) {
   const typeCounts = new Map<string, number>()
   for (const e of p.events) typeCounts.set(e.eventType, (typeCounts.get(e.eventType) ?? 0) + 1)
   const names: EventNames = {
-    person: (id) => p.refIndex.person(id)?.name,
+    person,
     group: (id) => p.refIndex.group(id)?.name,
     dynasty: (id) => p.refIndex.dynastyName(id),
   }
@@ -173,7 +207,7 @@ export function HistoryPanel(p: Props) {
                 {describeEvent(e, names)?.headline ?? <>
                 {e.year}年 {e.eventType}
                 {' / '}
-                {e.involvedRefs.map((r) => (r.kind === 'PERSON_PAIR' ? r.ids.map((id) => refLabel(p.refIndex, 'person', id)).join('・') : (REF_KIND[r.kind] ? refLabel(p.refIndex, REF_KIND[r.kind]!, r.id) : unresolvedLabel('other', r.id)))).join('、')}</>}
+                {e.involvedRefs.map((r) => refLabel(refIndex, person, r)).join('、')}</>}
                 {numericChanges(e)
                   .filter((c) => c.path.endsWith('population'))
                   .map((c) => ` / 人口 ${c.before.toLocaleString('ja-JP')}→${c.after.toLocaleString('ja-JP')}（${formatDelta(c.delta)}）`)
@@ -203,7 +237,7 @@ export function HistoryPanel(p: Props) {
         {p.traceId && !trace ? (
           <p className="missing">参照不明（Trace {p.traceId}）</p>
         ) : trace ? (
-          <TraceDetail trace={trace} history={history} index={index} refIndex={p.refIndex} eventId={p.eventId} onEvent={p.onEvent} onSelect={p.onSelect} />
+          <TraceDetail trace={trace} history={history} index={index} refIndex={refIndex} person={person} eventId={p.eventId} onEvent={p.onEvent} onSelect={p.onSelect} />
         ) : (
           <p className="note">Event の「判断根拠を開く」から DecisionTrace を表示します。</p>
         )}
@@ -226,6 +260,8 @@ function EventDetail({
 }>) {
   const ok = history.backlinkConsistent(event)
   const sum = describeEvent(event, names)
+  const isMarriage = event.eventType.split('+').some(type => type === 'MARRIAGE_REGISTER' || type === 'MARRIAGE_DISSOLVE')
+  const agreement = marriageAgreementTrace(event, history.trace)
   return (
     <>
       <h3>{sum ? sum.headline : `Event: ${event.eventType}`}</h3>
@@ -246,14 +282,14 @@ function EventDetail({
           <ul className="inline-list">
             {event.involvedRefs.map((r) => (
               <li key={refKey(r)}>
-                <RefView r={r} index={refIndex} worldIndex={index} onSelect={onSelect} />
+                <RefView r={r} index={refIndex} person={names.person} worldIndex={index} onSelect={onSelect} />
               </li>
             ))}
           </ul>
         </dd>
       </dl>
-      <details open={!sum} className="dev-details" data-testid="event-state-details">
-        <summary>{sum ? '開発・検証情報（確定した状態差分の全文）' : '状態差分'}</summary>
+      <details open={!sum && !isMarriage} className="dev-details" data-testid="event-state-details">
+        <summary>{sum || isMarriage ? '開発・検証情報（確定した状態差分の全文）' : '状態差分'}</summary>
           <table data-testid="state-changes">
             <thead>
               <tr>
@@ -289,7 +325,7 @@ function EventDetail({
                 <li key={id}>
                   {history.trace(id) ? (
                     <button type="button" className="link" aria-pressed={id === traceId} onClick={() => onTrace(id)}>
-                      判断根拠を開く（{id}）
+                      {isMarriage && history.trace(id)?.ruleId === 'A-LEG-01' ? '判断根拠を開く（法的判断 A-LEG-01）' : `判断根拠を開く（${id}）`}
                     </button>
                   ) : (
                     <span className="missing">参照不明（Trace {id}）</span>
@@ -299,6 +335,12 @@ function EventDetail({
             </ul>
           )}
         </dd>
+        {agreement && <>
+          <dt>契約に記録された当事者の合意</dt>
+          <dd><button type="button" className="link" aria-pressed={agreement.traceId === traceId} onClick={() => onTrace(agreement.traceId)}>
+            合意の根拠を開く（B-005）
+          </button></dd>
+        </>}
       </dl>
       <details className="dev-details">
         <summary>開発・検証情報（Event）</summary>
@@ -307,21 +349,25 @@ function EventDetail({
           <dd>{event.eventType}</dd>
           <dt>eventId</dt>
           <dd data-testid="event-id">{event.eventId}</dd>
+          <dt>sourceTraceIds（直接参照）</dt>
+          <dd>{event.sourceTraceIds.join('、') || 'なし'}</dd>
           <dt>逆参照の一致</dt>
           <dd data-testid="event-backlink">{ok ? '一致（Trace.eventIds がこの Event を含む）' : '不一致または未確認'}</dd>
         </dl>
+        {!!event.supportingMarriageRegistrations?.length && <pre>{JSON.stringify(event.supportingMarriageRegistrations, null, 2)}</pre>}
       </details>
     </>
   )
 }
 
 function TraceDetail({
-  trace, history, index, refIndex, eventId, onEvent, onSelect,
+  trace, history, index, refIndex, person, eventId, onEvent, onSelect,
 }: Readonly<{
   trace: DecisionTrace
   history: TraceIndex
   index: WorldIndex
   refIndex: WorldIndex
+  person: PersonName
   eventId: Id | undefined
   onEvent: (id: Id) => void
   onSelect: (s: Selection) => void
@@ -337,7 +383,7 @@ function TraceDetail({
         </dd>
         <dt>判断主体</dt>
         <dd>
-          <RefView r={trace.actorRef} index={refIndex} worldIndex={index} onSelect={onSelect} />
+          <RefView r={trace.actorRef} index={refIndex} person={person} worldIndex={index} onSelect={onSelect} />
         </dd>
         <dt>判定</dt>
         <dd>{trace.status}</dd>

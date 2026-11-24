@@ -1,0 +1,53 @@
+import { expect, test } from '@playwright/test'
+
+const integrated = process.env.CHRONOFORK_E2E_INTEGRATED === '1'
+test.skip(!integrated, 'CHRONOFORK_E2E_INTEGRATED=1で実100年A0を計算する')
+
+test('実A0の候補提示・成立時個別化・同年の婚姻表示・翌年の死別を辿れる', async ({ page }) => {
+  test.setTimeout(5 * 60_000)
+  await page.goto('/')
+  await page.getByTestId('obs-start').click()
+  await expect(page.getByTestId('obs-year-label')).toHaveText('1250年初', { timeout: 180_000 })
+
+  const picker = page.getByTestId('obs-person')
+  await picker.selectOption('person-exp-06')
+  const supply = page.getByTestId('history-supply')
+  const proposal = supply.getByRole('listitem').filter({ hasText: /1278年.*人口集団から候補が提示された/ }).first()
+  await expect(proposal).toContainText('婚姻の承認ではない')
+  await proposal.getByRole('button', { name: '1278年の判断記録を開く' }).click()
+  await expect(page.getByTestId('obs-trace-detail')).toContainText('規則 B-001（ACCEPT）', { timeout: 30_000 })
+  await expect(page.getByTestId('obs-trace-detail')).toContainText('実際に関連づくEvent：0件')
+
+  const label = '試験人物（補助・1260年生・女）'
+  const personOption = picker.getByRole('option', { name: /試験人物（補助・1260年生・女）/ })
+  const populationId = await personOption.getAttribute('value')
+  expect(populationId).toMatch(/^support:population:/)
+  await picker.selectOption(populationId!)
+  const life = page.getByTestId('history-life')
+  await expect(life).toContainText('1260年生')
+  await expect(life).toContainText('C004の匿名出生コホートに由来し、1310年の婚姻成立時に個別化')
+  await expect(life).toContainText('年初記録の初出は1311年初')
+  await expect(life.getByRole('button', { name: '出生の記録を開く' })).toHaveCount(0)
+  await life.getByRole('button', { name: '婚姻成立時の個別化の記録を開く' }).click()
+  await expect(page.getByTestId('obs-year-label')).toHaveText('1310年初', { timeout: 30_000 })
+  const event = page.getByTestId('obs-event-detail')
+  await expect(event.getByRole('heading').first()).toContainText(label)
+  await expect(event.getByRole('heading').first()).toContainText('婚姻が成立')
+  await expect(page.getByTestId('obs-event-list')).not.toContainText(populationId!)
+  await expect(event).not.toContainText(populationId!, { useInnerText: true })
+  const reasons = page.getByTestId('obs-event-reasons')
+  await expect(reasons).toContainText('判断規則 A-LEG-01')
+  await reasons.getByRole('button', { name: '根拠を詳しく見る' }).click()
+  await expect(page.getByTestId('obs-trace-detail')).toContainText('DOMESTIC_MARRIAGE_AUTHORITY_AND_CONSENT_VERIFIED')
+
+  await expect(page.getByTestId('history-marriages')).toContainText('1310〜1311年')
+  const deferred = page.getByTestId('history-judgments').getByRole('listitem').filter({ hasText: /1311年.*出生が成立しなかった（保留）/ })
+  await expect(deferred).toContainText('親が不在')
+  await deferred.getByRole('button', { name: '1311年の判断記録を開く' }).click()
+  await expect(page.getByTestId('obs-year-label')).toHaveText('1311年初', { timeout: 30_000 })
+  await expect(page.getByTestId('obs-trace-detail')).toContainText('PARENTS_UNAVAILABLE')
+  await page.getByTestId('obs-event-type').selectOption('MARRIAGE_DISSOLVE')
+  await page.getByTestId('obs-event-list').getByRole('button', { name: /婚姻が終了/ }).click()
+  await page.getByTestId('obs-event-reasons').getByRole('button', { name: '根拠を詳しく見る' }).click()
+  await expect(page.getByTestId('obs-trace-detail')).toContainText('CONFIRMED_SPOUSE_DEATH')
+})

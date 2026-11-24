@@ -1,7 +1,8 @@
 // 既知Eventを「誰に何が起きたか」へ読み替える表示専用の関数。
 // Event.stateChanges の確定値だけを使い、形が想定と違えば undefined を返して生データ表示へ戻す（事実を創作しない）。
-import type { EventLogEntry, Id } from '../simulation/contracts/index.ts'
+import type { DecisionTrace, EventLogEntry, Id } from '../simulation/contracts/index.ts'
 import { baseDisplayName, personIdTag } from './observation/person-display.ts'
+import type { DisplayablePerson } from './observation/person-display.ts'
 
 export type EventNames = Readonly<{
   person: (id: Id) => string | undefined
@@ -33,17 +34,58 @@ export const unresolvedLabel = (kind: UnresolvedKind, id: Id): string => {
 /** 合成名の末尾に付く内部キー「 (marriage:…)」を除いた表示名。元の名前は開発・検証情報に残る。 */
 export const shortPersonName = (name: string) => name.replace(/\s*\(.*$/, '')
 
+/** 人物の新規作成が確定したStateChangeだけを採用する。候補ID・対象参照は名前の根拠にしない。 */
+export function eventPersonRecords(events: readonly EventLogEntry[]): DisplayablePerson[] {
+  const people: DisplayablePerson[] = []
+  for (const e of events) {
+    const types = e.eventType.split('+')
+    if (!types.some(t => t === 'PERSON_BIRTH' || t === 'MARRIAGE_REGISTER' || t === 'PERSON_SUPPORTING_RECORD')) continue
+    for (const { path, before, after } of e.stateChanges) {
+      if (before !== null || !isObj(after) || typeof after.personId !== 'string' ||
+        path !== `$.persons[${after.personId}]` || typeof after.name !== 'string' ||
+        (after.sex !== 'MALE' && after.sex !== 'FEMALE') || typeof after.birthYear !== 'number') continue
+      const role = after.interactionRole
+      if (!types.includes('PERSON_BIRTH') && role !== 'SUPPORTING') continue
+      people.push({ personId: after.personId, name: after.name, sex: after.sex, birthYear: after.birthYear,
+        ...(role === 'KEY' || role === 'SUPPORTING' ? { interactionRole: role } : {}) })
+    }
+  }
+  return people
+}
+
+function registeredMarriage(e: EventLogEntry) {
+  const after = e.stateChanges.find((c) => c.path.startsWith('$.legal.marriages[') && c.before === null)?.after
+  if (!isObj(after) || after.status !== 'ACTIVE' || !Array.isArray(after.personIds) || after.personIds.length !== 2) return undefined
+  const [a, b] = after.personIds.map(str)
+  return a && b && a !== b ? { after, pair: [a, b] as const } : undefined
+}
+
+/** 契約の明示的な出典だけを辿る。合意TraceはEventの直接のsourceTraceIdsではない。 */
+export function marriageAgreementTrace(e: EventLogEntry, getTrace: (id: Id) => DecisionTrace | undefined): DecisionTrace | undefined {
+  if (!e.eventType.split('+').includes('MARRIAGE_REGISTER')) return undefined
+  const marriage = registeredMarriage(e)
+  const contract = marriage?.after.contract
+  const evidence = isObj(contract) ? str(contract.evidenceId) : undefined
+  const prefix = 'evidence:nextgen-agreement:'
+  if (!marriage || !evidence?.startsWith(prefix)) return undefined
+  const trace = getTrace(evidence.slice(prefix.length))
+  if (trace?.ruleId !== 'B-005' || trace.status !== 'ACCEPT' || trace.year !== e.year || trace.actorRef.kind !== 'PERSON_PAIR') return undefined
+  const [a, b] = trace.actorRef.ids
+  const [x, y] = marriage.pair
+  return (a === x && b === y) || (a === y && b === x) ? trace : undefined
+}
+
 export function describeEvent(e: EventLogEntry, names: EventNames): EventSummary | undefined {
   const person = (id: Id) => names.person(id) ?? unresolvedLabel('person', id)
   const group = (id: Id) => names.group(id) ?? unresolvedLabel('group', id)
   const dynasty = (id: Id) => names.dynasty(id) ?? unresolvedLabel('dynasty', id)
-  switch (e.eventType) {
+  const types = e.eventType.split('+')
+  switch (types.includes('MARRIAGE_REGISTER') ? 'MARRIAGE_REGISTER' : e.eventType) {
     case 'MARRIAGE_REGISTER': {
-      const after = e.stateChanges.find((c) => c.path.startsWith('$.legal.marriages[') && c.before === null)?.after
-      if (!isObj(after) || !Array.isArray(after.personIds) || after.personIds.length !== 2) return undefined
-      const [a, b] = after.personIds.map(str)
-      if (!a || !b) return undefined
-      const lines = [after.status === 'ACTIVE' ? '婚姻の状態: 有効' : `婚姻の状態: ${String(after.status)}`]
+      const marriage = registeredMarriage(e)
+      if (!marriage) return undefined
+      const { after, pair: [a, b] } = marriage
+      const lines = ['婚姻の状態: 有効']
       const clauses = isObj(after.contract) && Array.isArray(after.contract.clauses) ? after.contract.clauses : []
       for (const c of clauses) {
         if (isObj(c) && c.kind === 'CHILD_LEGAL_DYNASTY' && str(c.dynastyId)) {
@@ -51,6 +93,13 @@ export function describeEvent(e: EventLogEntry, names: EventNames): EventSummary
         }
       }
       return { headline: `${person(a)}と${person(b)}の婚姻が成立（${e.year}年）`, lines }
+    }
+    case 'MARRIAGE_DISSOLVE': {
+      const ended = e.stateChanges.some(c => c.path.startsWith('$.legal.marriages[') &&
+        c.path.endsWith('].status') && c.before === 'ACTIVE' && c.after === 'DISSOLVED')
+      if (!ended) return undefined
+      const ref = e.involvedRefs.find(r => r.kind === 'PERSON')
+      return { headline: `${ref?.kind === 'PERSON' ? `${person(ref.id)}の` : ''}婚姻が終了（${e.year}年）`, lines: ['婚姻の状態: 終了'] }
     }
     case 'PERSON_BIRTH': {
       const after = e.stateChanges.find((c) => c.path.startsWith('$.persons[') && c.before === null)?.after

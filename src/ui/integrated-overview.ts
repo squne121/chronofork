@@ -2,7 +2,7 @@
 import type { EventLogEntry, Id, Person, WorldState } from '../simulation/contracts/index.ts'
 import type { PlayView } from './branch-play-source.ts'
 import { descendantDepths } from './dynasty-continuity.ts'
-import { describeEvent, unresolvedLabel } from './event-summary.ts'
+import { describeEvent, eventPersonRecords, unresolvedLabel } from './event-summary.ts'
 import type { EventNames } from './event-summary.ts'
 import { personDisplayNames } from './observation/person-display.ts'
 
@@ -78,18 +78,11 @@ export function namesOf(w:WorldState|undefined):EventNames{
     country:id=>w?.countries.find(c=>c.countryId===id)?.name,
   }
 }
-/** 年初snapshotに加え、同じ年の確定PERSON_BIRTH Eventに記録された人物名だけを解決に使う（IDから名前は生成しない）。 */
+/** 年初snapshotと、同じ年の確定Eventで出生・登録した人物を同じ集合で識別する。 */
 export function namesOfYear(w:WorldState|undefined,events:readonly EventLogEntry[]):EventNames{
   const base=namesOf(w)
-  const born: {personId:Id;name:string;sex:'MALE'|'FEMALE';birthYear:number}[]=[]
-  for(const e of events){
-    if(e.eventType!=='PERSON_BIRTH')continue
-    const after=e.stateChanges.find(c=>c.path.startsWith('$.persons[')&&c.before===null)?.after as {personId?:unknown;name?:unknown;sex?:unknown;birthYear?:unknown}|null|undefined
-    if(after&&typeof after.personId==='string'&&typeof after.name==='string'&&
-      (after.sex==='MALE'||after.sex==='FEMALE'))
-      born.push({personId:after.personId,name:after.name,sex:after.sex,birthYear:typeof after.birthYear==='number'?after.birthYear:e.year})
-  }
-  return {...base,person:personDisplayNames([...(w?.persons??[]),...born])}
+  const people=eventPersonRecords(w ? events.filter(e=>e.year===w.year) : events)
+  return people.length===0 ? base : {...base,person:personDisplayNames([...people,...(w?.persons??[])])}
 }
 export function eventHeadline(e:EventLogEntry,names:EventNames,typeLabel:string):string{
   const d=describeEvent(e,names)

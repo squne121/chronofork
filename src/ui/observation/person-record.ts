@@ -45,6 +45,12 @@ export type TitleHoldRecord = Readonly<{
   life: 'ALIVE' | 'DEAD' | 'UNKNOWN'
 }>
 
+type BirthEvidence =
+  | Readonly<{ kind: 'BIRTH_EVENT'; eventId: Id; year: number }>
+  | Readonly<{ kind: 'MARRIAGE_REGISTRATION'; eventId: Id; year: number;
+    birthBacking: NonNullable<EventLogEntry['supportingMarriageRegistrations']>[number]['registration']['birthBacking'] }>
+  | Readonly<{ kind: 'BEFORE_OBSERVATION' | 'UNCONFIRMED' }>
+
 export type PersonRecord = Readonly<{
   personId: Id
   name: string
@@ -60,8 +66,8 @@ export type PersonRecord = Readonly<{
   motherId?: Id
   marriages: readonly MarriageRecord[]
   childIds: readonly Id[]
-  /** 観測期間内の出生・死亡Event。1250年初の初期人物は出生Eventを持たない。 */
-  birthEventId?: Id
+  /** 個人の出生と、人口内訳からの個別化は別の記録。 */
+  birthEvidence: BirthEvidence
   deathEventId?: Id
   titles: readonly TitleHoldRecord[]
   judgments: readonly JudgmentSpan[]
@@ -110,22 +116,39 @@ function otherOf(ids: readonly unknown[], self: Id): Id | undefined {
   return typeof o === 'string' ? o : undefined
 }
 
+/** B-001の個別の探索者を読む。人口集団自体の判断・人物昇格は婚姻候補の供給ではない。 */
+function supplySeeker(t: DecisionTrace): Id | undefined {
+  if (t.actorRef.kind === 'PERSON' && t.status === 'DEFER' && t.reasonCodes.includes('SUPPORTING_SUPPLY_DEFERRED')) {
+    const self = t.actorRef.id
+    return t.candidates.some(c => c.inputs.seekerPersonId === self) ? self : undefined
+  }
+  if (t.actorRef.kind !== 'GROUP' || t.status !== 'ACCEPT' ||
+    !t.reasonCodes.includes('SUPPORTING_CANDIDATE_ONLY') || !t.reasonCodes.includes('NOT_MARRIAGE_APPROVAL')) return undefined
+  const candidate = t.candidates.find(c => c.candidateId === t.selectedCandidateId && c.eligible)
+  const inputs = candidate?.inputs
+  if (!inputs || inputs.candidateGroupId !== t.actorRef.id || inputs.candidateYear !== t.year ||
+    typeof inputs.supportingCandidateId !== 'string' || inputs.supportingCandidateId === inputs.seekerPersonId) return undefined
+  return str(inputs.seekerPersonId)
+}
+
 function judgmentSpans(traces: readonly DecisionTrace[]): Map<Id, SpanAcc[]> {
   const map = new Map<Id, SpanAcc[]>()
+  const seenSupply = new Set<Id>()
   for (const t of traces) {
     if (t.ruleId !== 'B-004' && t.ruleId !== 'B-005' && t.ruleId !== 'B-002' && t.ruleId !== 'B-001') continue
+    if (t.status !== 'ACCEPT' && t.status !== 'DEFER' && t.status !== 'REJECT') continue
     if (t.ruleId === 'B-001') {
-      // 補助人物（婚姻候補）の供給判断のうち、特定の人物を探す側として記録されたものだけ。人口集団の登録判断は含めない。
-      if (t.actorRef.kind !== 'PERSON' || (t.status !== 'ACCEPT' && t.status !== 'DEFER' && t.status !== 'REJECT')) continue
-      const self = t.actorRef.id
-      const key = ['B-001', t.status, t.reasonCodes.join('|')].join('#')
+      const self = supplySeeker(t)
+      if (self === undefined || seenSupply.has(t.traceId)) continue
+      seenSupply.add(t.traceId)
+      // 提示は一候補ずつ元の記録を開けるようにし、保留だけを従来どおり期間で集約する。
+      const key = t.status === 'ACCEPT' ? `B-001#${t.traceId}` : ['B-001', t.status, t.reasonCodes.join('|')].join('#')
       addSpan(map, self, key, () => ({
         ruleId: 'B-001', status: t.status as JudgmentStatus, fromYear: t.year, toYear: t.year, count: 1,
         reasonCodes: [...t.reasonCodes], firstTraceId: t.traceId, lastTraceId: t.traceId,
       }), t.year, t.traceId)
       continue
     }
-    if (t.status !== 'ACCEPT' && t.status !== 'DEFER' && t.status !== 'REJECT') continue
     const cd = t.candidates[0]
     const inputs: Obj = cd && isObj(cd.inputs) ? cd.inputs : {}
     let ids: readonly Id[] = []
@@ -172,20 +195,38 @@ export function buildPersonRecords(
   const latest = new Map<Id, Person>()
   const marriages = new Map<Id, WorldState['legal']['marriages'][number]>()
   const firstYear = new Map<Id, number>()
-  for (const w of [...snapshots].sort((a, b) => a.year - b.year)) {
+  const ordered = [...snapshots].sort((a, b) => a.year - b.year)
+  const observationStart = ordered[0]?.year
+  for (const w of ordered) {
     for (const p of w.persons) {
       latest.set(p.personId, p)
       if (!firstYear.has(p.personId)) firstYear.set(p.personId, w.year)
     }
     for (const m of w.legal.marriages) marriages.set(m.marriageId, m)
   }
-  const birthEvent = new Map<Id, Id>()
+  const birthEvent = new Map<Id, BirthEvidence>()
+  const registrations = new Map<Id, BirthEvidence>()
   const deathEvent = new Map<Id, Id>()
   for (const e of eventLog) {
     const types = e.eventType.split('+')
+    const registeredHere = new Set<Id>()
+    if (types.includes('MARRIAGE_REGISTER')) {
+      for (const { registration } of e.supportingMarriageRegistrations ?? []) {
+        const id = registration.person.personId
+        registeredHere.add(id)
+        if (!registrations.has(id)) registrations.set(id, {
+          kind: 'MARRIAGE_REGISTRATION', eventId: e.eventId, year: e.year, birthBacking: registration.birthBacking,
+        })
+      }
+    }
     if (types.includes('PERSON_BIRTH')) {
-      const after = e.stateChanges.find(c => c.path.startsWith('$.persons[') && c.before === null)?.after
-      if (isObj(after) && typeof after.personId === 'string' && !birthEvent.has(after.personId)) birthEvent.set(after.personId, e.eventId)
+      for (const c of e.stateChanges) {
+        if (c.before !== null || !isObj(c.after) || c.after.birthYear !== e.year) continue
+        const id = str(c.after.personId)
+        if (id !== undefined && c.path === `$.persons[${id}]` && !registeredHere.has(id) && !birthEvent.has(id)) {
+          birthEvent.set(id, { kind: 'BIRTH_EVENT', eventId: e.eventId, year: e.year })
+        }
+      }
     }
     if (types.includes('PERSON_DEATH')) {
       for (const r of e.involvedRefs) if (r.kind === 'PERSON' && !deathEvent.has(r.id)) deathEvent.set(r.id, e.eventId)
@@ -228,7 +269,10 @@ export function buildPersonRecords(
     ...(p.motherId === undefined ? {} : { motherId: p.motherId }),
     marriages: marriagesOf.get(p.personId) ?? [],
     childIds: children.get(p.personId) ?? [],
-    ...(birthEvent.has(p.personId) ? { birthEventId: birthEvent.get(p.personId)! } : {}),
+    birthEvidence: birthEvent.get(p.personId) ?? registrations.get(p.personId) ?? {
+      kind: observationStart !== undefined && firstYear.get(p.personId) === observationStart && p.birthYear < observationStart
+        ? 'BEFORE_OBSERVATION' : 'UNCONFIRMED',
+    },
     ...(deathEvent.has(p.personId) ? { deathEventId: deathEvent.get(p.personId)! } : {}),
     titles: (titlesOf.get(p.personId) ?? []).sort((a, b) => a.fromYear - b.fromYear || a.titleId.localeCompare(b.titleId)),
     judgments: (spans.get(p.personId) ?? []).map(a => a.span).sort((a, b) => a.fromYear - b.fromYear || a.ruleId.localeCompare(b.ruleId)),
