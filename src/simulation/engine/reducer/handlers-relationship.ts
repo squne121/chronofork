@@ -54,7 +54,9 @@ export const personPairTrustSet: Handler<PersonPairTrustSetCommand> = (d, c) => 
   // next が厳密昇順で relation と同じキーを含まない（filter で除去済み）なら、結果も厳密昇順。
   // pairTrustKey は要素ごとの呼出しをまたぐキャッシュのため、呼出し後に要素の personIds が書き換えられていると
   // 古いキーでの昇順にすぎない。全要素でキャッシュと現在の personIds が一致する場合だけ確認済みとする。
-  if (inserted.sorted && d.scope && inserted.list.every(x=>pairTrustKey(x)===JSON.stringify(x.personIds))) {
+  // 比較側は新たに作った plain な 2 要素配列で求め、personIds 自身の toJSON 等に左右されない
+  // （従来の find/filter が使う personIds[0]/[1] と同じ値でキーを確かめる）。
+  if (inserted.sorted && d.scope && inserted.list.every(x=>pairTrustKey(x)===JSON.stringify([x.personIds[0],x.personIds[1]]))) {
     d.scope.sortedPairTrust.add(inserted.list)
   }
   d.world = {...w,pairTrust:inserted.list}

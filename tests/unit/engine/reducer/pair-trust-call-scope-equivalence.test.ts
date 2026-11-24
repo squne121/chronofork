@@ -188,4 +188,18 @@ describe('呼出しをまたぐキー記憶の陳腐化（独立レビュー指�
     expect(JSON.stringify(fast.world)).toBe(JSON.stringify(ref.world))
     expect(fast.world.pairTrust!.filter((r) => r.personIds[0] === c && r.personIds[1] === d)).toHaveLength(1)
   })
+
+  it('personIds が独自の toJSON を持つ非 plain 入力でも高速経路を使わず従来と同じ結果（独立再レビュー指摘）', () => {
+    const [p1, p2, p3, , , , , p8] = ids as string[]
+    const e = { personIds: Object.assign([p2!, p3!], { toJSON: () => [p2, p8] }) as unknown as [string, string], value: 1, lastUpdatedYear: Y - 1 }
+    const w: WorldState = { ...base, pairTrust: [e] }
+    const set = (p: string, q: string, tag: string): DomainCommand =>
+      ({ type: 'PERSON_PAIR_TRUST_SET', commandId: 'cmd:' + tag, source: src(tag), relation: rel(p, q, 3) })
+    const units = [[set(p1!, p2!, 'j1')], [set(p2!, p3!, 'j2')]]
+    const fast = applyOutcome(w, outcome('B-009', 3, units.flat()), { transaction: tx0() })
+    const ref = oneByOne(w, units, tx0())
+    expect(fast.units.map(unitView)).toEqual(ref.units)
+    expect(fast.world.pairTrust!.map((r) => [r.personIds[0], r.personIds[1]])).toEqual(ref.world.pairTrust!.map((r) => [r.personIds[0], r.personIds[1]]))
+    expect(fast.world.pairTrust!.filter((r) => r.personIds[0] === p2 && r.personIds[1] === p3)).toHaveLength(1)
+  })
 })
