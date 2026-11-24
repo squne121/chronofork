@@ -81,11 +81,11 @@ def parse_register(content):
         if table in ("other", None):
             id_cells = sum(bool(re.search(r"DEC-", cell)) for cell in cells)
             if ("DEC-" in first or (id_cells and re.search(
-                    r"(?:#|PR\s*|pull request\s+)[0-9]+", first, re.IGNORECASE))
+                    r"(?:#|PR\s*|pull request\s+)[0-9]+", stripped, re.IGNORECASE))
                     or id_cells > 1):
                 raise ValueError(f"line {number}: decision or mapping in unknown table")
             for cell in cells[1:]:
-                for token in re.findall(r"DEC-[A-Za-z0-9/\-]*", cell):
+                for token in re.findall(r"DEC-[A-Za-z0-9_/\-]*", cell):
                     if not KEY.fullmatch(token):
                         raise ValueError(f"line {number}: invalid decision reference {token}")
                     for part in token.split("/"):
@@ -267,11 +267,17 @@ class GuardTests(unittest.TestCase):
             validate(base + note + ALIASES + "| #125 | DEC-075 | DEC-130 | bad |\n")
 
     def test_unknown_grouped_ids(self):
-        for ref in ("DEC-", "DEC-075/76", "DEC-075/999"):
+        for ref in ("DEC-", "DEC-075/76", "DEC-075/999", "DEC-075_invalid"):
             first = "pull request 125" if ref.endswith("999") else "方針"
             with self.subTest(ref=ref), self.assertRaises(ValueError):
                 validate(self.base + "\n| 項目 | 関連決定 |\n|---|---|\n"
                          + f"| {first} | {ref} |\n")
+
+    def test_unknown_table_mapping_in_other_cells(self):
+        for row in ("| 再採番 | #125: DEC-075 → DEC-999 |\n",
+                    "| 再採番 | #125 | DEC-075/999 |\n"):
+            with self.subTest(row=row), self.assertRaises(ValueError):
+                validate(self.base + "\n| 項目 | 対応 |\n|---|---|\n" + row)
 
     def test_definition_header_and_column_count(self):
         for extra in ("\n| ID | 注意 |\n|---|---|\n| DEC-999 | reference |\n",
