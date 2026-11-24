@@ -8,7 +8,7 @@ test.describe('PR #118 統合後の王位・国家統治者と出生人物導線
 
   test('実WorldStateを根拠に出生→翌年の人物、王位移転、国家統治者更新/未確定を辿る',async({page})=>{
     await page.setViewportSize({width:1280,height:900})
-    await page.goto('/')
+    await page.goto('/?run=legacy-integrated')
     await page.getByTestId('obs-start').click()
     await expect(page.getByTestId('obs-year-label')).toContainText('1250年初',{timeout:12*60_000})
 

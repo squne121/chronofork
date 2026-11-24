@@ -11,7 +11,7 @@ import {createExperimentalIntegratedWorld} from '../../../../src/scenario/experi
 import {buildTitleHoldingHistories} from '../../../../src/ui/observation/title-history.ts'
 import { buildPersonRecords } from '../../../../src/ui/observation/person-record.ts'
 
-beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy'))
+beforeEach(()=>window.history.replaceState({},'', '/?entry=legacy&run=legacy-integrated'))
 afterEach(cleanup)
 
 it('介入前に実A0を観測すると、旧C004年表を同じ歴史と誤表示せず選択年・人物を介入へ渡す',async()=>{

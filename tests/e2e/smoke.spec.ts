@@ -16,7 +16,7 @@ test('初回は未観測の原史A0だけを入口にし、旧C004/直接介入�
   await expect(page.getByTestId('obs-intro')).toBeVisible()
   await expect(page.getByTestId('obs-start')).toBeVisible()
   await expect(page.getByTestId('history-status')).toContainText('未観測')
-  await expect(page.getByTestId('current-year')).not.toContainText('1273')
+  await expect(page.getByTestId('branch-results')).toHaveCount(0)
   await expect(page.getByTestId('legacy-workspace')).not.toHaveAttribute('open','')
   await expect(page.getByTestId('branch-run')).toBeHidden()
   await page.getByTestId('legacy-toggle').click()

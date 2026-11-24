@@ -73,11 +73,14 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent,onInspe
     <details data-testid="integrated-source">
       <summary>入力条件と計算結果の出典</summary>
       <dl className="compare-metrics">
-        <dt>実行構成</dt><dd>createExperimentalIntegratedWorld / Evaluators（実装側の共通ファクトリ）</dd>
+        <dt>実行構成ID</dt><dd>{view.a0.inputs.configId??view.mode}</dd>
+        {view.mode==='INTEGRATED_EXPERIMENTAL'&&<><dt>共通ファクトリ</dt><dd>createExperimentalIntegratedWorld / Evaluators</dd></>}
+        {view.a0.inputs.configDigest&&<><dt>構成digest</dt><dd>{view.a0.inputs.configDigest}</dd></>}
         <dt>seed</dt><dd>{input.seed}</dd>
         <dt>対象の2人</dt><dd>{personLabel(input.firstPersonId)}・{personLabel(input.secondPersonId)}</dd>
         <dt>介入</dt><dd>{input.year}年から{input.durationYears}年間、信頼 {input.signedDelta>0?'+':''}{input.signedDelta}</dd>
-        <dt>計算範囲</dt><dd>1250年〜1350年（A0とA1で同じ初期世界・法令・評価器、A1だけ介入台帳を追加）</dd>
+        <dt>計算範囲</dt><dd>{view.a0.result.startYear}年〜{final0?.year??'未確認'}年（A0とA1で同じ初期世界・法令・評価器、A1だけ介入台帳を追加）</dd>
+        {view.second&&<><dt>A2の追加介入</dt><dd>{personLabel(view.second.input.firstPersonId)}・{personLabel(view.second.input.secondPersonId)}：{view.second.input.year}年から{view.second.input.durationYears}年間、信頼 {view.second.input.signedDelta>0?'+':''}{view.second.input.signedDelta}</dd></>}
         {view.a0Source&&<><dt>原史A0</dt><dd data-testid="integrated-a0-source">{view.a0Source==='REUSED'
           ?'同じ条件の保存済み計算結果を再利用（今回は再計算していません）':'今回計算'}</dd></>}
         {calc&&<><dt>実測時間（Worker内の計算）</dt><dd data-testid="integrated-compute-time">{sec(calc.computeMs)}</dd>
@@ -85,9 +88,9 @@ export function IntegratedOverview({view,calc,personLabel,onInspectEvent,onInspe
         <dt>正式勝敗 / 自律歴史</dt><dd>goal=null（未成立）/ NOT_ESTABLISHED</dd>
         <dt>未実装ルール</dt><dd>TODO {view.a1.result.coverage.todoRuleIds.length}件</dd>
       </dl>
-      <p className="note" data-testid="integrated-defaults-note">
+      {view.mode==='INTEGRATED_EXPERIMENTAL'&&<p className="note" data-testid="integrated-defaults-note">
         初期入力例（seed {INTEGRATED_PLAY_DEFAULTS.seed}・{INTEGRATED_PLAY_DEFAULTS.year}年・{INTEGRATED_PLAY_DEFAULTS.signedDelta}・{INTEGRATED_PLAY_DEFAULTS.durationYears}年間）はPR #78で実測した CALIBRATION_ONLY の条件です。入力欄を変えた場合は、その値で再計算しています。史実・強制イベントではありません。
-      </p>
+      </p>}
       {om&&<p className="note" data-testid="integrated-omission">
         表示の省略（experimental試遊限定の技術的処置）: 計算した全件数は Event A0 {om.fullEventCount.a0}件 / A1 {om.fullEventCount.a1}件、Trace A0 {om.fullTraceCount.a0}件 / A1 {om.fullTraceCount.a1}件です。
         メモリ保護のため、A0/A1で内容が完全に同一の高頻度記録（{Object.entries(om.omittedEventsByType).map(([k,n])=>`${k} ${n}件`).join('、')||'なし'}、

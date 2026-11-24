@@ -9,7 +9,7 @@ test.describe('PR #118 理由を調べて介入へ進む探索経路（opt-in）
   test('終点の不足から喪失記録・人物履歴・婚姻候補の理由を画面だけで辿り、候補の2人を介入フォームへ渡せる',async({page})=>{
     await page.setViewportSize({width:1280,height:900})
     page.setDefaultTimeout(60_000)
-    await page.goto('/')
+    await page.goto('/?run=legacy-integrated')
     await page.getByTestId('obs-start').click()
     await expect(page.getByTestId('obs-year-label')).toContainText('1250年初',{timeout:12*60_000})
 

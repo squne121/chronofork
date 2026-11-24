@@ -3,6 +3,8 @@
 import {
   createExperimentalWorld, createExperimentalOrdinaryLegalTrial, prepareExperimentalGoalContext, EXPERIMENTAL_NALVEN_GOAL,
   createExperimentalIntegratedEvaluators, createExperimentalIntegratedTimelineOptions, integratedRunConfigIdentity,
+  createMultiHouseWorld, createMultiHouseEvaluators, multiHouseRunConfigIdentity, multiHouseRunConfigDigest,
+  MULTI_HOUSE_RUN_CONDITIONS, MULTI_HOUSE_GOAL,
   INTEGRATED_PAIR, INTEGRATED_SEED, INTEGRATED_START_YEAR, INTEGRATED_TRUST_REDUCTION,
 } from '../scenario/experimental/index.ts'
 import { rngVersion } from '../simulation/random.ts'
@@ -64,11 +66,24 @@ const TEST_MARRIAGE_APPROVAL:MarriageApprovalEvidence={
   },
 }
 /** 試験用法制の切替。変更できるのは試験用シナリオ構成で、ゲーム内の法的状態ではない。 */
-export type PlayMode='FIXED_APPROVAL'|'ORDINARY_LAW'|'INTEGRATED_EXPERIMENTAL'
+export type ObservationMode='INTEGRATED_EXPERIMENTAL'|'MULTI_HOUSE_EXPERIMENTAL'
+export type PlayMode='FIXED_APPROVAL'|'ORDINARY_LAW'|ObservationMode
 export const PLAY_DEFAULT_MODE:PlayMode='FIXED_APPROVAL'
-export const playModeLabel=(mode:PlayMode):string=>mode==='INTEGRATED_EXPERIMENTAL'
-  ? '統合法制・世代継続（experimental）'
+export const DEFAULT_OBSERVATION_MODE:ObservationMode='MULTI_HOUSE_EXPERIMENTAL'
+export const DEFAULT_OBSERVATION_SEED=MULTI_HOUSE_RUN_CONDITIONS.primarySeed
+export const isObservationMode=(mode:PlayMode|undefined):mode is ObservationMode=>
+  mode==='INTEGRATED_EXPERIMENTAL'||mode==='MULTI_HOUSE_EXPERIMENTAL'
+const isPlayMode=(mode:PlayMode):boolean=>isObservationMode(mode)||mode==='FIXED_APPROVAL'||mode==='ORDINARY_LAW'
+export const playModeLabel=(mode:PlayMode):string=>mode==='MULTI_HOUSE_EXPERIMENTAL'
+  ? '複数家門の歴史（試験版）'
+  : mode==='INTEGRATED_EXPERIMENTAL'?'統合法制・世代継続（experimental）'
   : mode==='ORDINARY_LAW'?'通常法制（experimental）':'旧・1260年の明示承認試験'
+// 同一のブラウザビルド内で不変。キャッシュ本体は短いdigestではなく完全なidentityで照合する。
+let multiHouseDigest:string|undefined
+let multiHouseIdentity:ReturnType<typeof multiHouseRunConfigIdentity>|undefined
+export function playConfigDigest(mode:PlayMode):string|undefined{
+  return mode==='MULTI_HOUSE_EXPERIMENTAL'?(multiHouseDigest??=multiHouseRunConfigDigest()):undefined
+}
 /**
  * 統合モードの初期入力例。PR #78 で実測した CALIBRATION_ONLY の条件であり、強制的な歴史イベントではない。
  * 利用者が変更した値で必ず再計算する（ここは入力欄の初期値にだけ使う）。
@@ -170,6 +185,8 @@ function buildInputs(seed:number,ids:readonly string[],branchId:string,mode:Play
     seed,scenarioId:'experimental / 亡国の王冠 / '+playModeLabel(mode)+' / '+branchId,
     rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,rngVersion,
     evaluatedRuleIds:ids,
+    configId:mode==='MULTI_HOUSE_EXPERIMENTAL'?MULTI_HOUSE_RUN_CONDITIONS.configId:mode,
+    configDigest:playConfigDigest(mode),
   }
 }
 /** Branchは正式な勝敗・coverage全域を持たないので、試験表示専用の読取TimelineResultに明示変換する。 */
@@ -177,7 +194,7 @@ function asTimelineRun(branch:Branch,parent:TimelineRun,mode:PlayMode):TimelineR
   const coverage=branch.recompute?.suffixCoverage??parent.result.coverage
   const finalWorld=branch.snapshots[branch.snapshots.length-1]
   const technicalGoal=branch.status==='COMPLETED'&&finalWorld?.year===GOAL_YEAR
-    ? evaluateGoal(finalWorld,EXPERIMENTAL_NALVEN_GOAL):null
+    ? evaluateGoal(finalWorld,mode==='MULTI_HOUSE_EXPERIMENTAL'?MULTI_HOUSE_GOAL:EXPERIMENTAL_NALVEN_GOAL):null
   const result:TimelineResult={
     status:branch.status,seed:branch.seed,branchId:branch.branchId,
     rngVersion:branch.rngVersion,startYear:branch.startYear,
@@ -212,7 +229,7 @@ type RootContext=Readonly<{
 type Failure=Readonly<{ok:false;code:string;message:string}>
 /** A0単独実行とA0/A1比較が共有する検証・法的証拠・初期世界の準備（別のゲーム計算を作らない）。 */
 function prepareRoot(seed:number,mode:PlayMode):Readonly<{ok:true;context:RootContext}>|Failure{
-  if(mode!=='FIXED_APPROVAL'&&mode!=='ORDINARY_LAW'&&mode!=='INTEGRATED_EXPERIMENTAL')
+  if(!isPlayMode(mode))
     return {ok:false,code:'INVALID_MODE',message:'試験用法制モードが不正です'}
   if(!Number.isSafeInteger(seed)||seed<0)
     return {ok:false,code:'INVALID_SEED',message:'seedは0以上の安全整数が必要です'}
@@ -220,6 +237,7 @@ function prepareRoot(seed:number,mode:PlayMode):Readonly<{ok:true;context:RootCo
     const integrated=createExperimentalIntegratedTimelineOptions('A0-play')
     return {ok:true,context:{seed,mode,initial:integrated.world,integrated}}
   }
+  if(mode==='MULTI_HOUSE_EXPERIMENTAL')return {ok:true,context:{seed,mode,initial:createMultiHouseWorld()}}
   const initial=playInitialWorld()
   const legal=prepareExperimentalGoalContext(initial)
   if(!legal.ok)return {ok:false,code:'INITIAL_LEGAL_EVIDENCE_INVALID',
@@ -236,11 +254,13 @@ function prepareRoot(seed:number,mode:PlayMode):Readonly<{ok:true;context:RootCo
 function runRootTimeline(c:RootContext,observer?:ProgressObserver):
   Readonly<{ok:true;timeline:TimelineResult;evaluators:EvaluatorMap;a0:TimelineRun}>|Failure{
   const evaluators=c.integrated?c.integrated.options.evaluators
+    :c.mode==='MULTI_HOUSE_EXPERIMENTAL'?createMultiHouseEvaluators(c.initial,[])
     :createEvaluators(c.initial,[],c.legal!.book,c.mode,c.ordinaryTrial)
   const timeline=c.integrated
     ? runTimeline(c.initial,{...c.integrated.options,seed:c.seed,...progressHook('A0',observer)})
     : runTimeline(c.initial,{seed:c.seed,branchId:'A0-play',evaluators,
-      goal:c.legal!.goal,technicalGoalEvaluation:true,...progressHook('A0',observer)})
+      goal:c.mode==='MULTI_HOUSE_EXPERIMENTAL'?MULTI_HOUSE_RUN_CONDITIONS.goal:c.legal!.goal,
+      technicalGoalEvaluation:c.mode==='MULTI_HOUSE_EXPERIMENTAL'?MULTI_HOUSE_RUN_CONDITIONS.technicalGoalEvaluation:true,...progressHook('A0',observer)})
   if(timeline.status!=='COMPLETED')
     return {ok:false,code:'A0_HALTED',message:JSON.stringify(timeline.halt)}
   return {ok:true,timeline,evaluators,a0:{
@@ -250,14 +270,17 @@ function runRootTimeline(c:RootContext,observer?:ProgressObserver):
 }
 /** A1の評価器: fork年初のWorldStateと新ledgerから、A0と同じ構成で再生成する。 */
 function forkEvaluators(c:RootContext,state:WorldState,ledger:readonly StatModifier[]):EvaluatorMap{
+  if(c.mode==='MULTI_HOUSE_EXPERIMENTAL')return createMultiHouseEvaluators(state,ledger)
   return c.integrated?createExperimentalIntegratedEvaluators(state,ledger)
     :createEvaluators(state,ledger,c.legal!.book,c.mode,c.ordinaryTrial)
 }
 /** A0を一意に決める入力すべて。介入(年・人物・補正・期間)は含めない。 */
 function a0CacheKeyOf(c:RootContext):string{
+  const common={mode:c.mode,seed:c.seed,rngVersion,rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion}
+  // 複数家門のidentityは初期世界・tuningも含むので、同じ内容を二重にキーへ入れない。
+  if(c.mode==='MULTI_HOUSE_EXPERIMENTAL')return buildA0CacheKey({...common,multiHouse:multiHouseIdentity??=multiHouseRunConfigIdentity()})
   return buildA0CacheKey({
-    mode:c.mode,seed:c.seed,rngVersion,rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,
-    tuning:EXPERIMENTAL_TUNING,initialWorld:c.initial,
+    ...common,tuning:EXPERIMENTAL_TUNING,initialWorld:c.initial,
     ...(c.integrated
       ?{integrated:{goal:c.integrated.options.goal,ruleIds:Object.keys(c.integrated.options.evaluators).sort(),config:integratedRunConfigIdentity()}}
       :{legal:{goal:c.legal?.goal,book:c.legal?.book,ordinary:c.ordinaryTrial,
@@ -273,7 +296,7 @@ export type PlayRunOptions=Readonly<{
 /** 決定的再計算の本物の結果だけ返す。停止時は部分結果を表示用「成功」と扱わない。 */
 export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,options:PlayRunOptions={}):PlayResult{
   const mode=input.mode??PLAY_DEFAULT_MODE
-  if(mode!=='FIXED_APPROVAL'&&mode!=='ORDINARY_LAW'&&mode!=='INTEGRATED_EXPERIMENTAL')return reject('INVALID_MODE','試験用法制モードが不正です')
+  if(!isPlayMode(mode))return reject('INVALID_MODE','試験用法制モードが不正です')
   if(!Number.isSafeInteger(input.seed)||input.seed<0)return reject('INVALID_SEED','seedは0以上の安全整数が必要です')
   if(!Number.isSafeInteger(input.year)||input.year<START_YEAR||input.year>=GOAL_YEAR)
     return reject('INVALID_YEAR','介入年は1250〜1349年の整数が必要です')
@@ -431,7 +454,9 @@ export function directlyInvolvesPair(e:EventLogEntry,pair:readonly [Id,Id]):bool
 export type ObservationYearCounts = Readonly<{year:number;events:number;traces:number;focusEvents?:number}>
 export type ObservationSlice = Readonly<{
   seed:number
-  mode:'INTEGRATED_EXPERIMENTAL'
+  mode:ObservationMode
+  configId?:string
+  configDigest?:string
   year:number
   world:WorldState
   events:readonly EventLogEntry[]
@@ -463,7 +488,7 @@ const observationTitleHistoryCache=new WeakMap<TimelineRun,readonly TitleHolding
 const observationRecordCache=new WeakMap<TimelineRun,Readonly<{persons:readonly PersonRecord[];losses:readonly TitleLossRecord[]}>>()
 /** 実A0の確定結果だけを読む。UIが計算規則や架空の歴史を生成しないための純粋関数。 */
 export function sliceA0Observation(
-  a0:TimelineRun,year:number,mode:'INTEGRATED_EXPERIMENTAL',a0Source:A0Source,
+  a0:TimelineRun,year:number,mode:ObservationMode,a0Source:A0Source,
 ):ObservationSlice|undefined{
   const world=a0.result.snapshots.find(w=>w.year===year)
   if(!world||a0.result.status!=='COMPLETED')return undefined
@@ -502,7 +527,7 @@ export function sliceA0Observation(
   const finalWorld=a0.result.snapshots.find(w=>w.year===GOAL_YEAR)
   const knownA0Ending=buildA0KnownEnding(world,finalWorld)
   return {
-    seed:a0.inputs.seed,mode,year,world,events,traces,counts,candidates,titleHistories,knownA0Ending,
+    seed:a0.inputs.seed,mode,configId:a0.inputs.configId,configDigest:a0.inputs.configDigest,year,world,events,traces,counts,candidates,titleHistories,knownA0Ending,
     personRecords:records.persons,titleLossRecords:records.losses,
     goal:a0.result.goal,technicalGoal:a0.result.technicalGoal,status:a0.result.status,a0Source,
   }
@@ -512,7 +537,7 @@ export function sliceA0Observation(
 export function runPlayObservation(
   input:ObservationInput,cache:SingleA0Cache,observer?:ProgressObserver,
 ):ObservationResult{
-  if(input.mode!=='INTEGRATED_EXPERIMENTAL')return {ok:false,code:'INVALID_MODE',message:'統合試験モードだけを観測できます'}
+  if(!isObservationMode(input.mode))return {ok:false,code:'INVALID_MODE',message:'観測は複数家門構成と旧統合試験構成に対応しています'}
   if(!Number.isSafeInteger(input.year)||input.year<START_YEAR||input.year>GOAL_YEAR)
     return {ok:false,code:'INVALID_YEAR',message:'観測年は1250〜1350年の整数が必要です'}
   const prep=prepareRoot(input.seed,input.mode)

@@ -320,13 +320,21 @@ describe('App: 統合モードの結果表示(実WorldState/EventLogを統合モ
   // 描画経路の確認用に、実際に計算できる短い旧モードの結果をモード名だけ統合に付け替える。
   // 100年の統合実計算そのものはオプトインの long テストで検証する。
   const real = runPlayComparison({ seed: 20260101, year: 1260, firstPersonId: 'person-exp-04', secondPersonId: 'person-exp-05', signedDelta: 20, durationYears: 5 })
+  const submitFixtureInput = (input: PlayInput) => {
+    selectIntegrated()
+    for (const [id, value] of [
+      ['branch-fork-year', input.year], ['branch-person-one', input.firstPersonId],
+      ['branch-person-two', input.secondPersonId], ['branch-trust-delta', input.signedDelta],
+      ['branch-duration', input.durationYears],
+    ]) fireEvent.change(screen.getByTestId(String(id)), { target: { value: String(value) } })
+    fireEvent.click(screen.getByTestId('branch-run'))
+  }
   it('出典・差分判定・経過表・親子・Titleを表示し、正式勝敗を作らない', async () => {
     if (!real.ok) throw new Error(real.code)
-    const view: PlayView = { ...real.comparison, mode: 'INTEGRATED_EXPERIMENTAL' }
+    const view: PlayView = { ...real.comparison, mode: 'INTEGRATED_EXPERIMENTAL', input: { ...real.comparison.input, mode: 'INTEGRATED_EXPERIMENTAL' } }
     const { runner, calls } = controlledRunner()
     render(<App playRunner={runner} />)
-    selectIntegrated()
-    fireEvent.click(screen.getByTestId('branch-run'))
+    submitFixtureInput(view.input)
     await act(async () => { calls[0]!.resolve({ kind: 'DONE', computeMs: 12345, result: { ok: true, view } }) })
     expect(screen.getByTestId('integrated-source').textContent).toContain('createExperimentalIntegratedWorld')
     expect(screen.getByTestId('integrated-compute-time').textContent).toBe('12.3秒')
@@ -348,14 +356,13 @@ describe('App: 統合モードの結果表示(実WorldState/EventLogを統合モ
   it('Event差がなくても介入を参照した実Traceへ直接移動できる（表示のみの同枝複写fixture）', async () => {
     if (!real.ok) throw new Error(real.code)
     // 表示用に同じ実計算枝をA0/A1へ割当て、「Event差なし」の閲覧経路だけを検証する。
-    const view: PlayView = { ...real.comparison, mode: 'INTEGRATED_EXPERIMENTAL', a0: real.comparison.a1 }
+    const view: PlayView = { ...real.comparison, mode: 'INTEGRATED_EXPERIMENTAL', input: { ...real.comparison.input, mode: 'INTEGRATED_EXPERIMENTAL' }, a0: real.comparison.a1 }
     const recorded = view.a1.result.decisionTraces.find(t => t.modifierIds.includes(view.modifier.modifierId))
     expect(recorded).toBeDefined()
     if (!recorded) return
     const { runner, calls } = controlledRunner()
     render(<App playRunner={runner} />)
-    selectIntegrated()
-    fireEvent.click(screen.getByTestId('branch-run'))
+    submitFixtureInput(view.input)
     await act(async () => { calls[0]!.resolve({ kind: 'DONE', computeMs: 1, result: { ok: true, view } }) })
     expect(screen.getByTestId('integrated-verdict').textContent).toContain('差は確認されませんでした')
     expect(screen.getByTestId('integrated-evidence-count').textContent).toContain('介入を参照した判断Trace:')

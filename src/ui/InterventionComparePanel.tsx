@@ -1,12 +1,12 @@
 // A0/A1の試験用介入操作。描画用の差分は実WorldState/EventLog/DecisionTraceからのみ取得する。
 // GAME-01〜05と正式勝敗は未成立。CALIBRATION_ONLYの明示法的承認だけを試験で注入する。
 import { useMemo, useState } from 'react'
-import { compareYear, directlyInvolvesPair, playInitialWorld, playModeLabel, INTEGRATED_PLAY_DEFAULTS, PLAY_DEFAULT_MODE, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
+import { compareYear, directlyInvolvesPair, isObservationMode, playInitialWorld, playModeLabel, INTEGRATED_PLAY_DEFAULTS, PLAY_DEFAULT_MODE, PLAY_DEMO_DELTA, PLAY_DEMO_DURATION, PLAY_DEMO_PAIR, PLAY_DEMO_YEAR } from './branch-play-source.ts'
 import { observeDynastyContinuity } from './dynasty-continuity.ts'
 import type { ContinuityObservation } from './dynasty-continuity.ts'
 import { NALVEN_DYNASTY_ID } from '../scenario/experimental/index.ts'
 import { childIdsOfPair, unresolvedLabel } from './event-summary.ts'
-import type { BranchChoice, PlayInput, PlayMode, PlayView } from './branch-play-source.ts'
+import type { BranchChoice, ObservationMode, PlayInput, PlayMode, PlayView } from './branch-play-source.ts'
 import { candidateLabel, candidateSetMatches, candidatesAtYear, extractCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
 import { IntegratedOverview } from './IntegratedOverview.tsx'
@@ -54,6 +54,7 @@ type Props=Readonly<{
   onFetchCandidates:(seed:number,mode:PlayMode)=>void
   onCancelCandidates:()=>void
   /** 年表調査から選択した年と人物。既存の合法な介入対象判定に委ねる。 */
+  observationMode?:ObservationMode
   observationTarget?:Readonly<{year:number;personId:string;secondPersonId?:string;seed:number;token:number}>
   activeBranch:BranchChoice|'A2'
   onRun:(input:PlayInput)=>void
@@ -112,14 +113,15 @@ const countHeld=(w:{titles:readonly {holder:{status:string}}[]})=>w.titles.filte
 export function InterventionComparePanel(p:Props){
   // 観測画面から渡された初期値は、親のkey変更による安全な再マウント時だけ適用する。
   const observed=p.observationTarget
-  const [mode,setMode]=useState<PlayMode>(observed?'INTEGRATED_EXPERIMENTAL':PLAY_DEFAULT_MODE)
+  const multiHouse=p.observationMode==='MULTI_HOUSE_EXPERIMENTAL'
+  const [mode,setMode]=useState<PlayMode>(p.observationMode??(observed?'INTEGRATED_EXPERIMENTAL':PLAY_DEFAULT_MODE))
   const [yearText,setYearText]=useState(String(observed?.year??PLAY_DEMO_YEAR))
   const [firstId,setFirstId]=useState<string>(observed?.personId??PLAY_DEMO_PAIR[0])
-  const [secondId,setSecondId]=useState<string>(observed
+  const [secondId,setSecondId]=useState<string>(multiHouse ? observed?.secondPersonId??'' : observed
     ? observed.secondPersonId??(observed.personId===INTEGRATED_PLAY_DEFAULTS.pair[1]?INTEGRATED_PLAY_DEFAULTS.pair[0]:INTEGRATED_PLAY_DEFAULTS.pair[1])
     : PLAY_DEMO_PAIR[1])
-  const [deltaText,setDeltaText]=useState(String(observed?INTEGRATED_PLAY_DEFAULTS.signedDelta:PLAY_DEMO_DELTA))
-  const [durationText,setDurationText]=useState(String(observed
+  const [deltaText,setDeltaText]=useState(String(observed&&!multiHouse?INTEGRATED_PLAY_DEFAULTS.signedDelta:PLAY_DEMO_DELTA))
+  const [durationText,setDurationText]=useState(String(multiHouse?1:observed
     ? Math.min(INTEGRATED_PLAY_DEFAULTS.durationYears,1350-observed.year):PLAY_DEMO_DURATION))
   const seed=Number(p.seedText.trim())
   const year=Number(yearText),delta=Number(deltaText),duration=Number(durationText)
@@ -140,10 +142,10 @@ export function InterventionComparePanel(p:Props){
     :candidateSetMatches(comparisonSet,seed,mode)?comparisonSet:undefined
   const yearOk=/^\d+$/.test(yearText)&&Number.isSafeInteger(year)&&year>=1250&&year<1350
   const options:readonly PersonOption[]=activeSet&&yearOk
-    ?candidatesAtYear(activeSet,year).map(c=>({id:c.id,label:candidateLabel(c)})):persons
+    ?candidatesAtYear(activeSet,year).map(c=>({id:c.id,label:candidateLabel(c)})):multiHouse?[]:persons
   const inOptions=(id:string)=>options.some(o=>o.id===id)
   const personsOk=inOptions(firstId)&&inOptions(secondId)
-  const canRun=valid&&personsOk
+  const canRun=valid&&personsOk&&(!multiHouse||!!activeSet)
   // 表示名: 現在の候補→表示中の比較のA0→初期人物。どれにも無いときだけIDを出す。
   const personName=(id:string)=>{
     const c=activeSet?.candidates.find(x=>x.id===id)
@@ -152,6 +154,7 @@ export function InterventionComparePanel(p:Props){
   const personOptions=(selected:string)=>{
     const list=options.map(x=><option key={x.id} value={x.id}>{x.label}</option>)
     // 現在の年に存在しない人物が選択中のままなら、選択が無効であることを選択欄にも出す（黙って別の人物にしない）。
+    if(selected==='')return [<option key="__choose" value="" disabled>人物を選んでください</option>,...list]
     return inOptions(selected)?list:[<option key="__missing" value={selected} disabled>{personName(selected)}（{yearOk?`${year}年初には存在しません`:'年を確認してください'}）</option>,...list]
   }
   const data=p.comparison?compareYear(p.comparison,p.year):undefined
@@ -223,9 +226,9 @@ export function InterventionComparePanel(p:Props){
   </li>
   return <section className="panel intervention-panel" aria-labelledby="branch-heading" data-testid="branch-compare-panel">
     <h2 id="branch-heading">介入して歴史を比べる（試験版）</h2>
-    <p className="note">対象の2人の信頼を一時的に変え、1250〜1350年の実WorldStateを再計算します。法令や出生・死亡の具体値はCALIBRATION_ONLYで、どちらの方式も正式な勝敗・全自律歴史ではありません。</p>
-    <h3 className="step-title"><span className="step-no">1</span>試験方式と介入を選ぶ</h3>
-    <label>法制を試す方式
+    <p className="note">対象の2人の信頼を一時的に変え、1250〜1350年の実WorldStateを再計算します。法令や出生・死亡の具体値はCALIBRATION_ONLYで、正式な勝敗・全自律歴史ではありません。</p>
+    <h3 className="step-title"><span className="step-no">1</span>{multiHouse?'介入を選ぶ':'試験方式と介入を選ぶ'}</h3>
+    {!multiHouse&&<label>法制を試す方式
       <select data-testid="play-law-mode" value={mode} disabled={!!p.running} onChange={e=>{
         const next=e.target.value as PlayMode
         setMode(next)
@@ -248,9 +251,10 @@ export function InterventionComparePanel(p:Props){
         <option value="ORDINARY_LAW">通常法制（experimental）</option>
         <option value="INTEGRATED_EXPERIMENTAL">統合法制・世代継続（experimental）</option>
       </select>
-    </label>
+    </label>}
     <p className="note" data-testid="play-mode-description">
-      {mode==='INTEGRATED_EXPERIMENTAL'
+      {multiHouse?'観測中と同じ複数家門の原史から分岐します。婚姻や出生を直接指定するのではなく、選んだ2人の信頼を一時的に変えます。'
+        :mode==='INTEGRATED_EXPERIMENTAL'
         ?'SUPPORTING登録・婚姻・出生・死亡・婚姻終了・法的王朝・相続・統治委任を一つの構成で通し、1250〜1350年を再計算します（100年分のため端末により1〜数分かかります。計算中も画面は操作できます）。入力欄の初期値はPR #78で実測したCALIBRATION_ONLYの例で、歴史の固定イベントではありません。'
         :mode==='ORDINARY_LAW'
         ?'同一国内の背景法令・当事者の試験適格性と、その年のB-005交渉意思から婚姻・相続・新委任を審査します。特定年の婚姻承認は予約しません。'
@@ -265,13 +269,13 @@ export function InterventionComparePanel(p:Props){
         signedDelta:delta,durationYears:duration,mode})
     }}>
       <div className="candidate-source" data-testid="candidate-source">
-        <button type="button" data-testid="candidates-fetch" disabled={!/^\d+$/.test(p.seedText.trim())||!Number.isSafeInteger(seed)||!!p.running||!!p.fetchingCandidates||!!p.observationLoading}
-          onClick={()=>p.onFetchCandidates(seed,mode)}>この条件のA0から人物候補を取得（後から生まれた人物を選ぶ場合）</button>
+        {!multiHouse&&<button type="button" data-testid="candidates-fetch" disabled={!/^\d+$/.test(p.seedText.trim())||!Number.isSafeInteger(seed)||!!p.running||!!p.fetchingCandidates||!!p.observationLoading}
+          onClick={()=>p.onFetchCandidates(seed,mode)}>この条件のA0から人物候補を取得（後から生まれた人物を選ぶ場合）</button>}
         {p.fetchingCandidates&&<button type="button" data-testid="candidates-cancel" onClick={p.onCancelCandidates}>取得をキャンセル</button>}
         <span className="note" role="status" data-testid="candidate-status"> {p.fetchingCandidates
           ?'A0を計算して人物候補を取得中です（介入の再計算はしません。この間も他の操作ができます）。'
           :activeSet?`候補はseed ${activeSet.seed}・${playModeLabel(activeSet.mode)}のA0の${yearOk?`${year}年初`:'年初'}の実際のWorldStateから取得しています（KEY人物${yearOk?candidatesAtYear(activeSet,year).length:activeSet.candidates.length}人）。`
-          :'現在は初期人物のみ表示しています。1251年以降に生まれた人物を選ぶには、上のボタンでA0の候補を取得してください。'}</span>
+          :multiHouse?'このseedの原史を先に観測すると、介入できる人物が表示されます。':'現在は初期人物のみ表示しています。1251年以降に生まれた人物を選ぶには、上のボタンでA0の候補を取得してください。'}</span>
         {p.candidateError&&<p role="alert" className="halt" data-testid="candidate-error">人物候補を取得できませんでした: {p.candidateError.code} / {p.candidateError.message}</p>}
       </div>
       <div className="form-grid">
@@ -298,11 +302,11 @@ export function InterventionComparePanel(p:Props){
       <h3 className="step-title"><span className="step-no">2</span>再計算する</h3>
       <button type="submit" disabled={!canRun||!!p.running||!!p.fetchingCandidates||!!p.observationLoading} data-testid="branch-run" className="cta">介入して再計算</button>
       {p.running&&<button type="button" onClick={p.onCancel} data-testid="branch-cancel">計算をキャンセル</button>}
-      <span className="note"> {mode==='INTEGRATED_EXPERIMENTAL'
+      <span className="note"> {multiHouse?'':mode==='INTEGRATED_EXPERIMENTAL'
         ?`初期入力例：${personName(INTEGRATED_PLAY_DEFAULTS.pair[0])}と${personName(INTEGRATED_PLAY_DEFAULTS.pair[1])}、${INTEGRATED_PLAY_DEFAULTS.year}年、${INTEGRATED_PLAY_DEFAULTS.signedDelta}、${INTEGRATED_PLAY_DEFAULTS.durationYears}年間（seed ${INTEGRATED_PLAY_DEFAULTS.seed}）。`
         :`例：${personName(PLAY_DEMO_PAIR[0])}と${personName(PLAY_DEMO_PAIR[1])}、${mode==='ORDINARY_LAW'?'1250':'1260'}年、+20、5年。`}出生・相続・委任は実計算の結果次第です。</span>
     </form>
-    {activeSet&&yearOk&&!personsOk&&<p role="status" className="missing" data-testid="branch-person-invalid">選択中の人物は{year}年初のA0に存在しない（または直接介入できない）ため、再計算できません。表示された候補から選び直してください。</p>}
+    {activeSet&&yearOk&&((firstId!==''&&!inOptions(firstId))||(secondId!==''&&!inOptions(secondId)))&&<p role="status" className="missing" data-testid="branch-person-invalid">選択中の人物は{year}年初のA0に存在しない（または直接介入できない）ため、再計算できません。表示された候補から選び直してください。</p>}
     {!valid&&<p role="status" className="missing" data-testid="branch-invalid">seed、介入年、相異なる2人、0以外の補正値、1350年を超えない期間を指定してください。</p>}
     {p.running&&<p role="status" className="note" data-testid="branch-running">
       計算中です（経過 {p.running.elapsedSec}秒）。完了までの目安は測れないため表示しません。この間も年表・地図の閲覧など他の操作ができます。
@@ -319,12 +323,12 @@ export function InterventionComparePanel(p:Props){
     {p.notice&&<p role="status" className="note" data-testid="branch-notice">{p.notice}</p>}
     {p.error&&<p role="alert" className="halt" data-testid="branch-error">{errorHeading(p.error.code)}: {p.error.code} / {p.error.message}</p>}
     {!p.comparison&&<p className="note" data-testid="branch-empty">まだ比較結果はありません。上の「介入して再計算」を押すと、ここにA0/A1の違いが表示されます。</p>}
-    {p.comparison&&p.comparison.mode==='INTEGRATED_EXPERIMENTAL'&&mode===p.comparison.mode&&
+    {p.comparison&&isObservationMode(p.comparison.mode)&&mode===p.comparison.mode&&
       Number(p.seedText.trim())===p.comparison.input.seed&&
       <FollowupInterventionPanel
         key={JSON.stringify([p.comparison.input.seed,p.comparison.input.year,p.comparison.input.firstPersonId,
           p.comparison.input.secondPersonId,p.comparison.input.signedDelta,p.comparison.input.durationYears])}
-        comparison={p.comparison} year={p.year} activeBranch={p.activeBranch} busy={!!p.running||!!p.fetchingCandidates}
+        comparison={p.comparison} year={p.year} activeBranch={p.activeBranch} busy={!!p.running||!!p.fetchingCandidates||!!p.observationLoading}
         onRun={p.onRun} onViewA2={()=>p.onViewBranch('A2')}/>
     }
     {p.comparison&&input&&before&&after&&<div data-testid="branch-results" className="compare-results">
@@ -384,7 +388,7 @@ export function InterventionComparePanel(p:Props){
         <p className="note">「A1にだけ記録」は、介入ありの歴史にだけ確定したEventです（A0にだけ記録はその逆）。</p>
         <p className="note">正式勝敗: 未成立。これは試験版の差分であり、単独原因の断定ではありません。</p>
       </div>
-      {p.comparison.mode==='INTEGRATED_EXPERIMENTAL'&&<IntegratedOverview view={p.comparison} calc={p.calc}
+      {isObservationMode(p.comparison.mode)&&<IntegratedOverview view={p.comparison} calc={p.calc}
         personLabel={id=>{const c=comparisonSet?.candidates.find(x=>x.id===id);return c?candidateLabel(c):unresolvedLabel('person',id)}} onInspectEvent={p.onInspectEvent} onInspectTrace={p.onInspectTrace}/>}
       <div className="headline" id="trial-goal-summary" data-testid="trial-goal-summary">
         <h4>1350年のナルヴェン王朝存続条件（試験判定）</h4>

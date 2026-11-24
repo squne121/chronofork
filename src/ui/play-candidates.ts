@@ -1,7 +1,7 @@
 // 介入対象の候補（GUI専用の軽量ビュー）。A0の実WorldStateから、人物選択に必要な最小情報だけを取り出す。
 // 候補の適格性は branch-play-source の interventionTargetIssue（CLIと共通）を唯一の判定とし、ここで別規則を作らない。
 import type { Id, WorldState } from '../simulation/contracts/index.ts'
-import { interventionTargetIssue, runPlayBaseline } from './branch-play-source.ts'
+import { interventionTargetIssue, playConfigDigest, runPlayBaseline } from './branch-play-source.ts'
 import type { PlayMode } from './branch-play-source.ts'
 import { baseDisplayName, personIdTag } from './observation/person-display.ts'
 export { personIdTag } from './observation/person-display.ts'
@@ -12,7 +12,7 @@ export type PlayCandidate = Readonly<{
   ranges: readonly (readonly [number, number])[]
 }>
 /** どの seed・モードのA0から得たかを必ず持つ。条件が変わったら使わない。 */
-export type PlayCandidateSet = Readonly<{ seed: number; mode: PlayMode; candidates: readonly PlayCandidate[] }>
+export type PlayCandidateSet = Readonly<{ seed: number; mode: PlayMode; configDigest?: string; candidates: readonly PlayCandidate[] }>
 
 /** A0の年初snapshot列から候補を作る。SUPPORTINGは interventionTargetIssue で除外される。完全なEventLog等は触らない。 */
 export function extractCandidates(seed: number, mode: PlayMode, snapshots: readonly WorldState[]): PlayCandidateSet {
@@ -27,7 +27,7 @@ export function extractCandidates(seed: number, mode: PlayMode, snapshots: reado
       else e.ranges.push([w.year, w.year])
     }
   }
-  return { seed, mode, candidates: [...acc.values()].map(e => ({ ...e.c, ranges: e.ranges })) }
+  return { seed, mode, configDigest: playConfigDigest(mode), candidates: [...acc.values()].map(e => ({ ...e.c, ranges: e.ranges })) }
 }
 
 export const isPresentIn = (c: PlayCandidate, year: number): boolean =>
@@ -39,7 +39,7 @@ export const candidatesAtYear = (set: PlayCandidateSet, year: number): readonly 
 
 /** 候補が現在の入力条件のものか。違えば表示にも適用にも使わない。 */
 export const candidateSetMatches = (set: PlayCandidateSet | undefined, seed: number, mode: PlayMode): set is PlayCandidateSet =>
-  set !== undefined && set.seed === seed && set.mode === mode
+  set !== undefined && set.seed === seed && set.mode === mode && set.configDigest === playConfigDigest(mode)
 
 /** 候補には識別子を添え、同年生まれの別人も選択できるようにする。 */
 export const candidateLabel = (c: Pick<PlayCandidate, 'id' | 'name' | 'sex' | 'birthYear'>): string =>

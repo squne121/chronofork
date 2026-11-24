@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { titleLabel } from './title-history.ts'
 import { A0FutureContext } from './A0FutureContext.tsx'
-import type { ObservationSlice } from '../branch-play-source.ts'
+import type { ObservationMode, ObservationSlice } from '../branch-play-source.ts'
+import type { CalcInfo } from '../IntegratedOverview.tsx'
 import type { PlayProgress } from '../play-progress.ts'
 import { associationsFor, collectAssociations } from './associations.ts'
 import { FamilyTree } from './FamilyTree.tsx'
@@ -25,6 +26,8 @@ type Props = Readonly<{
   error?:Readonly<{code:string;message:string}>
   seedText:string
   onSeedText:(text:string)=>void
+  mode?:ObservationMode
+  calc?:CalcInfo
   onReset:()=>void
   onLoad:(year:number)=>void
   onCancel:()=>void
@@ -219,17 +222,26 @@ export function ObservationPanel(p:Props){
         {!v&&!p.loading&&<p className="obs-guidance" data-testid="obs-intro">まだ原史の計算結果は表示していません。下のボタンで1250〜1350年の世界を計算します。</p>}
         <p className="note">試験版です。1350年の判定は参考表示で、正式な勝敗ではありません。</p>
         <details className="dev-details" data-testid="obs-dev-info"><summary>開発・検証情報</summary>
-          <p className="note">EXPERIMENTAL / CALIBRATION_ONLY。正式Goalは未設定（goal=null）で、技術判定は正式な勝敗を意味しません。{goal&&' 技術判定コード: '+goal.status}</p></details>
+          <p className="note">EXPERIMENTAL / CALIBRATION_ONLY。正式Goalは未設定（goal=null）で、技術判定は正式な勝敗を意味しません。{goal&&' 技術判定コード: '+goal.status}</p>
+          {v&&<dl className="compare-metrics" data-testid="obs-source">
+            <dt>実行構成ID</dt><dd>{v.configId??v.mode}</dd>
+            {v.configDigest&&<><dt>構成digest</dt><dd>{v.configDigest}</dd></>}
+            <dt>seed</dt><dd>{v.seed}</dd>
+            <dt>計算範囲</dt><dd>{v.counts[0]?.year}〜{v.counts.at(-1)?.year}年</dd>
+            <dt>介入</dt><dd>なし（A0）</dd>
+            {p.calc&&<><dt>実測時間（Worker / 表示まで）</dt><dd data-testid="obs-times">{p.calc.computeMs.toFixed(0)} ms / {p.calc.wallMs.toFixed(0)} ms</dd></>}
+          </dl>}
+        </details>
       </div>
       <div className="obs-seed-tools">
-        <label htmlFor="obs-seed-input">統合A0のseed
+        <label htmlFor="obs-seed-input">{p.mode==='MULTI_HOUSE_EXPERIMENTAL'?'原史A0のseed':'統合A0のseed'}
           <input id="obs-seed-input" data-testid="obs-seed-input" type="text" inputMode="numeric"
             value={p.seedText} disabled={p.loading} aria-invalid={!seedValid}
             onChange={e=>p.onSeedText(e.target.value)}/>
         </label>
         <button type="button" className="cta" data-testid="obs-start"
           onClick={()=>{setEventType('ALL');p.onLoad(v?.year??1250)}} disabled={p.loading||!seedValid}>
-          {!v?'統合A0を計算して観測':seedMatches?'このseedの原史A0を再表示':'このseedで原史A0を計算'}
+          {!v?(p.mode==='MULTI_HOUSE_EXPERIMENTAL'?'原史A0を計算して観測':'統合A0を計算して観測'):seedMatches?'このseedの原史A0を再表示':'このseedで原史A0を計算'}
         </button>
         {v&&!confirmReset&&<button type="button" data-testid="obs-reset" disabled={p.loading} onClick={()=>setConfirmReset(true)}>開発用：旧試験画面へ切り替え</button>}
         {v&&confirmReset&&<span role="alert" data-testid="obs-reset-warning">
@@ -249,7 +261,7 @@ export function ObservationPanel(p:Props){
       {p.progress&&<p data-testid="obs-progress">{p.progress.confirmedYear}年初まで計算済み（A0 {p.progress.transitionsDone}/{p.progress.transitionsTotal}年分）。</p>}
       <button type="button" onClick={()=>{setPendingOpen(undefined);p.onCancel()}} data-testid="obs-cancel">観測の取得を中止</button>
     </div>}
-    {p.error&&<p role="alert" data-testid="obs-error">観測に失敗しました（{p.error.code}）。{p.error.message}</p>}
+    {p.error&&<p role="alert" data-testid="obs-error">{p.error.code==='CANCELLED'?'観測を中断しました':p.error.code==='A0_HALTED'?'原史の計算が停止しました（勝敗ではありません）':'観測に失敗しました'}（{p.error.code}）。{p.error.message}</p>}
     {v&&<div className="obs-body">
       <div className="obs-goal" data-testid="obs-goal">
         <h3>1350年の王朝存続条件 — 何が不足している？</h3>

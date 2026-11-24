@@ -10,7 +10,7 @@ test.describe('DEC-106: 原史の結末から遡る試遊可能性の証拠収�
 
   test('原史の結果・称号・変化年・Event・Trace・内部ID露出を確認する',async({page},testInfo)=>{
     await page.setViewportSize({width:1280,height:900})
-    await page.goto('/')
+    await page.goto('/?run=legacy-integrated')
     const result:{
       revision:string; seed:number; viewport:string; checks:Record<string,unknown>; evidence:string[]
     }={revision:process.env.CHRONOFORK_AUDIT_REVISION??'working-tree',

@@ -182,7 +182,7 @@ export function PersonHistory(p: PersonHistoryProps) {
               この2人の信頼を介入として検討する（{firstB4.fromYear}年）</button>}
         </details>
       })}
-      {candidateSpans.length > 0 && <p className="note">信頼の数値介入が結果を変えられるのは、不採用・保留の理由が信頼値の閾値であるときです。
+      {candidateSpans.length > 0 && <p className="note">信頼の数値介入は、信頼の閾値、相手候補の順位や契約案への同意を通じて判断に影響することがあります。
         血縁や共通祖先の記録が理由のときは、信頼値だけでは変わるとは限りません（変わらないとも断定しません）。</p>}
       <h5>出生の判断（この人物が親として記録されたもの）</h5>
       {birthSpans.length === 0

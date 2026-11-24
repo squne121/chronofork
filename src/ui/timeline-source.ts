@@ -16,6 +16,8 @@ export const DEFAULT_SEED = 1
 export type RunInputs = Readonly<{
   seed: number
   scenarioId: string
+  configId?: string
+  configDigest?: string
   rulesetVersion: string
   rngVersion: string
   evaluatedRuleIds: readonly string[]

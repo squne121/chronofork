@@ -1,6 +1,6 @@
 import {expect,test} from '@playwright/test'
 
-// 観測優先入口 `/` から: 原史A0を観測 → 人物を調べる → 1269年へ移動 → 介入・再計算 →
+// 旧統合の明示入口から: 原史A0を観測 → 人物を調べる → 1269年へ移動 → 介入・再計算 →
 // 結果が初期視点で見つかり、1350年の技術Goal・TERRITORIAL Title・CONTROL_MANDATEを画面から確認する。
 // 技術検証であり正式勝敗ではない。正解値のヒントはUIへ埋め込まず、試験側の入力としてのみ使う。
 const heavy=process.env.CHRONOFORK_E2E_INTEGRATED==='1'
@@ -8,9 +8,9 @@ test.describe('PR #118 観測→介入→結果比較の通し試験（opt-in）
   test.skip(!heavy,'CHRONOFORK_E2E_INTEGRATED=1で100年A0とA1を実計算する')
   test.setTimeout(30*60_000)
 
-  test('/で原史A0観測→人物調査→1269年へ移動→介入→1350年の技術Goalまで画面で確認',async({page})=>{
+  test('旧統合入口で原史A0観測→人物調査→1269年へ移動→介入→1350年の技術Goalまで画面で確認',async({page})=>{
     await page.setViewportSize({width:1280,height:800})
-    await page.goto('/')
+    await page.goto('/?run=legacy-integrated')
     await page.getByTestId('obs-start').click()
     await expect(page.getByTestId('obs-year-label')).toContainText('1250年初',{timeout:12*60_000})
     await expect(page.getByTestId('obs-future-ending')).toContainText('原史A0')
