@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'vitest'
 import {createExperimentalWorld} from '../../../src/scenario/experimental/index.ts'
-import {runPlayBaseline,runPlayComparison} from '../../../src/ui/branch-play-source.ts'
+import {compareYear,runPlayBaseline,runPlayComparison} from '../../../src/ui/branch-play-source.ts'
+import {executeTextCommand} from '../../../src/text/command.ts'
 import {
   debugObservation,playerObservation,summarizeWorld,TextGameSession,textReport,
 } from '../../../src/text/game.ts'
@@ -125,6 +126,64 @@ describe('プレイヤー用テキストI/Oと明示的デバッグの境界（�
     expect(invalid).toMatchObject({ok:false,code:'YEAR_UNAVAILABLE'})
     expect(debugObservation(a0,1351)).toMatchObject({ok:false,code:'YEAR_UNAVAILABLE'})
     expect(textReport(invalid)).toContain('YEAR_UNAVAILABLE')
+  })
+
+  it('再介入の構文拒否は旧A1を保ち、実A0計算後の失敗は破棄し、成功時のみ新A1を採用する',()=>{
+    const s=new TextGameSession(1,'FIXED_APPROVAL')
+    const run=(line:string)=>executeTextCommand(s,line.split(' '))
+    const y=1260
+    expect(run(`observe ${y} A0`)).toEqual(playerObservation(a0,y,'A0'))
+    expect(run('intervene 1260 person-exp-04 person-exp-05 20 5'))
+      .toMatchObject({ok:true,channel:'PLAYER',action:'intervene'})
+    const oldA1=run(`observe ${y} A1`)
+    const oldCompare=run(`compare ${y}`)
+    const oldDebug=run(`debug ${y} A1`)
+    expect(oldA1).toEqual(playerObservation(a1,y,'A1'))
+    expect(oldCompare).toMatchObject({ok:true,channel:'PLAYER',action:'compare'})
+    expect(oldDebug).toMatchObject({ok:true,channel:'DEBUG',action:'debug'})
+
+    const syntax=run('intervene 1260 person-exp-04 person-exp-05 2.0 5')
+    expect(syntax).toMatchObject({ok:false,code:'INVALID_NUMBER',message:expect.stringContaining('既存の履歴は変更していません')})
+    expect(textReport(syntax)).toContain('ERROR INVALID_NUMBER:')
+    expect(run(`observe ${y} A1`)).toEqual(oldA1)
+    expect(run(`compare ${y}`)).toEqual(oldCompare)
+    expect(run(`debug ${y} A1`)).toEqual(oldDebug)
+
+    // 対象の適格性は再計算したA0の介入年初WorldStateで検証される。
+    const failure=run('intervene 1260 no-such person-exp-05 20 5')
+    expect(failure).toMatchObject({ok:false,code:'UNKNOWN_PERSON',message:expect.stringContaining('旧A1は破棄済み')})
+    expect(textReport(failure)).toContain('ERROR UNKNOWN_PERSON:')
+    for(const line of [`observe ${y} A1`,`compare ${y}`,`debug ${y} A1`,`inspect person person-exp-04 ${y} A1`]){
+      expect(run(line)).toMatchObject({ok:false,code:'NO_BRANCH'})
+    }
+    const recoveredA0=run(`observe ${y} A0`)
+    const recoveredDebug=run(`debug ${y} A0`)
+    expect(recoveredA0).toEqual(playerObservation(a0,y,'A0'))
+    expect(recoveredDebug).toEqual(debugObservation(a0,y))
+
+    const next={...INTERVENTION,signedDelta:-20,seed:1,mode:'FIXED_APPROVAL' as const}
+    const replay=runPlayComparison(next)
+    if(!replay.ok)throw new Error('再介入の実A0/A1の準備に失敗')
+    expect(run('intervene 1260 person-exp-04 person-exp-05 -20 5'))
+      .toMatchObject({ok:true,channel:'PLAYER',action:'intervene',data:{input:next,branch:'A1'}})
+    const current=replay.comparison
+    expect(current.a0).toEqual(a0)
+    expect(run(`observe ${y} A0`)).toEqual(recoveredA0)
+    expect(run(`debug ${y} A0`)).toEqual(recoveredDebug)
+    expect(run(`observe ${y} A1`)).toEqual(playerObservation(current.a1,y,'A1'))
+    const debug=run(`debug ${y} A1`)
+    expect(debug).not.toEqual(oldDebug)
+    const traces=current.a1.result.decisionTraces.filter(t=>t.year===y)
+    expect(traces.length).toBeGreaterThan(0)
+    expect(debug).toMatchObject({ok:true,channel:'DEBUG',action:'debug',data:{
+      traces,events:current.a1.result.eventLog.filter(e=>e.year===y),inputs:current.a1.inputs,
+    }})
+    const diff=compareYear(current,y)
+    if(!diff.a0World||!diff.a1World)throw new Error('再介入の比較対象年がありません')
+    expect(run(`compare ${y}`)).toMatchObject({ok:true,channel:'PLAYER',action:'compare',data:{
+      a0:summarizeWorld(diff.a0World),a1:summarizeWorld(diff.a1World),traceSummary:diff.traceSummary,
+      events:diff.events.map(({kind,event})=>({kind,eventId:event.eventId,eventType:event.eventType,involvedRefs:event.involvedRefs})),
+    }})
   })
 
   it('型を迂回した不正branchはA0へ落とさず拒否する',()=>{

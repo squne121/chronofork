@@ -1,0 +1,6 @@
+.desk-document { position: fixed; width: min(420px, 100vw); max-height: calc(100vh - 20px); display: flex; flex-direction: column; background: #fffdf7; color: #24211d; border: 1px solid #756957; box-shadow: 0 4px 18px #0005; }
+.desk-document > header { display: flex; align-items: center; gap: .5rem; padding: .4rem; background: #e7dfcf; }
+.desk-document > header strong { flex: 1; overflow-wrap: anywhere; }
+.desk-document > header button:first-of-type { cursor: move; touch-action: none; }
+.desk-document-body { overflow: auto; padding: .75rem; }
+.desk-document pre { white-space: pre-wrap; overflow-wrap: anywhere; }

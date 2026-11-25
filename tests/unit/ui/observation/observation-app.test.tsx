@@ -3,6 +3,7 @@
 import {cleanup,fireEvent,render,screen} from '@testing-library/react'
 import {afterEach,expect,it,vi, beforeEach} from 'vitest'
 import App from '../../../../src/ui/App.tsx'
+import { playConfigDigest, playConfigId } from '../../../../src/ui/branch-play-source.ts'
 import type {ObservationSlice,PlayInput} from '../../../../src/ui/branch-play-source.ts'
 import {extractCandidates} from '../../../../src/ui/play-candidates.ts'
 import type {CandidatesRunner,ObservationOutcome} from '../../../../src/ui/play-runner.ts'
@@ -18,7 +19,7 @@ it('介入前に実A0を観測すると、旧C004年表を同じ歴史と誤表�
   const world=createExperimentalIntegratedWorld()
   const person=world.persons.find(p=>p.interactionRole!=='SUPPORTING')!
   const observation:ObservationSlice={
-    seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',year:1250,world,
+    seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',configId:playConfigId('INTEGRATED_EXPERIMENTAL'),configDigest:playConfigDigest('INTEGRATED_EXPERIMENTAL'),year:1250,world,
     events:[],traces:[],
     counts:Array.from({length:101},(_,i)=>({year:1250+i,events:0,traces:0})),
     technicalGoal:null,goal:null,status:'COMPLETED',a0Source:'COMPUTED',
@@ -58,7 +59,7 @@ it('観測A0の候補は1250年だけではなく、介入年1251年にも適格
   const person=world.persons.find(p=>p.interactionRole!=='SUPPORTING')!
   const candidates=extractCandidates(20260101,'INTEGRATED_EXPERIMENTAL',[world,{...world,year:1251}])
   const observation:ObservationSlice={
-    seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',year:1250,world,events:[],traces:[],
+    seed:20260101,mode:'INTEGRATED_EXPERIMENTAL',configId:playConfigId('INTEGRATED_EXPERIMENTAL'),configDigest:playConfigDigest('INTEGRATED_EXPERIMENTAL'),year:1250,world,events:[],traces:[],
     counts:Array.from({length:101},(_,i)=>({year:1250+i,events:0,traces:0})),
     technicalGoal:null,goal:null,status:'COMPLETED',a0Source:'COMPUTED',candidates,
     titleHistories:buildTitleHoldingHistories([world],[]),personRecords:buildPersonRecords([world],[],[],buildTitleHoldingHistories([world],[])),titleLossRecords:[],
@@ -102,7 +103,7 @@ it('ユーザー指定のA0 seedを使用し、観測完了後も再観測・旧
   }),{observe:(input:{seed:number;year:number})=>{
     called(input)
     const observation:ObservationSlice={
-      seed:input.seed,mode:'INTEGRATED_EXPERIMENTAL',year:input.year,world,
+      seed:input.seed,mode:'INTEGRATED_EXPERIMENTAL',configId:playConfigId('INTEGRATED_EXPERIMENTAL'),configDigest:playConfigDigest('INTEGRATED_EXPERIMENTAL'),year:input.year,world,
       events:[],traces:[],counts:[],technicalGoal:null,goal:null,status:'COMPLETED',a0Source:'COMPUTED',
       candidates:extractCandidates(input.seed,'INTEGRATED_EXPERIMENTAL',[world]),
       titleHistories:buildTitleHoldingHistories([world],[]),personRecords:buildPersonRecords([world],[],[],buildTitleHoldingHistories([world],[])),titleLossRecords:[],

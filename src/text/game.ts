@@ -164,12 +164,18 @@ export class TextGameSession {
   }
 
   intervene(input:Omit<PlayInput,'mode'|'seed'>):TextResult{
-    // 統合100年実行はメモリが大きいため、比較結果で置き換わる単独A0を先に解放する（必要なら決定的に再計算される）。
+    // 旧A0/A1を次の計算と同時に保持しない。失敗後のA0は参照時に決定的に再計算する。
+    this.comparison=undefined
     this.baseline=undefined
-    const result=runPlayComparison({...input,mode:this.mode,seed:this.seed})
-    if(!result.ok)return fail(result.code,result.message)
+    const noBranch='再計算要求を受け付けたため、旧A1は破棄済みです。現在のA1はありません。'
+    let result
+    try{
+      result=runPlayComparison({...input,mode:this.mode,seed:this.seed})
+    }catch(error){
+      return fail('UNEXPECTED_ERROR',`${error instanceof Error?error.message:String(error)}。${noBranch}`)
+    }
+    if(!result.ok)return fail(result.code,`${result.message}。${noBranch}`)
     this.comparison=result.comparison
-    this.baseline=result.comparison.a0
     const {a0,a1}=result.comparison
     return success('PLAYER','intervene',{
       provenance:'EXPERIMENTAL / CALIBRATION_ONLY',

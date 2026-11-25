@@ -100,3 +100,29 @@
 .obs-loss h4 {margin:0 0 0.2rem;}
 [hidden]{display:none !important;}
 @media(max-width:700px){.obs-history-facts{grid-template-columns:1fr;}}
+
+/* 編纂机：通常入口だけに適用し、旧試験・既存 A1/A2 表示の配置には触れない。 */
+.desk-status {padding-block:0.4rem;gap:0.4rem 1rem;font-size:0.85rem;}
+.desk-status .trial-help {margin:0;flex-basis:auto;}
+.obs-desk .obs-head {align-items:center;}
+@media(min-width:761px){
+  .obs-desk .obs-head-with-time {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,28rem);}
+  .obs-head-with-time .obs-year-nav {grid-column:2;grid-row:1 / span 2;}
+}
+.obs-desk .obs-head h2 {margin:0;font-size:1.15rem;}
+.obs-desk .obs-question {margin:0.25rem 0;font-size:1rem;}
+.obs-desk .obs-head .note {margin:0.25rem 0;}
+.obs-desk .obs-seed-tools input {width:9rem;}
+.obs-desk .obs-year-nav {margin-inline-start:auto;width:min(100%,28rem);}
+.obs-desk .obs-year-nav-playing {width:min(100%,17rem);}
+.obs-desk .obs-year-nav-playing output {font-size:0.9rem;}
+.obs-desk-jumps {display:flex;gap:0.4rem;margin-block:0.4rem;}
+.obs-desk-grid {display:grid;grid-template-columns:minmax(0,4fr) minmax(0,6fr);gap:1rem;}
+.obs-desk-grid>section {min-width:0;}
+.obs-desk .obs-person {margin-block-start:1rem;border:1px solid var(--line);border-radius:6px;padding:0.65rem;}
+.obs-world-inline {display:grid;gap:0.65rem;}
+.obs-year-index {display:grid;gap:0.35rem;margin-block:0.75rem;}
+.desk-region-map {height:17rem;}
+.desk-region-map .region-node {width:30%;overflow-wrap:anywhere;}
+.desk-map-events {font-weight:700;}
+@media(max-width:760px){.obs-desk-grid{grid-template-columns:minmax(0,1fr);}}

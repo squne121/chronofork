@@ -48,10 +48,11 @@ export function executeTextCommand(session:TextGameSession,parts:readonly string
     return session.inspect(kind as InspectKind,id,y.value,b.branch)
   }
   if(verb==='intervene'){
-    if(args.length!==5)return err('INVALID_COMMAND','interveneには年・人物ID×2・補正値・年数が必要です')
-    const y=intArg('年',args[0]); if(!y.ok)return y
-    const d=intArg('補正値',args[3],undefined,true); if(!d.ok)return d
-    const n=intArg('年数',args[4]); if(!n.ok)return n
+    const unchanged='再計算要求を受け付けていないため、既存の履歴は変更していません。'
+    if(args.length!==5)return err('INVALID_COMMAND',`interveneには年・人物ID×2・補正値・年数が必要です。${unchanged}`)
+    const y=intArg('年',args[0]); if(!y.ok)return err(y.code,`${y.message}。${unchanged}`)
+    const d=intArg('補正値',args[3],undefined,true); if(!d.ok)return err(d.code,`${d.message}。${unchanged}`)
+    const n=intArg('年数',args[4]); if(!n.ok)return err(n.code,`${n.message}。${unchanged}`)
     return session.intervene({year:y.value,firstPersonId:args[1],secondPersonId:args[2],
       signedDelta:d.value,durationYears:n.value})
   }

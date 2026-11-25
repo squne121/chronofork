@@ -4,7 +4,7 @@ import {
   createExperimentalWorld, createExperimentalOrdinaryLegalTrial, prepareExperimentalGoalContext, EXPERIMENTAL_NALVEN_GOAL,
   createExperimentalIntegratedEvaluators, createExperimentalIntegratedTimelineOptions, integratedRunConfigIdentity,
   createMultiHouseWorld, createMultiHouseEvaluators, multiHouseRunConfigIdentity, multiHouseRunConfigDigest,
-  MULTI_HOUSE_RUN_CONDITIONS, MULTI_HOUSE_GOAL,
+  MULTI_HOUSE_RUN_CONDITIONS, MULTI_HOUSE_GOAL, createMultiHouseDemandWorld, createMultiHouseDemandEvaluators,
   INTEGRATED_PAIR, INTEGRATED_SEED, INTEGRATED_START_YEAR, INTEGRATED_TRUST_REDUCTION,
 } from '../scenario/experimental/index.ts'
 import { rngVersion } from '../simulation/random.ts'
@@ -24,8 +24,10 @@ import type { EvaluatorMap, TimelineResult, YearProgress } from '../simulation/e
 import { normalizePersonPair } from '../simulation/intervention/index.ts'
 import type { MarriageApprovalEvidence } from '../simulation/rules/a/index.ts'
 import { EXPERIMENTAL_TUNING } from '../simulation/tuning.ts'
+import { hasDemandTrust, isCompleteLimitedA0, limitedPlayConfig, LIMITED_PLAYTEST_DRIFT, LIMITED_PLAYTEST_SEED } from './desk/data/limited-config.ts'
+import type { PlayConfiguration } from './desk/data/limited-config.ts'
 import type { TimelineRun } from './timeline-source.ts'
-import { extractCandidates } from './play-candidates.ts'
+import { extractCandidatesFromA0 } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
 import { isObservationFocusEvent } from './integrated-overview.ts'
 import { buildTitleHoldingHistories } from './observation/title-history.ts'
@@ -81,10 +83,12 @@ export const playModeLabel=(mode:PlayMode):string=>mode==='MULTI_HOUSE_EXPERIMEN
 // 同一のブラウザビルド内で不変。キャッシュ本体は短いdigestではなく完全なidentityで照合する。
 let multiHouseDigest:string|undefined
 let multiHouseIdentity:ReturnType<typeof multiHouseRunConfigIdentity>|undefined
-export function playConfigId(mode:PlayMode):string{
+export function playConfigId(mode:PlayMode,configuration?:PlayConfiguration):string{
+  if(configuration==='LIMITED_PLAYTEST')return limitedPlayConfig().configId
   return mode==='MULTI_HOUSE_EXPERIMENTAL'?MULTI_HOUSE_RUN_CONDITIONS.configId:mode
 }
-export function playConfigDigest(mode:PlayMode):string|undefined{
+export function playConfigDigest(mode:PlayMode,configuration?:PlayConfiguration):string|undefined{
+  if(configuration==='LIMITED_PLAYTEST')return limitedPlayConfig().configDigest
   return mode==='MULTI_HOUSE_EXPERIMENTAL'?(multiHouseDigest??=multiHouseRunConfigDigest()):undefined
 }
 /**
@@ -97,6 +101,7 @@ export const INTEGRATED_PLAY_DEFAULTS=Object.freeze({
 })
 export type PlayInput=Readonly<{
   mode?:PlayMode
+  configuration?:PlayConfiguration
   seed:number
   year:number
   firstPersonId:Id
@@ -187,17 +192,16 @@ function createEvaluators(w:WorldState,ledger:readonly StatModifier[],book:Legal
   if(!r.ok)throw new Error('EVALUATOR_FACTORY_FAILED:'+r.issues.join(','))
   return r.evaluators
 }
-function buildInputs(seed:number,ids:readonly string[],branchId:string,mode:PlayMode):TimelineRun['inputs']{
+function buildInputs(seed:number,ids:readonly string[],branchId:string,mode:PlayMode,configuration?:PlayConfiguration):TimelineRun['inputs']{
   return {
     seed,scenarioId:'experimental / 亡国の王冠 / '+playModeLabel(mode)+' / '+branchId,
     rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,rngVersion,
     evaluatedRuleIds:ids,
-    configId:playConfigId(mode),
-    configDigest:playConfigDigest(mode),
+    ...(configuration==='LIMITED_PLAYTEST'?limitedPlayConfig():{configId:playConfigId(mode),configDigest:playConfigDigest(mode)}),
   }
 }
 /** Branchは正式な勝敗・coverage全域を持たないので、試験表示専用の読取TimelineResultに明示変換する。 */
-function asTimelineRun(branch:Branch,parent:TimelineRun,mode:PlayMode):TimelineRun{
+function asTimelineRun(branch:Branch,parent:TimelineRun,mode:PlayMode,configuration?:PlayConfiguration):TimelineRun{
   const coverage=branch.recompute?.suffixCoverage??parent.result.coverage
   const finalWorld=branch.snapshots[branch.snapshots.length-1]
   const technicalGoal=branch.status==='COMPLETED'&&finalWorld?.year===GOAL_YEAR
@@ -214,7 +218,8 @@ function asTimelineRun(branch:Branch,parent:TimelineRun,mode:PlayMode):TimelineR
     },
   }
   return {
-    inputs:buildInputs(branch.seed,branch.evaluatorProfile.ruleIds,branch.branchId,mode),
+    inputs:buildInputs(branch.seed,branch.evaluatorProfile.ruleIds,branch.branchId,mode,configuration),
+    ...(configuration==='LIMITED_PLAYTEST'?{playLedger:branch.ledger}:{}),
     initialWorld:parent.initialWorld,result,playModifierIds:branch.ledger.map(m=>m.modifierId),
   }
 }
@@ -226,7 +231,7 @@ const progressHook=(branch:ProgressBranch,observer:ProgressObserver|undefined)=>
   })}:{}
 type IntegratedSetup=ReturnType<typeof createExperimentalIntegratedTimelineOptions>
 type RootContext=Readonly<{
-  seed:number;mode:PlayMode;initial:WorldState
+  seed:number;mode:PlayMode;initial:WorldState;configuration?:PlayConfiguration
   /** FIXED_APPROVAL / ORDINARY_LAW のみ。統合モードは自前の法令・Goal構成を持つ。 */
   legal?:Extract<ReturnType<typeof prepareExperimentalGoalContext>,{ok:true}>
   ordinaryTrial?:OrdinaryTrial
@@ -235,11 +240,16 @@ type RootContext=Readonly<{
 }>
 type Failure=Readonly<{ok:false;code:string;message:string}>
 /** A0単独実行とA0/A1比較が共有する検証・法的証拠・初期世界の準備（別のゲーム計算を作らない）。 */
-function prepareRoot(seed:number,mode:PlayMode):Readonly<{ok:true;context:RootContext}>|Failure{
+function prepareRoot(seed:number,mode:PlayMode,configuration?:PlayConfiguration):Readonly<{ok:true;context:RootContext}>|Failure{
   if(!isPlayMode(mode))
     return {ok:false,code:'INVALID_MODE',message:'試験用法制モードが不正です'}
   if(!Number.isSafeInteger(seed)||seed<0)
     return {ok:false,code:'INVALID_SEED',message:'seedは0以上の安全整数が必要です'}
+  if(configuration!==undefined){
+    if(configuration!=='LIMITED_PLAYTEST'||mode!=='MULTI_HOUSE_EXPERIMENTAL'||seed!==LIMITED_PLAYTEST_SEED)
+      return {ok:false,code:'INVALID_CONFIGURATION',message:'限定試遊の構成・モード・seed が一致しません'}
+    return {ok:true,context:{seed,mode,configuration,initial:createMultiHouseDemandWorld(LIMITED_PLAYTEST_DRIFT)}}
+  }
   if(mode==='INTEGRATED_EXPERIMENTAL'){
     const integrated=createExperimentalIntegratedTimelineOptions('A0-play')
     return {ok:true,context:{seed,mode,initial:integrated.world,integrated}}
@@ -260,7 +270,8 @@ function prepareRoot(seed:number,mode:PlayMode):Readonly<{ok:true;context:RootCo
 /** A0の評価器生成と年次実行。例外は呼び出し側のtry/catchで扱う。 */
 function runRootTimeline(c:RootContext,observer?:ProgressObserver):
   Readonly<{ok:true;timeline:TimelineResult;evaluators:EvaluatorMap;a0:TimelineRun}>|Failure{
-  const evaluators=c.integrated?c.integrated.options.evaluators
+  const evaluators=c.configuration==='LIMITED_PLAYTEST'?createMultiHouseDemandEvaluators(c.initial,[],LIMITED_PLAYTEST_DRIFT)
+    :c.integrated?c.integrated.options.evaluators
     :c.mode==='MULTI_HOUSE_EXPERIMENTAL'?createMultiHouseEvaluators(c.initial,[])
     :createEvaluators(c.initial,[],c.legal!.book,c.mode,c.ordinaryTrial)
   const timeline=c.integrated
@@ -271,12 +282,14 @@ function runRootTimeline(c:RootContext,observer?:ProgressObserver):
   if(timeline.status!=='COMPLETED')
     return {ok:false,code:'A0_HALTED',message:JSON.stringify(timeline.halt)}
   return {ok:true,timeline,evaluators,a0:{
-    inputs:buildInputs(c.seed,Object.keys(evaluators),'A0-play',c.mode),
+    inputs:buildInputs(c.seed,Object.keys(evaluators),'A0-play',c.mode,c.configuration),
+    ...(c.configuration==='LIMITED_PLAYTEST'?{playLedger:[]}:{}),
     result:timeline,initialWorld:c.initial,playModifierIds:[],
   }}
 }
 /** A1の評価器: fork年初のWorldStateと新ledgerから、A0と同じ構成で再生成する。 */
 function forkEvaluators(c:RootContext,state:WorldState,ledger:readonly StatModifier[]):EvaluatorMap{
+  if(c.configuration==='LIMITED_PLAYTEST')return createMultiHouseDemandEvaluators(state,ledger,LIMITED_PLAYTEST_DRIFT)
   if(c.mode==='MULTI_HOUSE_EXPERIMENTAL')return createMultiHouseEvaluators(state,ledger)
   return c.integrated?createExperimentalIntegratedEvaluators(state,ledger)
     :createEvaluators(state,ledger,c.legal!.book,c.mode,c.ordinaryTrial)
@@ -284,6 +297,7 @@ function forkEvaluators(c:RootContext,state:WorldState,ledger:readonly StatModif
 /** A0を一意に決める入力すべて。介入(年・人物・補正・期間)は含めない。 */
 function a0CacheKeyOf(c:RootContext):string{
   const common={mode:c.mode,seed:c.seed,rngVersion,rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion}
+  if(c.configuration==='LIMITED_PLAYTEST')return buildA0CacheKey({...common,identity:limitedPlayConfig().configIdentity})
   // 複数家門のidentityは初期世界・tuningも含むので、同じ内容を二重にキーへ入れない。
   if(c.mode==='MULTI_HOUSE_EXPERIMENTAL')return buildA0CacheKey({...common,multiHouse:multiHouseIdentity??=multiHouseRunConfigIdentity()})
   return buildA0CacheKey({
@@ -294,8 +308,30 @@ function a0CacheKeyOf(c:RootContext):string{
         calibration:BIRTH_MORTALITY_CALIBRATION,trustBase:TRUST_BASE,approval:TEST_MARRIAGE_APPROVAL}}),
   })
 }
+function cachedRoot(c:RootContext,cache:SingleA0Cache|undefined,key:string){
+  const entry=cache?.get(key)
+  if(!entry||c.configuration===undefined)return entry
+  const {root,a0}=entry
+  if(root.branchId==='A0-play'&&root.seed===c.seed&&root.ledger.length===0&&
+    a0.playLedger===root.ledger&&isCompleteLimitedA0(a0))return entry
+  cache?.clear()
+  return undefined
+}
+
 export const playModifierId=(year:number,pair:readonly [Id,Id],signedDelta:number,durationYears:number):Id=>
   'ui:modifier:'+JSON.stringify([year,pair,signedDelta,durationYears])
+
+/** 入力から期待される介入。履歴照合では ID だけでなく実台帳の全項目と比較する。 */
+export function playModifier(input:PlayInput,pair:readonly [Id,Id]):StatModifier{
+  return {
+    modifierId:playModifierId(input.year,pair,input.signedDelta,input.durationYears),
+    interventionId:'ui:intervention:'+JSON.stringify([input.year,pair]),
+    targetRef:{kind:'PERSON_PAIR',ids:pair},statKey:PAIR_TRUST_STAT_KEY,
+    signedDelta:input.signedDelta,startYear:input.year,
+    endExclusiveYear:input.year+input.durationYears,
+    decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
+  }
+}
 
 export type PlayRunOptions=Readonly<{
   /** 指定したときだけA0を保持/再利用する。省略時は従来どおり毎回計算する。 */
@@ -328,19 +364,14 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,opt
     return reject('INVALID_DURATION','第2介入の期間は1年以上、1350年を超えない整数が必要です')
   if(secondPair&&pair[0]===secondPair[0]&&pair[1]===secondPair[1])
     return reject('DUPLICATE_INTERVENTION','同年・同対象・同一statKeyへの重複介入は禁止されています')
-  const prep=prepareRoot(input.seed,mode)
+  const prep=prepareRoot(input.seed,mode,input.configuration)
   if(!prep.ok)return reject(prep.code,prep.message)
-  const modifier:StatModifier={
-    modifierId:playModifierId(input.year,pair,input.signedDelta,input.durationYears),
-    interventionId:'ui:intervention:'+JSON.stringify([input.year,pair]),
-    targetRef:{kind:'PERSON_PAIR',ids:pair},statKey:PAIR_TRUST_STAT_KEY,
-    signedDelta:input.signedDelta,startYear:input.year,
-    endExclusiveYear:input.year+input.durationYears,
-    decayPolicy:'NONE',ruleVersion:STAT_MODIFIER_RULE_VERSION,
-  }
+  if(input.configuration==='LIMITED_PLAYTEST'&&followup)
+    return reject('UNSUPPORTED_FOLLOWUP','限定試遊入口は A0/A1 の比較に対応しています')
+  const modifier=playModifier(input,pair)
   try{
     const key=options.cache?a0CacheKeyOf(prep.context):''
-    const cached=options.cache?.get(key)
+    const cached=cachedRoot(prep.context,options.cache,key)
     let root:Branch,a0:TimelineRun,a0Source:A0Source
     if(cached){
       root=cached.root;a0=cached.a0;a0Source='REUSED'
@@ -353,7 +384,7 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,opt
       if(!made.ok)return reject('A0_ROOT_REJECTED',made.code+':'+made.message)
       root=made.branch;a0Source='COMPUTED'
       // 表示用A0はrootの凍結済み配列を共有する(同内容の複製を二重に保持しない)。
-      a0={...rootRun.a0,result:{...timeline,snapshots:root.snapshots,eventLog:root.eventLog,decisionTraces:root.decisionTraces}}
+      a0={...rootRun.a0,...(input.configuration==='LIMITED_PLAYTEST'?{playLedger:root.ledger}:{}),result:{...timeline,snapshots:root.snapshots,eventLog:root.eventLog,decisionTraces:root.decisionTraces}}
       options.cache?.put({key,root,a0,counts:countsOf(root)})
     }
     // 対象はfork年初の実WorldState（A0の同一snapshot）で検査する。1250年に未登場の後世KEY人物も対象にできる。
@@ -369,7 +400,7 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,opt
     })
     if(!rerun.ok)return reject('FORK_REJECTED',rerun.code+':'+rerun.message)
     if(rerun.branch.status!=='COMPLETED')return reject('A1_HALTED',JSON.stringify(rerun.branch.halt))
-    const a1=asTimelineRun(rerun.branch,a0,mode)
+    const a1=asTimelineRun(rerun.branch,a0,mode,input.configuration)
     if(!followup||!secondPair)
       return {ok:true,comparison:{mode,input,modifier,root,branch:rerun.branch,a0,a1,a0Source}}
     const secondForkWorld=rerun.branch.snapshots[input.year-rerun.branch.startYear]
@@ -415,8 +446,8 @@ export type PlayBaselineResult =
   | Readonly<{ok:true;a0:TimelineRun}>
   | Readonly<{ok:false;code:string;message:string}>
 
-export function runPlayBaseline(seed:number,mode:PlayMode=PLAY_DEFAULT_MODE):PlayBaselineResult{
-  const prep=prepareRoot(seed,mode)
+export function runPlayBaseline(seed:number,mode:PlayMode=PLAY_DEFAULT_MODE,configuration?:PlayConfiguration):PlayBaselineResult{
+  const prep=prepareRoot(seed,mode,configuration)
   if(!prep.ok)return prep
   try{
     const run=runRootTimeline(prep.context)
@@ -467,6 +498,10 @@ export type ObservationSlice = Readonly<{
   mode:ObservationMode
   configId?:string
   configDigest?:string
+  configuration?:PlayConfiguration
+  configIdentity?:string
+  branchId?:string
+  playLedger?:readonly StatModifier[]
   year:number
   world:WorldState
   events:readonly EventLogEntry[]
@@ -487,7 +522,7 @@ export type ObservationSlice = Readonly<{
   status:TimelineResult['status']
   a0Source:A0Source
 }>
-export type ObservationInput = Readonly<{seed:number;mode:PlayMode;year:number}>
+export type ObservationInput = Readonly<{seed:number;mode:PlayMode;year:number;configuration?:PlayConfiguration}>
 export type ObservationResult =
   | Readonly<{ok:true;observation:ObservationSlice}>
   | Readonly<{ok:false;code:string;message:string}>
@@ -498,11 +533,14 @@ const observationTitleHistoryCache=new WeakMap<TimelineRun,readonly TitleHolding
 const observationRecordCache=new WeakMap<TimelineRun,Readonly<{persons:readonly PersonRecord[];losses:readonly TitleLossRecord[]}>>()
 /** 実A0の確定結果だけを読む。UIが計算規則や架空の歴史を生成しないための純粋関数。 */
 export function sliceA0Observation(
-  a0:TimelineRun,year:number,mode:ObservationMode,a0Source:A0Source,
+  a0:TimelineRun,year:number,mode:ObservationMode,a0Source:A0Source,configuration?:PlayConfiguration,
 ):ObservationSlice|undefined{
   if(a0.pending||a0.logsOmitted||a0.result.status!=='COMPLETED'||a0.result.branchId!=='A0-play'||
-    a0.inputs.seed!==a0.result.seed||a0.inputs.configId!==playConfigId(mode)||
-    a0.inputs.configDigest!==playConfigDigest(mode))return undefined
+    a0.inputs.seed!==a0.result.seed||a0.inputs.configId!==playConfigId(mode,configuration)||
+    a0.inputs.configDigest!==playConfigDigest(mode,configuration)||
+    a0.inputs.configIdentity!==(configuration==='LIMITED_PLAYTEST'?limitedPlayConfig().configIdentity:undefined))return undefined
+  if(configuration==='LIMITED_PLAYTEST' ? mode!=='MULTI_HOUSE_EXPERIMENTAL'||!isCompleteLimitedA0(a0)
+    : a0.result.snapshots.some(hasDemandTrust))return undefined
   const world=a0.result.snapshots.find(w=>w.year===year)
   if(!world)return undefined
   const counts=Array.from({length:GOAL_YEAR-START_YEAR+1},(_,i)=>({year:START_YEAR+i,events:0,traces:0,focusEvents:0}))
@@ -523,7 +561,8 @@ export function sliceA0Observation(
   let candidates=observationCandidateCache.get(a0)
   if(!candidates){
     // 通常の候補APIと同じ適格性判定を使い、101年初の存在区間を保持する。
-    candidates=extractCandidates(a0.inputs.seed,mode,a0.result.snapshots)
+    candidates=extractCandidatesFromA0(a0,mode,configuration)
+    if(!candidates)return undefined
     observationCandidateCache.set(a0,candidates)
   }
   let titleHistories=observationTitleHistoryCache.get(a0)
@@ -541,6 +580,8 @@ export function sliceA0Observation(
   const knownA0Ending=buildA0KnownEnding(world,finalWorld)
   return {
     seed:a0.inputs.seed,mode,configId:a0.inputs.configId,configDigest:a0.inputs.configDigest,year,world,events,traces,counts,candidates,titleHistories,knownA0Ending,
+    ...(configuration==='LIMITED_PLAYTEST'?{configuration,configIdentity:a0.inputs.configIdentity,
+      branchId:a0.result.branchId,playLedger:a0.playLedger}:{}),
     personRecords:records.persons,titleLossRecords:records.losses,
     goal:a0.result.goal,technicalGoal:a0.result.technicalGoal,status:a0.result.status,a0Source,
   }
@@ -553,11 +594,11 @@ export function runPlayObservation(
   if(!isObservationMode(input.mode))return {ok:false,code:'INVALID_MODE',message:'観測は複数家門構成と旧統合試験構成に対応しています'}
   if(!Number.isSafeInteger(input.year)||input.year<START_YEAR||input.year>GOAL_YEAR)
     return {ok:false,code:'INVALID_YEAR',message:'観測年は1250〜1350年の整数が必要です'}
-  const prep=prepareRoot(input.seed,input.mode)
+  const prep=prepareRoot(input.seed,input.mode,input.configuration)
   if(!prep.ok)return prep
   try{
     const key=a0CacheKeyOf(prep.context)
-    const cached=cache.get(key)
+    const cached=cachedRoot(prep.context,cache,key)
     let a0:TimelineRun
     let source:A0Source
     if(cached){a0=cached.a0;source='REUSED'}
@@ -566,12 +607,12 @@ export function runPlayObservation(
       if(!r.ok)return r
       const root=createRootBranch(r.timeline,[],r.evaluators)
       if(!root.ok)return {ok:false,code:'A0_ROOT_REJECTED',message:root.code+':'+root.message}
-      a0={...r.a0,result:{...r.timeline,snapshots:root.branch.snapshots,
+      a0={...r.a0,...(input.configuration==='LIMITED_PLAYTEST'?{playLedger:root.branch.ledger}:{}),result:{...r.timeline,snapshots:root.branch.snapshots,
         eventLog:root.branch.eventLog,decisionTraces:root.branch.decisionTraces}}
       cache.put({key,root:root.branch,a0,counts:countsOf(root.branch)})
       source='COMPUTED'
     }
-    const observation=sliceA0Observation(a0,input.year,input.mode,source)
+    const observation=sliceA0Observation(a0,input.year,input.mode,source,input.configuration)
     return observation?{ok:true,observation}
       :{ok:false,code:'UNCOMPUTED_YEAR',message:'この年の年初WorldStateは確定していません'}
   }catch(error){

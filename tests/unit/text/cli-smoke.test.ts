@@ -22,7 +22,7 @@ describe('NodeテキストCLIの起動・実世界操作',()=>{
 
   it('A0観測→介入→A1観測→比較→debugの一連操作が成功し、同一入力で出力が完全一致する',()=>{
     const script=['observe 1260 A0','intervene 1260 person-exp-04 person-exp-05 20 5',
-      'observe 1262 A1','compare 1300','debug 1260 A1 RULE-B-004','debug 1260 A0','exit'].join('\n')+'\n'
+      'observe 1262 A1','compare 1300','debug 1260 A1 B-004','debug 1260 A0','exit'].join('\n')+'\n'
     const a=cli(J,script); const b=cli(J,script)
     expect(a.p.status).toBe(0)
     expect(a.out.map(o=>o.ok)).toEqual([true,true,true,true,true,true])
@@ -30,6 +30,9 @@ describe('NodeテキストCLIの起動・実世界操作',()=>{
     expect(a.lines).toEqual(b.lines)
     for(const o of a.out.slice(0,4))expect(JSON.stringify(o)).not.toContain('technicalGoal')
     expect(a.out[4].data).toHaveProperty('technicalGoal')
+    const traces=a.out[4].data?.traces as {ruleId:string;year:number}[]
+    expect(traces.length).toBeGreaterThan(0)
+    expect(traces.every(t=>t.ruleId==='B-004'&&t.year===1260)).toBe(true)
   },180000)
 
   it('不正なbranchはobserve・inspect・debugのいずれもA0へ変換せずエラーにする',()=>{

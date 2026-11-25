@@ -5,12 +5,13 @@ import type { ObservationInput, ObservationSlice, PlayInput, PlayView } from './
 import { toDisplayView } from './play-view.ts'
 import { runPlayCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
+import type { PlayConfiguration } from './desk/data/limited-config.ts'
 import type { PlayMode } from './branch-play-source.ts'
 import type { PlayProgress } from './play-progress.ts'
 import { SingleA0Cache } from './a0-cache.ts'
 
 /** 比較の再計算(input)か、人物選択用のA0候補の取得(candidates)。候補は必要な人物情報だけを返す。 */
-export type WorkerRequest=Readonly<{input:PlayInput}>|Readonly<{observe:ObservationInput}>|Readonly<{candidates:Readonly<{seed:number;mode:PlayMode}>}>
+export type WorkerRequest=Readonly<{input:PlayInput}>|Readonly<{observe:ObservationInput}>|Readonly<{candidates:Readonly<{seed:number;mode:PlayMode;configuration?:PlayConfiguration}>}>
 export type WorkerResponse=
   | Readonly<{kind:'PROGRESS';progress:PlayProgress}>
   /** A0を再計算せず保存済みを使う。A0の年次進捗は送らない(再計算したように見せない)。 */
@@ -33,7 +34,7 @@ ctx.onmessage=e=>{
   let response:WorkerResponse
   try{
     if('candidates' in e.data){
-      const c=runPlayCandidates(e.data.candidates.seed,e.data.candidates.mode)
+      const c=runPlayCandidates(e.data.candidates.seed,e.data.candidates.mode,e.data.candidates.configuration)
       const computeMs=performance.now()-t0
       ctx.postMessage(c.ok?{ok:true,candidates:c.set,computeMs}:{ok:false,code:c.code,message:c.message,computeMs})
       return
