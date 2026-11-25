@@ -82,7 +82,10 @@ const cmp = (a0: [EventLogEntry[], DecisionTrace[]], a1: [EventLogEntry[], Decis
 /** 順序・内容・省略件数に加え、A1要素がA0要素と同一オブジェクトとして共有されるかの配置まで一致を見る。 */
 function expectSameView(c: PlayComparison): PlayView {
   const o = legacyToDisplayView(c), n = toDisplayView(c)
-  expect(n.displayOmission as DisplayOmission).toEqual(o.displayOmission)
+  const { byYear, ...legacyOmission } = n.displayOmission!
+  expect(legacyOmission).toEqual(o.displayOmission)
+  expect(byYear).toEqual(Object.keys(legacyOmission.omittedEventsByType).length || Object.keys(legacyOmission.omittedTracesByRule).length
+    ? { 1250: { omittedEventsByType: legacyOmission.omittedEventsByType, omittedTracesByRule: legacyOmission.omittedTracesByRule } } : {})
   for (const side of ['a0', 'a1'] as const) {
     expect(n[side].result.eventLog).toEqual(o[side].result.eventLog)
     expect(n[side].result.decisionTraces).toEqual(o[side].result.decisionTraces)
@@ -96,7 +99,11 @@ function expectSameView(c: PlayComparison): PlayView {
   expect(sharing(n)).toEqual(sharing(o))
   expect(n.a0.result.snapshots).toBe(c.a0.result.snapshots)
   expect(n.a1.result.technicalGoal).toBe(c.a1.result.technicalGoal)
-  expect(JSON.stringify(n)).toBe(JSON.stringify(o))
+  const { logsOmitted: mark0, ...a0 } = n.a0
+  const { logsOmitted: mark1, ...a1 } = n.a1
+  const marked = Object.keys(byYear!).length > 0 ? true : undefined
+  expect([mark0, mark1]).toEqual([marked, marked])
+  expect(JSON.stringify({ ...n, a0, a1, displayOmission: legacyOmission })).toBe(JSON.stringify(o))
   return n
 }
 
@@ -188,7 +195,9 @@ longTest('toDisplayView: 実100年(CALIBRATION_ONLY)で参照実装と一致す�
     const t0 = performance.now(); const o = legacyToDisplayView(r.comparison); const tOld = performance.now() - t0
     const t1 = performance.now(); const n = toDisplayView(r.comparison); const tNew = performance.now() - t1
     console.info(`CHRONOFORK_DISPLAY_VIEW year=${year} legacyMs=${Math.round(tOld)} newMs=${Math.round(tNew)}`)
-    expect(n.displayOmission).toEqual(o.displayOmission)
+    const { byYear, ...legacyOmission } = n.displayOmission!
+    expect(legacyOmission).toEqual(o.displayOmission)
+    expect(byYear).toBeDefined()
     for (const side of ['a0', 'a1'] as const) {
       const a = n[side].result, b = o[side].result
       expect(a.eventLog.length).toBe(b.eventLog.length)

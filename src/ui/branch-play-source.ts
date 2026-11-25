@@ -81,6 +81,9 @@ export const playModeLabel=(mode:PlayMode):string=>mode==='MULTI_HOUSE_EXPERIMEN
 // 同一のブラウザビルド内で不変。キャッシュ本体は短いdigestではなく完全なidentityで照合する。
 let multiHouseDigest:string|undefined
 let multiHouseIdentity:ReturnType<typeof multiHouseRunConfigIdentity>|undefined
+export function playConfigId(mode:PlayMode):string{
+  return mode==='MULTI_HOUSE_EXPERIMENTAL'?MULTI_HOUSE_RUN_CONDITIONS.configId:mode
+}
 export function playConfigDigest(mode:PlayMode):string|undefined{
   return mode==='MULTI_HOUSE_EXPERIMENTAL'?(multiHouseDigest??=multiHouseRunConfigDigest()):undefined
 }
@@ -115,11 +118,15 @@ export type SecondPlayInput=Readonly<{
  * ブラウザへ転送する表示用ビューが、完全な結果から省略した件数。
  * 省略はA0/A1で完全に同一かつ相互参照が閉じている高頻度の信頼更新(PERSON_PAIR_TRUST_SET / B-009)に限る。
  */
-export type DisplayOmission=Readonly<{
-  fullEventCount:Readonly<{a0:number;a1:number}>
-  fullTraceCount:Readonly<{a0:number;a1:number}>
+export type OmittedRecordCounts=Readonly<{
   omittedEventsByType:Readonly<Record<string,number>>
   omittedTracesByRule:Readonly<Record<string,number>>
+}>
+export type DisplayOmission=OmittedRecordCounts&Readonly<{
+  fullEventCount:Readonly<{a0:number;a1:number}>
+  fullTraceCount:Readonly<{a0:number;a1:number}>
+  /** 両枝共通。キーのない年は省略なし。旧ビューでは年別内訳自体がない。 */
+  byYear?:Readonly<Partial<Record<number,OmittedRecordCounts>>>
 }>
 /** UIが読む範囲。Worker経由では完全版のroot/branchを持ち込まず、このビューだけを受け取る。 */
 export type PlayView=Readonly<{
@@ -185,7 +192,7 @@ function buildInputs(seed:number,ids:readonly string[],branchId:string,mode:Play
     seed,scenarioId:'experimental / 亡国の王冠 / '+playModeLabel(mode)+' / '+branchId,
     rulesetVersion:EXPERIMENTAL_TUNING.rulesetVersion,rngVersion,
     evaluatedRuleIds:ids,
-    configId:mode==='MULTI_HOUSE_EXPERIMENTAL'?MULTI_HOUSE_RUN_CONDITIONS.configId:mode,
+    configId:playConfigId(mode),
     configDigest:playConfigDigest(mode),
   }
 }
@@ -208,7 +215,7 @@ function asTimelineRun(branch:Branch,parent:TimelineRun,mode:PlayMode):TimelineR
   }
   return {
     inputs:buildInputs(branch.seed,branch.evaluatorProfile.ruleIds,branch.branchId,mode),
-    initialWorld:parent.initialWorld,result,
+    initialWorld:parent.initialWorld,result,playModifierIds:branch.ledger.map(m=>m.modifierId),
   }
 }
 /** エンジンの確定済み年次通知を、枝を明示した小さなDTOへ変換する（観測専用）。 */
@@ -265,7 +272,7 @@ function runRootTimeline(c:RootContext,observer?:ProgressObserver):
     return {ok:false,code:'A0_HALTED',message:JSON.stringify(timeline.halt)}
   return {ok:true,timeline,evaluators,a0:{
     inputs:buildInputs(c.seed,Object.keys(evaluators),'A0-play',c.mode),
-    result:timeline,initialWorld:c.initial,
+    result:timeline,initialWorld:c.initial,playModifierIds:[],
   }}
 }
 /** A1の評価器: fork年初のWorldStateと新ledgerから、A0と同じ構成で再生成する。 */
@@ -287,6 +294,9 @@ function a0CacheKeyOf(c:RootContext):string{
         calibration:BIRTH_MORTALITY_CALIBRATION,trustBase:TRUST_BASE,approval:TEST_MARRIAGE_APPROVAL}}),
   })
 }
+export const playModifierId=(year:number,pair:readonly [Id,Id],signedDelta:number,durationYears:number):Id=>
+  'ui:modifier:'+JSON.stringify([year,pair,signedDelta,durationYears])
+
 export type PlayRunOptions=Readonly<{
   /** 指定したときだけA0を保持/再利用する。省略時は従来どおり毎回計算する。 */
   cache?:SingleA0Cache
@@ -321,7 +331,7 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,opt
   const prep=prepareRoot(input.seed,mode)
   if(!prep.ok)return reject(prep.code,prep.message)
   const modifier:StatModifier={
-    modifierId:'ui:modifier:'+JSON.stringify([input.year,pair,input.signedDelta,input.durationYears]),
+    modifierId:playModifierId(input.year,pair,input.signedDelta,input.durationYears),
     interventionId:'ui:intervention:'+JSON.stringify([input.year,pair]),
     targetRef:{kind:'PERSON_PAIR',ids:pair},statKey:PAIR_TRUST_STAT_KEY,
     signedDelta:input.signedDelta,startYear:input.year,
@@ -367,7 +377,7 @@ export function runPlayComparison(input:PlayInput,observer?:ProgressObserver,opt
     const secondIssue=interventionTargetIssue(secondForkWorld,secondPair)
     if(secondIssue)return reject(secondIssue.code,secondIssue.message)
     const secondModifier:StatModifier={
-      modifierId:'ui:modifier:'+JSON.stringify([input.year,secondPair,followup.signedDelta,followup.durationYears]),
+      modifierId:playModifierId(input.year,secondPair,followup.signedDelta,followup.durationYears),
       interventionId:'ui:intervention:'+JSON.stringify([input.year,secondPair]),
       targetRef:{kind:'PERSON_PAIR',ids:secondPair},statKey:PAIR_TRUST_STAT_KEY,
       signedDelta:followup.signedDelta,startYear:input.year,
@@ -490,8 +500,11 @@ const observationRecordCache=new WeakMap<TimelineRun,Readonly<{persons:readonly 
 export function sliceA0Observation(
   a0:TimelineRun,year:number,mode:ObservationMode,a0Source:A0Source,
 ):ObservationSlice|undefined{
+  if(a0.pending||a0.logsOmitted||a0.result.status!=='COMPLETED'||a0.result.branchId!=='A0-play'||
+    a0.inputs.seed!==a0.result.seed||a0.inputs.configId!==playConfigId(mode)||
+    a0.inputs.configDigest!==playConfigDigest(mode))return undefined
   const world=a0.result.snapshots.find(w=>w.year===year)
-  if(!world||a0.result.status!=='COMPLETED')return undefined
+  if(!world)return undefined
   const counts=Array.from({length:GOAL_YEAR-START_YEAR+1},(_,i)=>({year:START_YEAR+i,events:0,traces:0,focusEvents:0}))
   const events:EventLogEntry[]=[],traces:DecisionTrace[]=[]
   for(const e of a0.result.eventLog){

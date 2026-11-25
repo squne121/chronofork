@@ -98,10 +98,21 @@ export function toDisplayView(c:PlayComparison):PlayView{
   }
   const shownE=(e:EventLogEntry)=>!omitEvents.has(e.eventId)
   const shownT=(t:DecisionTrace)=>!omitTraces.has(t.traceId)
-  const tally=<T,>(xs:readonly T[],k:(x:T)=>string)=>{const m:Record<string,number>={};for(const x of xs)m[k(x)]=(m[k(x)]??0)+1;return m}
+  type Counts={omittedEventsByType:Record<string,number>;omittedTracesByRule:Record<string,number>}
+  const empty=():Counts=>({omittedEventsByType:{},omittedTracesByRule:{}})
+  const totals=empty(),byYear:Partial<Record<number,Counts>>={}
+  function count(year:number,kind:keyof Counts,key:string){
+    for(const counts of [totals,byYear[year]??=empty()]){
+      const map=counts[kind]
+      map[key]=(map[key]??0)+1
+    }
+  }
+  for(const e of r0.eventLog)if(omitEvents.has(e.eventId))count(e.year,'omittedEventsByType',e.eventType)
+  for(const t of r0.decisionTraces)if(omitTraces.has(t.traceId))count(t.year,'omittedTracesByRule',t.ruleId)
   const evKept0=r0.eventLog.filter(shownE),trKept0=r0.decisionTraces.filter(shownT)
   const slim=(run:TimelineRun,events:readonly EventLogEntry[],traces:readonly DecisionTrace[]):TimelineRun=>({
-    ...run,result:{...run.result,eventLog:events,decisionTraces:traces} as TimelineResult,
+    ...run,...(omitEvents.size||omitTraces.size?{logsOmitted:true as const}:{}),
+    result:{...run.result,eventLog:events,decisionTraces:traces} as TimelineResult,
   })
   const a0=slim(c.a0,evKept0,trKept0)
   const a1=slim(c.a1,shared(evKept0,r1.eventLog.filter(e=>!(omitEvents.has(e.eventId)&&sameEvent(e.eventId))),e=>e.eventId,cmp),
@@ -109,8 +120,7 @@ export function toDisplayView(c:PlayComparison):PlayView{
   const displayOmission:DisplayOmission={
     fullEventCount:{a0:r0.eventLog.length,a1:r1.eventLog.length},
     fullTraceCount:{a0:r0.decisionTraces.length,a1:r1.decisionTraces.length},
-    omittedEventsByType:tally(r0.eventLog.filter(e=>omitEvents.has(e.eventId)),e=>e.eventType),
-    omittedTracesByRule:tally(r0.decisionTraces.filter(t=>omitTraces.has(t.traceId)),t=>t.ruleId),
+    ...totals,byYear,
   }
   return {
     mode:c.mode,input:c.input,modifier:c.modifier,a0,a1,displayOmission,

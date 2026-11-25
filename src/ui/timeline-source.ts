@@ -27,6 +27,10 @@ export type TimelineRun = Readonly<{
   inputs: RunInputs
   result: TimelineResult
   initialWorld: WorldState
+  /** playの実枝が保持する介入履歴。旧試験TimelineRunには付かない。 */
+  playModifierIds?: readonly Id[]
+  /** ログに転送省略がある。比較DTOから単独で取り出しても完全版と区別する。 */
+  logsOmitted?: true
   /** true の間は旧試験計算を未実行の空run。旧試験を開くとき（または明示計算）に実計算へ置き換える。 */
   pending?: true
 }>
