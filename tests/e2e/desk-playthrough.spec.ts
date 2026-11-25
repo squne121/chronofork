@@ -9,6 +9,8 @@ const year = 1251
 const firstYear = 1250
 const digest = '5090c8485f4b8570'
 
+test.use({ actionTimeout: 15_000 })
+
 type FailureFixture = 'A1_HALTED' | 'WORKER_EXCEPTION'
 type TestControl = Window & { nextComparisonFailure?: FailureFixture | 'STALE'; deliverStaleComparison?: () => void }
 
@@ -261,11 +263,13 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
     await reference(event, 'A0')
     const supporting = originalMarriage.involvedRefs.find(ref => ref.kind === 'PERSON')
     if (supporting?.kind !== 'PERSON') throw new Error('実 A0 の婚姻 Event に補助人物の参照がない')
+    await front(event)
     await event.getByTestId(`document-link-person-${supporting.id}`).first().click()
     const absent = documents('人物', supporting.id)
     await reference(absent, 'A0')
     await expect(absent).toContainText('年初に不在（NOT_PRESENT）')
     await expect(absent.getByText('技術詳細：人物の年初状態', { exact: true })).toHaveCount(0)
+    await front(absent)
     await absent.getByRole('button', { name: '年表で絞り込む', exact: true }).click()
     await expect(a1).toContainText('対象は存在しません')
     await expect(a1.getByText('対象の年初状態（実値）', { exact: true })).toHaveCount(0)
