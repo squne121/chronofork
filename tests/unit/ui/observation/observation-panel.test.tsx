@@ -51,7 +51,7 @@ describe('別年の記録の非同期導線',()=>{
     judgments:[{ruleId:'B-002' as const,status:'DEFER' as const,fromYear:1251,toYear:1251,count:1,
       reasonCodes:[],firstTraceId:trace.traceId,lastTraceId:trace.traceId}]})
   const initial={...view,personRecords:records}
-  const target={...initial,year:1251,events:[{...event,year:1251}],traces:[{...trace,year:1251}]}
+  const target={...initial,year:1251,world:{...world,year:1251},events:[{...event,year:1251}],traces:[{...trace,year:1251}]}
   const props={...seedProps,onLoad:vi.fn(),onCancel:vi.fn(),onIntervene:vi.fn()}
   for(const kind of ['event','trace'] as const){
     const open=()=>fireEvent.click(screen.getByTestId(kind==='event'?'history-death-link':'history-open-trace'))
@@ -235,4 +235,22 @@ describe('介入前の原史A0観測画面',()=>{
     fireEvent.click(screen.getByTestId('obs-cancel'))
     expect(onCancel).toHaveBeenCalled()
   })
+})
+
+
+it('編纂机は同じ年の地図と年代記を同時に表示し、開くたびに確定した対象と時点を渡す',()=>{
+  const onOpenDocument=vi.fn()
+  render(<ObservationPanel {...seedProps} observation={view} desk loading={false}
+    onLoad={vi.fn()} onCancel={vi.fn()} onIntervene={vi.fn()} onOpenDocument={onOpenDocument}/>)
+  const origin=expect.objectContaining({seed:view.seed,branch:'A0',modifierIds:[]})
+  expect(screen.getByTestId('obs-chronicle')).toHaveProperty('dataset',expect.objectContaining({year:'1250'}))
+  expect(screen.getByTestId('region-map')).toHaveProperty('dataset',expect.objectContaining({year:'1250'}))
+  const region=world.regions[0]!.regionId
+  fireEvent.click(screen.getByTestId(`region-node-${region}`))
+  expect(onOpenDocument).toHaveBeenLastCalledWith({kind:'region',id:region},{origin,year:1250})
+  const button=screen.getByTestId('obs-event-list').querySelector('button')!
+  fireEvent.click(button)
+  fireEvent.click(button)
+  expect(onOpenDocument).toHaveBeenCalledTimes(3)
+  expect(onOpenDocument).toHaveBeenLastCalledWith({kind:'event',id:event.eventId},{origin,year:1250})
 })
