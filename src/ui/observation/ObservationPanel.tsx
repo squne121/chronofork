@@ -52,7 +52,7 @@ type Props = Readonly<{
   playing?:boolean
   onPlayingChange?:(playing:boolean)=>void
   onCancel:()=>void
-  onIntervene:(year:number,personId:string,secondPersonId?:string)=>void
+  onIntervene:(year:number,personId:string,secondPersonId?:string,evidence?:{kind:'event'|'trace';id:string})=>void
 }>
 
 const EVENT_LABELS:Readonly<Record<string,string>>={
@@ -615,7 +615,10 @@ export function ObservationPanel(p:Props){
           </div>}
           {person&&v.year<1350&&persons.find(x=>x.personId===person)?.interactionRole!=='SUPPORTING'&&
             persons.some(x=>x.personId===person)&&
-            <button type="button" className="cta" data-testid="obs-to-intervention" disabled={!seedMatches||p.loading} onClick={()=>{pause();p.onIntervene(v.year,person)}}>
+            <button type="button" className="cta" data-testid="obs-to-intervention" disabled={!seedMatches||p.loading} onClick={()=>{pause()
+              if (p.desk && chosenTrace && traceRefs.has(chosenTrace.traceId)) p.onIntervene(v.year,person,undefined,{kind:'trace',id:chosenTrace.traceId})
+              else if (p.desk && chosenEvent && eventRefs.has(chosenEvent.eventId)) p.onIntervene(v.year,person,undefined,{kind:'event',id:chosenEvent.eventId})
+              else p.onIntervene(v.year,person)}}>
               この人物と年から介入を検討する
             </button>}
           <p className="note">介入は既存の人物間信頼調整のみです。対象者の適格性・成立・歴史変化は保証しません。</p>

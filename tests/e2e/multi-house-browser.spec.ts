@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
 
-// 旧統合試験とは別に、通常の入口からWorkerでC1の実100年を計算する。
-test.describe('通常入口：複数家門の歴史を調べ、介入して比較する', () => {
+// 編纂机の通常入口は desk-playthrough で検証する。ここでは旧配置のタブと
+// A2・開発用比較詳細の回帰を残し、同じ v0 の実100年をWorkerで計算する。
+test.describe('旧調査配置：複数家門の歴史を調べ、介入して比較する', () => {
   test.skip(process.env.CHRONOFORK_E2E_MULTI_HOUSE !== '1', 'CHRONOFORK_E2E_MULTI_HOUSE=1 で実100年を計算する')
   test.setTimeout(15 * 60_000)
 
@@ -13,7 +14,7 @@ test.describe('通常入口：複数家門の歴史を調べ、介入して比�
       await expect(get('obs-year-label')).toHaveText(`${year}年初`, { timeout: 180_000 })
     }
     const metrics: unknown[] = []
-    await page.goto('/')
+    await page.goto('/?entry=legacy')
     for (const width of [1280, 960]) {
       await page.setViewportSize({ width, height: 900 })
       await expect(get('obs-seed-input')).toHaveValue('20260101')

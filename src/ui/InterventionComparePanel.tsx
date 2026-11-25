@@ -13,6 +13,7 @@ import { IntegratedOverview } from './IntegratedOverview.tsx'
 import { FollowupInterventionPanel } from './FollowupInterventionPanel.tsx'
 import type { PlayProgress, ProgressState } from './play-progress.ts'
 import type { CalcInfo } from './IntegratedOverview.tsx'
+import { trialGoalStatus } from './desk/comparison/goal-view.ts'
 import type { GoalEvaluation, GoalFailureCode } from '../simulation/goal.ts'
 
 /** 途中経過が止まった理由。どれも「結果が確定した」ことを意味しない。 */
@@ -31,6 +32,8 @@ function ProgressLine({label,p,ended,reused}:{label:string;p?:PlayProgress;ended
 }
 
 type Props=Readonly<{
+  desk?: boolean
+  onDeskCompare?: (pair: 'A0_A1' | 'A1_A2') => void
   seedText:string
   year:number
   comparison?:PlayView
@@ -78,13 +81,6 @@ const GOAL_FAILURE_LABEL:Record<GoalFailureCode,string>={
   DYNASTY_MISMATCH:'ナルヴェン王朝の合法な構成員ではない',
   REGION_NOT_FOUND:'対象地域が存在しない',NO_CONTROL:'有効な実効統治・委任がない',
 }
-/** 表示専用。勝敗は再計算せず、runTimeline/forkWorldの厳格なGoal結果だけを読む。 */
-const trialGoalStatus=(g:GoalEvaluation|null):string=>{
-  if(g===null)return '未検証'
-  if(g.status==='ACHIEVED')return '条件に一致（技術検証）'
-  if(g.status==='NOT_ACHIEVED')return '条件に不一致（技術検証）'
-  return g.status==='INVALID_INPUT'?'データ不正で評価不能':'対象年ではない'
-}
 const goalAssessments=(g:GoalEvaluation|null)=>
   g?.status==='ACHIEVED'||g?.status==='NOT_ACHIEVED'?g.assessments:[]
 /** 厳格な1350年GoalのTitle別判定をそのまま読む。未確定の権限は補完しない。 */
@@ -120,7 +116,7 @@ export function InterventionComparePanel(p:Props){
   const [secondId,setSecondId]=useState<string>(multiHouse ? observed?.secondPersonId??'' : observed
     ? observed.secondPersonId??(observed.personId===INTEGRATED_PLAY_DEFAULTS.pair[1]?INTEGRATED_PLAY_DEFAULTS.pair[0]:INTEGRATED_PLAY_DEFAULTS.pair[1])
     : PLAY_DEMO_PAIR[1])
-  const [deltaText,setDeltaText]=useState(String(observed&&!multiHouse?INTEGRATED_PLAY_DEFAULTS.signedDelta:PLAY_DEMO_DELTA))
+  const [deltaText,setDeltaText]=useState(p.desk?'':String(observed&&!multiHouse?INTEGRATED_PLAY_DEFAULTS.signedDelta:PLAY_DEMO_DELTA))
   const [durationText,setDurationText]=useState(String(multiHouse?1:observed
     ? Math.min(INTEGRATED_PLAY_DEFAULTS.durationYears,1350-observed.year):PLAY_DEMO_DURATION))
   const seed=Number(p.seedText.trim())
@@ -157,14 +153,15 @@ export function InterventionComparePanel(p:Props){
     if(selected==='')return [<option key="__choose" value="" disabled>人物を選んでください</option>,...list]
     return inOptions(selected)?list:[<option key="__missing" value={selected} disabled>{personName(selected)}（{yearOk?`${year}年初には存在しません`:'年を確認してください'}）</option>,...list]
   }
-  const data=p.comparison?compareYear(p.comparison,p.year):undefined
-  const secondData=p.comparison?.second?compareYear(p.comparison.second,p.year):undefined
+  const legacy = p.desk ? undefined : p.comparison
+  const data=legacy?compareYear(legacy,p.year):undefined
+  const secondData=legacy?.second?compareYear(legacy.second,p.year):undefined
   const before=data?.a0World,after=data?.a1World
   const input=p.comparison?.input
-  const continuityA0=p.comparison?observeDynastyContinuity(
-    p.comparison.a0.initialWorld,p.comparison.a0.result,NALVEN_DYNASTY_ID):undefined
-  const continuityA1=p.comparison?observeDynastyContinuity(
-    p.comparison.a1.initialWorld,p.comparison.a1.result,NALVEN_DYNASTY_ID):undefined
+  const continuityA0=legacy?observeDynastyContinuity(
+    legacy.a0.initialWorld,legacy.a0.result,NALVEN_DYNASTY_ID):undefined
+  const continuityA1=legacy?observeDynastyContinuity(
+    legacy.a1.initialWorld,legacy.a1.result,NALVEN_DYNASTY_ID):undefined
   const continuityPanel=(obs:ContinuityObservation|undefined,branch:'A0'|'A1')=><div
     data-testid={branch==='A0'?'continuity-a0':'continuity-a1'}>
     <h5>{branch} {branch==='A0'?'介入なし':'介入あり'}</h5>
@@ -194,12 +191,12 @@ export function InterventionComparePanel(p:Props){
     return region?region.name+'の領地称号':'名前未確認の称号'
   }
   const pair=input?[input.firstPersonId,input.secondPersonId].sort() as [string,string]:PLAY_DEMO_PAIR
-  const b4=(choice:BranchChoice)=>p.comparison?.[choice.toLowerCase() as 'a0'|'a1'].result.decisionTraces.find(t=>
+  const b4=(choice:BranchChoice)=>legacy?.[choice.toLowerCase() as 'a0'|'a1'].result.decisionTraces.find(t=>
     t.year===p.year&&t.ruleId==='B-004'&&t.actorRef.kind==='PERSON_PAIR'&&
     t.actorRef.ids[0]===pair[0]&&t.actorRef.ids[1]===pair[1])
   const traceA0=b4('A0'),traceA1=b4('A1')
   const score=(t:typeof traceA0)=>t?.candidates[0]?.score===undefined?'—':String(t.candidates[0].score)
-  const children=p.comparison?childIdsOfPair([...p.comparison.a0.result.eventLog,...p.comparison.a1.result.eventLog],pair):new Set<string>()
+  const children=legacy?childIdsOfPair([...legacy.a0.result.eventLog,...legacy.a1.result.eventLog],pair):new Set<string>()
   const eventRows=(data?.events??[]).map(x=>({
     ...x,focus:directlyInvolvesPair(x.event,pair)||x.event.involvedRefs.some(r=>r.kind==='PERSON'&&children.has(r.id)),
   }))
@@ -322,14 +319,15 @@ export function InterventionComparePanel(p:Props){
     </div>}
     {p.notice&&<p role="status" className="note" data-testid="branch-notice">{p.notice}</p>}
     {p.error&&<p role="alert" className="halt" data-testid="branch-error">{errorHeading(p.error.code)}: {p.error.code} / {p.error.message}</p>}
-    {!p.comparison&&<p className="note" data-testid="branch-empty">まだ比較結果はありません。上の「介入して再計算」を押すと、ここにA0/A1の違いが表示されます。</p>}
+    {!p.comparison&&<p className="note" data-testid="branch-empty">まだ比較結果はありません。{p.desk ? '条件を指定して再計算すると比較資料を開けます。' : '上の「介入して再計算」を押すと、ここにA0/A1の違いが表示されます。'}</p>}
+    {p.desk && p.comparison && <p><button type="button" disabled={!!p.running} onClick={() => p.onDeskCompare?.('A0_A1')}>同じ年の歴史を比較</button></p>}
     {p.comparison&&isObservationMode(p.comparison.mode)&&mode===p.comparison.mode&&
       Number(p.seedText.trim())===p.comparison.input.seed&&
       <FollowupInterventionPanel
         key={JSON.stringify([p.comparison.input.seed,p.comparison.input.year,p.comparison.input.firstPersonId,
           p.comparison.input.secondPersonId,p.comparison.input.signedDelta,p.comparison.input.durationYears])}
         comparison={p.comparison} year={p.year} activeBranch={p.activeBranch} busy={!!p.running||!!p.fetchingCandidates||!!p.observationLoading}
-        onRun={p.onRun} onViewA2={()=>p.onViewBranch('A2')}/>
+        onRun={p.onRun} onViewA2={()=>p.onViewBranch('A2')} onDeskCompare={p.desk ? () => p.onDeskCompare?.('A1_A2') : undefined}/>
     }
     {p.comparison&&input&&before&&after&&<div data-testid="branch-results" className="compare-results">
       <section className="effect-summary" id="effect-summary" data-testid="effect-summary" aria-labelledby="effect-summary-heading">

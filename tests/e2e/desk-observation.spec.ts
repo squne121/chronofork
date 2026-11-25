@@ -166,10 +166,14 @@ test('編纂机で実 A0 の重大事件を開き、同期した年代記・世�
   const movePerson = person.getByRole('button', { name: '資料を移動' })
   for (let i = 0; i < 25; i++) await movePerson.press('ArrowRight')
   await person.getByRole('button', { name: 'この人物と年から介入を検討する' }).click()
-  await expect(get('branch-person-one')).toHaveValue('person-exp-03')
-  await expect(get('branch-fork-year')).toHaveValue('1250')
-  await expect(get('branch-results')).toHaveCount(0)
+  const intervention = page.getByRole('dialog', { name: '介入', exact: true })
+  await expect(intervention.getByTestId('branch-person-one')).toHaveValue('person-exp-03')
+  await expect(intervention.getByTestId('branch-fork-year')).toHaveValue('1250')
+  await expect(intervention.getByRole('button', { name: '同じ年の歴史を比較', exact: true })).toHaveCount(0)
+  await expect(get('legacy-workspace')).not.toHaveAttribute('open', '')
   await page.screenshot({ path: testInfo.outputPath('desk-intervention.png') })
+  await intervention.getByRole('button', { name: '介入を閉じる', exact: true }).press('Escape')
+  await expect(intervention).toHaveCount(0)
 
   // 元の人物窓は指定年に固定したまま、別年の実記録を開く。
   await page.evaluate(() => { window.deskResponseTest.next = 'hold' })

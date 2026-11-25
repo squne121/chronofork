@@ -4,10 +4,15 @@ import { DEFAULT_OBSERVATION_MODE, DEFAULT_OBSERVATION_SEED, INTEGRATED_PLAY_DEF
 import type { ObservationMode, ObservationSlice } from './branch-play-source.ts'
 import { DeskDocuments } from './desk/documents/index.tsx'
 import type { DeskDocumentsProps, DocumentOpenRequest } from './desk/documents/index.tsx'
-import { historyFromObservation, sameHistoryYearRef } from './desk/data/history.ts'
-import type { HistoryYearRef } from './desk/data/history.ts'
+import { historyFromObservation, matchesPlayRequest, sameHistoryYearRef } from './desk/data/history.ts'
+import type { HistoryYear, HistoryYearRef } from './desk/data/history.ts'
 import type { OpenDeskDocument } from './desk/layout/document-link.ts'
 import type { DocumentFilter } from './desk/documents/record-filter.ts'
+import { DeskInterventionWindow } from './desk/comparison/DeskInterventionWindow.tsx'
+import type { DeskComparisonSelection, DeskPair } from './desk/comparison/DeskInterventionWindow.tsx'
+import type { EvidenceRequest, InvestigationContext } from './desk/comparison/DeskComparison.tsx'
+import { comparisonHistoryAt, comparisonTarget, investigationForIntervention, investigationFromLink } from './desk/comparison/investigation.ts'
+import type { ComparisonSource } from './desk/comparison/investigation.ts'
 import { createObservationRequests } from './desk/timeline/observation-requests.ts'
 import type { PlayProgress } from './play-progress.ts'
 import { HistoryPanel, involves } from './HistoryPanel.tsx'
@@ -88,8 +93,11 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const [a0Reused, setA0Reused] = useState(false)
   // 初回は実A0の観測を主入口にする。旧試験UIは明示的な「開発用」入口でのみ開く。
   const [workspaceOpen,setWorkspaceOpen]=useState(isLegacyEntry)
-  const [observation,setObservation]=useState<ObservationSlice>()
-  const observationYear = useMemo(() => observation && historyFromObservation(observation).at(observation.year), [observation])
+  type ObservedYear = { slice: ObservationSlice; history: HistoryYear; calc: CalcInfo }
+  const [observed, setObservation] = useState<ObservedYear>()
+  const observation = observed?.slice
+  const observationYear = observed?.history
+  const observationSources = useRef(new WeakMap<HistoryYear, ObservedYear>())
   const desk = !injected && !isLegacyEntry() && observationMode === DEFAULT_OBSERVATION_MODE
   const [deskPlaying, setDeskPlaying] = useState(false)
   const [documentRequest, setDocumentRequest] = useState<DocumentOpenRequest>()
@@ -97,7 +105,26 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const [documentSession, setDocumentSession] = useState(0)
   const [documentNavigation, setDocumentNavigation] = useState(0)
   const [documentFilter, setDocumentFilter] = useState<DocumentFilter>()
+  const [historyUpdate, setHistoryUpdate] = useState<DeskDocumentsProps['historyUpdate']>()
+  const [deskDraft, setDeskDraft] = useState<{ context: InvestigationContext; personId: string; year: number; partner?: string; serial: number }>()
+  const [deskResult, setDeskResult] = useState<{ view: PlayView; context: InvestigationContext; serial: number }>()
+  const [deskWindow, setDeskWindow] = useState<'intervention' | DeskComparisonSelection>()
+  const comparisonSources = useRef(new WeakMap<HistoryYear, ComparisonSource & { context: InvestigationContext }>())
+  const [deskWindowFront, setDeskWindowFront] = useState(false)
+  const investigationLinks = useRef(new Map<string, InvestigationContext[]>())
+  const pendingInvestigationLinks = useRef(new Map<string, DocumentOpenRequest>())
+  const resetDeskIntervention = () => {
+    setDeskDraft(undefined)
+    setDeskResult(undefined)
+    setDeskWindow(undefined)
+  }
   const resetDocuments = () => {
+    resetDeskIntervention()
+    setHistoryUpdate(undefined)
+    comparisonSources.current = new WeakMap()
+    observationSources.current = new WeakMap()
+    investigationLinks.current.clear()
+    pendingInvestigationLinks.current.clear()
     setDocumentSession(n => n + 1)
     setDocumentRequest(undefined)
     setDocumentFilter(undefined)
@@ -200,6 +227,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const changeSelectedSeed=(text:string)=>{
     // 計算中にseedが変わったときは旧Workerを止め、古い結果で新seedを上書きしない。
     if(observationRequests.busy)cancelObservation()
+    if (desk && (!/^\d+$/.test(text.trim()) || Number(text.trim()) !== observation?.seed)) {
+      if (deskDraft && handleRef.current && !workspaceOpen) cancelRun()
+      setDeskWindow(undefined)
+    }
     setSeedText(text)
     setObservationSeedText(text)
   }
@@ -255,8 +286,15 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       success: (view, computeMs, wallMs) => {
         setObsPendingYear(undefined)
         setObsProgress(undefined)
-        setObservation(view)
-        setObsCalc({ computeMs, wallMs })
+        const entry = { slice: view, history: historyFromObservation(view).at(view.year), calc: { computeMs, wallMs } }
+        observationSources.current.set(entry.history, entry)
+        for (const [id, request] of pendingInvestigationLinks.current) {
+          if (!sameHistoryYearRef(request.ref, entry.history.ref)) continue
+          rememberInvestigation(entry.history, request)
+          pendingInvestigationLinks.current.delete(id)
+        }
+        setObservation(entry)
+        setObsCalc(entry.calc)
         setSeedText(String(view.seed))
         // 単年の候補で全期間の存在区間を上書きしない。
         setCandidateSet(view.candidates)
@@ -275,8 +313,12 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       setObsProgress(undefined)
     }
   }
-  const observationToIntervene=(year:number,personId:string,secondPersonId?:string)=>{
+  const observationToIntervene=(year:number,personId:string,secondPersonId?:string,evidence?:InvestigationContext['evidence'])=>{
     if(!observation||observation.seed!==Number(observationSeedText.trim()))return
+    if (desk && observationYear) {
+      beginDeskIntervention({ history: observationYear, target: { kind: 'person', id: personId }, evidence }, year, secondPersonId)
+      return
+    }
     setSeedText(String(observation.seed))
     setObsTarget(old=>({year,personId,...(secondPersonId===undefined?{}:{secondPersonId}),seed:observation.seed,token:(old?.token??0)+1}))
     setWorkspaceOpen(true)
@@ -287,28 +329,100 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     observationYear.ref.origin.seed === Number(observationSeedText.trim()) && /^\d+$/.test(observationSeedText.trim()) &&
     sameHistoryYearRef(ref, { ...observationYear.ref, year: ref.year })
   const stopDeskPlayback = () => { setDeskPlaying(false); pauseObservation() }
+  const rememberInvestigation = (history: HistoryYear, request: Pick<DocumentOpenRequest, 'ref' | 'target' | 'source'>) => {
+    const context = investigationFromLink(history, request)
+    if (context?.target?.kind !== 'person') return
+    const key = `${request.ref.year}:${context.target.id}`
+    const known = investigationLinks.current.get(key) ?? []
+    if (!known.some(x => x.history === context.history && x.evidence?.kind === context.evidence?.kind && x.evidence?.id === context.evidence?.id)) {
+      investigationLinks.current.set(key, [...known, context])
+    }
+  }
   const openDocument: OpenDeskDocument = (target, ref, source) => {
     if (!observationYear || obsLoading || !inCurrentA0(ref) || !sameHistoryYearRef(ref, observationYear.ref)) return
+    rememberInvestigation(observationYear, { ref, target, source })
     setDocumentRequest({ requestId: String(++documentSerial.current), ref, target, source })
   }
-  const goToDocumentYear: NonNullable<DeskDocumentsProps['onYear']> = (ref, { sourceHistory }) => {
-    // 比較 DTO は現在の観測と同じ参照でも別出典。ここでは置換しない。
-    if (sourceHistory || !inCurrentA0(ref) || !Number.isInteger(ref.year) || ref.year < YEAR_RANGE.min || ref.year > YEAR_RANGE.max) return
+  const goToDocumentYear: NonNullable<DeskDocumentsProps['onYear']> = (ref, { windowId, sourceHistory }) => {
+    if (sourceHistory) {
+      // 明示比較の窓には、元 DTO と同じ比較・同じ側の年だけを返す。
+      const source = comparisonSources.current.get(sourceHistory)
+      const history = source && comparisonHistoryAt(source, ref)
+      if (history) setHistoryUpdate({ windowId, history })
+      return
+    }
+    if (!inCurrentA0(ref) || !Number.isInteger(ref.year) || ref.year < YEAR_RANGE.min || ref.year > YEAR_RANGE.max) return
     stopDeskPlayback()
     setDocumentNavigation(n => n + 1)
     if (observationYear?.ref.year !== ref.year || obsLoading || obsError) loadObservation(ref.year, false, ref)
   }
   const filterFromDocument: NonNullable<DeskDocumentsProps['onFilter']> = (target, ref, context) => {
-    if (context?.sourceHistory || !inCurrentA0(ref)) return
+    if (context?.sourceHistory) {
+      const source = comparisonSources.current.get(context.sourceHistory)
+      const original = source && inCurrentA0(source.context.history.ref) && !handleRef.current && comparisonHistoryAt(source, ref)
+      if (source && original) {
+        const focus = target.kind === 'event' || target.kind === 'trace' ? { ...target, branch: ref.origin.branch } : undefined
+        setWorkspaceOpen(false)
+        setDeskWindowFront(true)
+        setDeskWindow({ ...source, year: ref.year, target: comparisonTarget(target) ?? source.context.target, focus })
+      }
+      return
+    }
+    if (!inCurrentA0(ref)) return
     setDocumentFilter({ target, ref })
     goToDocumentYear(ref, { windowId: '' })
     const chronicle = document.getElementById('obs-desk-chronicle')
     chronicle?.scrollIntoView?.({ block: 'nearest' })
   }
+  const beginDeskIntervention = (context: InvestigationContext, year: number, partner?: string) => {
+    if (context.target?.kind !== 'person' || !inCurrentA0(context.history.ref) || handleRef.current || candHandleRef.current || obsLoading) return
+    stopDeskPlayback()
+    setWorkspaceOpen(false)
+    setPlayError(undefined)
+    clearProgress()
+    setNotice(undefined)
+    setDeskDraft({ context, personId: context.target.id, year, partner, serial: ++documentSerial.current })
+    setDeskWindow('intervention')
+    setDeskWindowFront(true)
+  }
   const interveneFromDocument: NonNullable<DeskDocumentsProps['onIntervene']> = (year, personId, secondPersonId, ref) => {
     if (!inCurrentA0(ref) || ref.year !== year || obsLoading || running || fetchingCandidates) return
+    if (!observationYear) return
+    const links = investigationLinks.current.get(`${ref.year}:${personId}`) ?? []
+    const source = links.find(link => sameHistoryYearRef(ref, link.history.ref))?.history ?? observationYear
+    beginDeskIntervention(investigationForIntervention(source, links, personId, secondPersonId), year, secondPersonId)
+  }
+  const openComparisonEvidence = ({ history, kind, id }: EvidenceRequest) => {
+    if (typeof deskWindow !== 'object') return
+    setDeskWindowFront(false)
+    comparisonSources.current.set(history, { view: deskWindow.view, pair: deskWindow.pair, context: deskWindow.context })
+    setDocumentRequest({ requestId: String(++documentSerial.current), ref: history.ref, history, target: { kind, id } })
+  }
+  const returnToInvestigation = (context: InvestigationContext) => {
+    if (!inCurrentA0(context.history.ref)) return
+    setDeskWindow(undefined)
+    setDeskWindowFront(false)
     stopDeskPlayback()
-    observationToIntervene(year, personId, secondPersonId)
+    cancelObservation()
+    setObsError(undefined)
+    setDocumentNavigation(n => n + 1)
+    const original = observationSources.current.get(context.history)
+    if (original) {
+      setObservation(original)
+      setObsCalc(original.calc)
+      setCandidateSet(original.slice.candidates)
+    }
+    const target = context.evidence ?? context.target
+    if (target && target.kind !== 'house') setDocumentRequest({
+      requestId: String(++documentSerial.current), ref: context.history.ref, target,
+      source: context.evidence && context.target?.kind === 'person' ? context.target : undefined,
+    })
+  }
+  const openDeskComparison = (pair: DeskPair) => {
+    if (!deskResult || !inCurrentA0(deskResult.context.history.ref) || handleRef.current || (pair === 'A1_A2' && !deskResult.view.second)) return
+    setWorkspaceOpen(false)
+    setDeskWindowFront(true)
+    setDeskWindow({ ...deskResult, pair, year: deskResult.context.history.ref.year, target: deskResult.context.target })
   }
   const stopCandidates = () => {
     candTokenRef.current++
@@ -405,7 +519,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     const id=requestAnimationFrame(()=>document.getElementById('effect-summary')?.scrollIntoView?.({block:'start'}))
     return()=>cancelAnimationFrame(id)
   },[resultReveal])
-  const runComparison = (input:PlayInput) => {
+  const runComparison = (input:PlayInput, draft?: { context: InvestigationContext; serial: number }) => {
+    const context = draft?.context
+    if (context && (!inCurrentA0(context.history.ref) || input.mode !== observationMode || input.seed !== context.history.ref.origin.seed)) return
+    const parent = context ? deskResult?.view : comparison
     setNotice(undefined)
     if (candHandleRef.current || observationRequests.busy) {setPlayError({code:'RUN_IN_PROGRESS',message:'原史の観測・候補取得が終了してから介入してください'});return}
     if(input.mode==='MULTI_HOUSE_EXPERIMENTAL'&&!candidateSetMatches(observation?.candidates,input.seed,input.mode)){
@@ -446,10 +563,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           return
         }
         const view='secondView' in o.result
-          ?comparison&&input.second&&sameFirstIntervention(comparison.input,input)&&
-            sameFirstIntervention(o.result.parentInput,comparison.input)&&
-            matchesFollowup(o.result.secondView,comparison,input,input.second)
-            ?{...comparison,second:o.result.secondView,a0Source:o.result.a0Source}
+          ?parent&&input.second&&sameFirstIntervention(parent.input,input)&&
+            sameFirstIntervention(o.result.parentInput,parent.input)&&
+            matchesFollowup(o.result.secondView,parent,input,input.second)
+            ?{...parent,second:o.result.secondView,a0Source:o.result.a0Source}
             :undefined
           :input.second?undefined:o.result.view
         if(!view){
@@ -457,7 +574,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           setPlayError({code:'A2_PARENT_MISMATCH',message:'前回のA1と第2介入の条件が一致しません'})
           return
         }
-        if(view.mode!==mode||!sameFirstIntervention(view.input,input)||
+        if((context && !matchesPlayRequest(input, view)) || view.mode!==mode||!sameFirstIntervention(view.input,input)||
           view.a0.inputs.configDigest!==playConfigDigest(mode)||view.a1.inputs.configDigest!==view.a0.inputs.configDigest||
           (view.second&&view.second.a1.inputs.configDigest!==view.a0.inputs.configDigest)){
           setProgressEnd('FAILED')
@@ -466,7 +583,10 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
         }
         clearProgress()
         setCalc({ computeMs: o.computeMs, wallMs: Date.now() - started })
-        applyView(view,input)
+        if (draft) {
+          setDeskResult({ view, context: draft.context, serial: draft.serial })
+          setNotice(input.second ? '第2介入の計算が完了しました。A1とA2の比較を開けます。' : '介入の計算が完了しました。原史と改変史の比較を開けます。')
+        } else applyView(view,input)
       })
       return
     }
@@ -540,6 +660,15 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const branchLabel = comparison
     ?activeBranch==='A0'?'A0（介入なしの歴史）':activeBranch==='A1'?'A1（第1介入の歴史）':'A2（第2介入までの歴史）'
     :observation?(observation.mode==='MULTI_HOUSE_EXPERIMENTAL'?'A0（複数家門の原史を観測）':'A0（統合試験の原史を観測）'):'原史（旧・C004試験計算）'
+  const activeDeskResult = deskResult?.serial === deskDraft?.serial ? deskResult : undefined
+  const deskSeedMatches = deskDraft && inCurrentA0(deskDraft.context.history.ref)
+  const interventionProps = {
+    seedText, year, comparison, error: playError, running: running ? { elapsedSec } : undefined,
+    progress, a0Reused, progressEnd, notice, calc, onCancel: cancelRun, onSeedText: changeSelectedSeed,
+    candidateSet, fetchingCandidates, observationLoading: obsLoading || obsDraining, candidateError,
+    onFetchCandidates: fetchCandidates, onCancelCandidates: () => { stopCandidates(); setNotice('人物候補の取得を中断しました。') },
+    activeBranch, onRun: runComparison, onViewBranch: switchBranch, onInspectEvent: openComparisonEvent, onInspectTrace: openComparisonTrace,
+  }
   return (
     <div className="app">
       <header className={desk ? "topbar desk-status" : "topbar"}>
@@ -562,6 +691,11 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
             <dd data-testid="goal-status">{!comparison&&!workspaceOpen?'正式な勝敗は未成立（試験版）':observation&&!comparison?'正式な勝敗は未成立（参考判定は原史欄に表示）':goalStatusLabel(result)}</dd>
           </div>
         </dl>
+        {desk && deskSeedMatches && <div aria-label="編纂机の介入と比較">
+          <button type="button" onClick={() => { setWorkspaceOpen(false); setDeskWindowFront(true); setDeskWindow('intervention') }}>介入の資料を開く</button>{' '}
+          {deskResult && <button type="button" disabled={!!running} onClick={() => openDeskComparison('A0_A1')}>A0とA1の比較を開く</button>}{' '}
+          {deskResult?.view.second && <button type="button" disabled={!!running} onClick={() => openDeskComparison('A1_A2')}>A1とA2の比較を開く</button>}
+        </div>}
         <details className="trial-help" data-testid="trial-guide-details">
           <summary>試験構成と現在できること</summary>
           <p className="lead" data-testid="trial-guide">
@@ -582,20 +716,15 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
             onLoad={loadObservation} onCancel={()=>{cancelObservation();setObsError({code:'CANCELLED',message:'計算を中断しました'})}} onIntervene={observationToIntervene}/>
         </div>
         <details className="obs-main obs-workspace" data-testid="legacy-workspace" open={workspaceOpen}
-          onToggle={e=>setWorkspaceOpen(e.currentTarget.open)}>
+          onToggle={e=>{ setWorkspaceOpen(e.currentTarget.open); if (e.currentTarget.open && desk) setDeskWindow(undefined) }}>
           <summary data-testid="legacy-toggle">
-            {comparison?'介入結果とA0/A1/A2の比較を確認する':observation?'調べた人物から介入・比較する':'開発用：旧試験と直接介入の操作を開く'}
+            {comparison?'介入結果とA0/A1/A2の比較を確認する':!desk&&observation?'調べた人物から介入・比較する':'開発用：旧試験と直接介入の操作を開く'}
           </summary>
           <div className="layout obs-workspace-layout">
         <div className="flow-col">
-          <InterventionComparePanel key={`${observation?.mode??'dev'}:${obsTarget?.token??0}`} observationMode={observation?.mode==='MULTI_HOUSE_EXPERIMENTAL'||obsTarget?observation?.mode:undefined} seedText={seedText} year={year} comparison={comparison} error={playError}
-            running={running ? { elapsedSec } : undefined} progress={progress} a0Reused={a0Reused} progressEnd={progressEnd} notice={notice} calc={calc} onCancel={cancelRun}
-            onSeedText={changeSelectedSeed}
-            candidateSet={candidateSet} fetchingCandidates={fetchingCandidates} observationLoading={obsLoading || obsDraining} candidateError={candidateError}
-            onFetchCandidates={fetchCandidates} onCancelCandidates={() => { stopCandidates(); setNotice('人物候補の取得を中断しました。') }}
-            observationTarget={obsTarget}
-            activeBranch={activeBranch} onRun={runComparison} onViewBranch={switchBranch}
-            onInspectEvent={openComparisonEvent} onInspectTrace={openComparisonTrace} />
+          <InterventionComparePanel {...interventionProps}
+            key={`${observation?.mode??'dev'}:${obsTarget?.token??0}`} observationMode={observation?.mode==='MULTI_HOUSE_EXPERIMENTAL'||obsTarget?observation?.mode:undefined}
+            observationTarget={obsTarget} />
         </div>
 
         {(!observation || !!comparison) && <>
@@ -678,9 +807,27 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           </div>
         </details>
       </main>
-      {desk && <DeskDocuments key={documentSession} history={observationYear} slice={observation}
+      {desk && <div onPointerDownCapture={() => setDeskWindowFront(false)} onFocusCapture={() => setDeskWindowFront(false)}><DeskDocuments key={documentSession} history={observationYear} slice={observation}
         openRequest={documentRequest} interventionDisabled={!observationYear || !inCurrentA0(observationYear.ref) || obsLoading || !!running || fetchingCandidates}
-        onYear={goToDocumentYear} onFilter={filterFromDocument} onIntervene={interveneFromDocument} />}
+        historyUpdate={historyUpdate} onOpenRelated={request => {
+          if (request.sourceHistory || !inCurrentA0(request.ref)) return
+          if (request.history) rememberInvestigation(request.history, request)
+          else if (request.target.kind === 'person') pendingInvestigationLinks.current.set(request.requestId, request)
+        }} onYear={goToDocumentYear} onFilter={filterFromDocument} onIntervene={interveneFromDocument} /></div>}
+      {desk && deskDraft && !workspaceOpen && <DeskInterventionWindow open={!!deskSeedMatches && deskWindow !== undefined}
+        front={deskWindowFront} onFront={() => setDeskWindowFront(true)}
+        comparison={typeof deskWindow === 'object' ? deskWindow : undefined} onCompare={setDeskWindow}
+        onClose={() => setDeskWindow(undefined)} onReturn={returnToInvestigation} onEvidence={openComparisonEvidence}>
+        <InterventionComparePanel {...interventionProps} key={deskDraft.serial} desk observationMode={observationMode}
+          year={deskDraft.context.history.ref.year} comparison={activeDeskResult?.view}
+          observationTarget={{ year: deskDraft.year, personId: deskDraft.personId, secondPersonId: deskDraft.partner,
+            seed: deskDraft.context.history.ref.origin.seed, token: deskDraft.serial }}
+          onRun={input => {
+            const draft = input.second ? activeDeskResult : deskDraft
+            if (draft) runComparison(input, draft)
+          }}
+          onDeskCompare={openDeskComparison} />
+      </DeskInterventionWindow>}
     </div>
   )
 }
