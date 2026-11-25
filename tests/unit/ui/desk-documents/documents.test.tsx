@@ -5,7 +5,7 @@ import { runPlayBaseline, sliceA0Observation } from '../../../../src/ui/branch-p
 import type { ObservationSlice } from '../../../../src/ui/branch-play-source.ts'
 import type { TargetRef, WorldState } from '../../../../src/simulation/contracts/index.ts'
 import { historyFromObservation } from '../../../../src/ui/desk/data/history.ts'
-import { DeskDocuments } from '../../../../src/ui/desk/documents/index.tsx'
+import { DeskDocuments, externalDocumentWindowId } from '../../../../src/ui/desk/documents/index.tsx'
 
 afterEach(cleanup)
 function isPresentPerson(ref: TargetRef, world: WorldState): ref is TargetRef & { kind: 'PERSON'; id: string } {
@@ -126,7 +126,11 @@ describe('実A0の独立資料', () => {
     fireEvent.contextMenu(within(dialog).getByRole('button', { name: '家系を開く' }))
     expect(screen.getAllByRole('dialog')).toHaveLength(1)
     const menu = within(dialog).getByRole('menu', { name: '対象の文脈操作' })
-    fireEvent.click(within(menu).getByRole('menuitem', { name: '資料を開く' }))
+    fireEvent.keyDown(within(menu).getByRole('menuitem', { name: '資料を開く' }), { key: 'Escape' })
+    expect(within(dialog).queryByRole('menu')).toBeNull()
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    fireEvent.contextMenu(within(dialog).getByRole('button', { name: '家系を開く' }))
+    fireEvent.click(within(within(dialog).getByRole('menu', { name: '対象の文脈操作' })).getByRole('menuitem', { name: '資料を開く' }))
     expect(screen.getByRole('dialog', { name: `家系 ${person.personId}` })).toBeTruthy()
   })
 
@@ -200,8 +204,8 @@ describe('実A0の独立資料', () => {
     const dialogs = screen.getAllByRole('dialog', { name: `Trace ${trace.traceId}` })
     expect(dialogs).toHaveLength(2)
     expect(dialogs[0]!.textContent).toContain('転送省略の可能性')
-    expect(dialogs[0]!.textContent).not.toContain(trace.ruleId)
-    expect(dialogs[1]!.textContent).toContain(trace.ruleId)
+    expect(dialogs[0]!.textContent).not.toContain('実判断:')
+    expect(dialogs[1]!.textContent).toContain(`実判断: ${trace.ruleId}`)
   })
 
   it('未計算の窓は同じ参照の確定結果を受け取ると表示を更新する', () => {
@@ -237,7 +241,7 @@ describe('実A0の独立資料', () => {
     expect(traceDialog.textContent).toContain('未計算')
     rerender(<DeskDocuments history={history} openRequest={traceRequest} />)
     expect(eventDialog.textContent).toContain(event.eventType)
-    expect(traceDialog.textContent).toContain(trace.ruleId)
+    expect(traceDialog.textContent).toContain(`実判断: ${trace.ruleId}`)
   })
 
   it('明示された比較由来の未取得・未計算資料を別出典の共通historyで昇格しない', () => {
@@ -260,7 +264,48 @@ describe('実A0の独立資料', () => {
     expect(personDialog.textContent).toContain('未取得')
     expect(personDialog.textContent).not.toContain(person.name)
     expect(traceDialog.textContent).toContain('未計算')
-    expect(traceDialog.textContent).not.toContain(trace.ruleId)
+    expect(traceDialog.textContent).not.toContain('実判断:')
+  })
+
+  it('明示比較資料から別年へ進む時は共通historyを混ぜず出典を通知する', () => {
+    const history = historyFromObservation(slice).at(slice.year)
+    const record = slice.personRecords.find(r => slice.world.persons.some(p => p.personId === r.personId) && r.judgments.some(j => j.fromYear !== slice.year))!
+    expect(record).toBeDefined()
+    const onOpenRelated = vi.fn()
+    const onYear = vi.fn()
+    const request = { requestId: 'pinned-person', ref: history.ref, target: { kind: 'person' as const, id: record.personId }, history }
+    const { rerender } = render(<DeskDocuments history={history} slice={slice} openRequest={request} onOpenRelated={onOpenRelated} onYear={onYear} />)
+    const dialog = screen.getByRole('dialog')
+    const buttons = within(dialog).getAllByTestId('history-open-trace')
+    const differentYear = buttons.find(button => !button.textContent?.startsWith(`${slice.year}年`))!
+    expect(differentYear).toBeDefined()
+    fireEvent.click(differentYear)
+    const notice = onOpenRelated.mock.calls[0]![0]
+    expect(notice.ref.year).not.toBe(slice.year)
+    expect(notice.sourceHistory).toBe(history)
+    expect(onYear).toHaveBeenCalledWith(notice.ref, { windowId: notice.windowId, sourceHistory: history })
+    const traceDialog = screen.getByRole('dialog', { name: `Trace ${notice.target.id}` })
+    expect(traceDialog.textContent).toContain('未取得')
+    // 同じrefを名乗る別出典のfixtureを混ぜない。
+    const otherSource = { ...history, ref: notice.ref }
+    rerender(<DeskDocuments history={otherSource} slice={slice} openRequest={request} onOpenRelated={onOpenRelated} onYear={onYear} />)
+    expect(traceDialog.textContent).toContain('未取得')
+  })
+
+  it('明示未取得資料の同出典結果を指定窓だけに反映する', () => {
+    const history = historyFromObservation(slice).at(slice.year)
+    const person = slice.world.persons[0]!
+    const pending = { ...history, start: { kind: 'NOT_LOADED' as const }, records: { kind: 'NOT_LOADED' as const } }
+    const request = { requestId: 'pinned-load', ref: history.ref, target: { kind: 'person' as const, id: person.personId }, history: pending }
+    const onYear = vi.fn()
+    const { rerender } = render(<DeskDocuments openRequest={request} onYear={onYear} />)
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.textContent).toContain('未取得')
+    fireEvent.click(within(dialog).getByRole('button', { name: /この参照/ }))
+    expect(onYear).toHaveBeenCalledWith(history.ref, { windowId: externalDocumentWindowId(request.requestId), sourceHistory: pending })
+    rerender(<DeskDocuments openRequest={request} onYear={onYear} historyUpdate={{ windowId: externalDocumentWindowId(request.requestId), history }} />)
+    expect(dialog.textContent).toContain(person.name)
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
   })
 
   it('実枝にいない人物を実在人物の資料で置き換えない', () => {
