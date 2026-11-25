@@ -113,8 +113,9 @@ export function DeskComparison({ view, pair, year, target, context, onReturn, on
   return <section aria-label="歴史の比較">
     <h3>同じ年の歴史を比較</h3>
     <button type="button" onClick={() => onReturn(context)}>元の調査へ戻る</button>
+    {pair === 'A1_A2' && view.second && <p>第1介入入力年 {view.input.year}年／第2介入入力年 {view.second.input.year}年</p>}
     {!comparison ? <p>この比較は取得できません。</p> : <>
-      <p>介入年 {view.input.year}年／観測年 {year}年。年初の状態と年内の記録は別です。記録差は因果を証明しません。</p>
+      <p>{pair === 'A0_A1' && `介入年 ${view.input.year}年／`}観測年 {year}年。年初の状態と年内の記録は別です。記録差は因果を証明しません。</p>
       {target && comparison.before.start.kind === 'CONFIRMED' && comparison.after.start.kind === 'CONFIRMED' && <p>対象年初状態: {targetState(comparison.before, target) === undefined || targetState(comparison.after, target) === undefined ? '両枝での比較はできません' : JSON.stringify(targetState(comparison.before, target)) === JSON.stringify(targetState(comparison.after, target)) ? '実値に差なし' : '実値に差あり'}（詳細は各枝の年初状態）</p>}
       <Differences comparison={comparison} target={target} onEvidence={onEvidence}/>
       <Branch history={comparison.before} target={target} onEvidence={onEvidence}/>

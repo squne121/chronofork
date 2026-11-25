@@ -65,6 +65,21 @@ it('A1→A2の元比較の省略範囲を根拠へ渡し、未記録を他枝か
   expect(comparison.after.event('event-1', 'FIXTURE').kind).toBe('POSSIBLY_OMITTED')
 })
 
+it('第1・第2介入入力年が異なる場合は各年を示し比較不能とし、未添付を推測しない', () => {
+  const original = fixture()
+  const year = 1251
+  const input = { ...original.input, year, secondPersonId: 'c' }
+  const id = playModifierId(year, ['a', 'c'], 20, 5)
+  const second: PlayView = { ...original, input, modifier: { modifierId: id } as PlayView['modifier'],
+    a0: original.a1, a1: { ...original.a1, playModifierIds: [original.modifier.modifierId, id], result: { ...original.a1.result, branchId: 'A2-play' } } }
+  const context = { history: comparisonAt(original, 'A0_A1', 1250)!.before }
+  const { rerender } = render(<DeskComparison view={{ ...original, second }} pair="A1_A2" year={1250} context={context} onReturn={() => {}} onEvidence={() => {}}/>)
+  expect(screen.getByText('第1介入入力年 1250年／第2介入入力年 1251年')).toBeTruthy()
+  expect(screen.getByText('この比較は取得できません。')).toBeTruthy()
+  rerender(<DeskComparison view={original} pair="A1_A2" year={1250} context={context} onReturn={() => {}} onEvidence={() => {}}/>)
+  expect(screen.queryByText(/第2介入入力年/)).toBeNull()
+})
+
 it('対象外の差を含めず、対象の年初実値と介入年・観測年を区別する', () => {
   const original = fixture()
   const person = original.a0.initialWorld.persons[0]!
