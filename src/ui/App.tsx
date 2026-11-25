@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ObservationPanel } from './observation/ObservationPanel.tsx'
 import { DEFAULT_OBSERVATION_MODE, DEFAULT_OBSERVATION_SEED, INTEGRATED_PLAY_DEFAULTS, isObservationMode, playConfigDigest } from './branch-play-source.ts'
 import type { ObservationMode, ObservationSlice } from './branch-play-source.ts'
+import { DeskDocuments } from './desk/documents/index.tsx'
+import type { DeskDocumentsProps, DocumentOpenRequest } from './desk/documents/index.tsx'
+import { historyFromObservation, sameHistoryYearRef } from './desk/data/history.ts'
+import type { HistoryYearRef } from './desk/data/history.ts'
+import type { OpenDeskDocument } from './desk/layout/document-link.ts'
+import type { DocumentFilter } from './desk/documents/record-filter.ts'
 import { createObservationRequests } from './desk/timeline/observation-requests.ts'
 import type { PlayProgress } from './play-progress.ts'
 import { HistoryPanel, involves } from './HistoryPanel.tsx'
@@ -83,6 +89,20 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   // 初回は実A0の観測を主入口にする。旧試験UIは明示的な「開発用」入口でのみ開く。
   const [workspaceOpen,setWorkspaceOpen]=useState(isLegacyEntry)
   const [observation,setObservation]=useState<ObservationSlice>()
+  const observationYear = useMemo(() => observation && historyFromObservation(observation).at(observation.year), [observation])
+  const desk = !injected && !isLegacyEntry() && observationMode === DEFAULT_OBSERVATION_MODE
+  const [deskPlaying, setDeskPlaying] = useState(false)
+  const [documentRequest, setDocumentRequest] = useState<DocumentOpenRequest>()
+  const documentSerial = useRef(0)
+  const [documentSession, setDocumentSession] = useState(0)
+  const [documentNavigation, setDocumentNavigation] = useState(0)
+  const [documentFilter, setDocumentFilter] = useState<DocumentFilter>()
+  const resetDocuments = () => {
+    setDocumentSession(n => n + 1)
+    setDocumentRequest(undefined)
+    setDocumentFilter(undefined)
+    setDeskPlaying(false)
+  }
   const [obsCalc,setObsCalc]=useState<CalcInfo>()
   const [obsPendingYear,setObsPendingYear]=useState<number>()
   const obsLoading = obsPendingYear !== undefined
@@ -99,7 +119,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const candHandleRef = useRef<CandidatesRunHandle | undefined>(undefined)
   const [playError, setPlayError] = useState<{code:string;message:string} | undefined>(undefined)
   const [activeBranch, setActiveBranch] = useState<BranchChoice|'A2'>('A1')
-  // C の資料窓まで、固定 ID を持つ既存 Inspector は一方にだけ置く。
+  // 固定 ID を持つ既存 Inspector は、観測と比較の一方にだけ置く。
   const [inspectObservationWorld, setInspectObservationWorld] = useState(false)
   // 旧試験を開いた時点で初めて旧試験計算を行う（通常の初期表示では実行しない）。
   const needLegacyRun = workspaceOpen && !!runState.pending && !observation && !comparison
@@ -184,7 +204,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     setObservationSeedText(text)
   }
   const clearProgress = () => { setProgress({}); setProgressEnd(undefined); setA0Reused(false) }
-  const loadObservation=(year:number, playback=false)=>{
+  const loadObservation=(year:number, playback=false, expectedRef?:HistoryYearRef)=>{
     if(handleRef.current||candHandleRef.current){
       setObsError({code:'RUN_IN_PROGRESS',message:'進行中の計算が終了してから観測してください'})
       return
@@ -206,6 +226,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       cancelObservation()
       playRunner.reset?.()
       setObservation(undefined)
+      resetDocuments()
       setObsCalc(undefined)
       setComparison(undefined)
       setRun(pendingExperimentalRun(seed))
@@ -229,7 +250,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     setObsProgress(undefined)
     setObsError(undefined)
     observationRequests.request({
-      input: { seed, mode: observationMode, year }, playback, observe: playRunner.observe,
+      input: { seed, mode: observationMode, year }, expectedRef, playback, observe: playRunner.observe,
       progress: setObsProgress,
       success: (view, computeMs, wallMs) => {
         setObsPendingYear(undefined)
@@ -261,6 +282,33 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     setWorkspaceOpen(true)
     setNotice(secondPersonId===undefined?'観測年・人物を介入フォームへ反映しました。2人目と補正値を確認してください。':'観測年と婚姻候補の2人を介入フォームへ反映しました。補正値と期間を確認してください。')
     setTimeout(()=>document.getElementById('branch-heading')?.scrollIntoView?.({block:'start'}),0)
+  }
+  const inCurrentA0 = (ref: HistoryYearRef) => observationYear !== undefined &&
+    observationYear.ref.origin.seed === Number(observationSeedText.trim()) && /^\d+$/.test(observationSeedText.trim()) &&
+    sameHistoryYearRef(ref, { ...observationYear.ref, year: ref.year })
+  const stopDeskPlayback = () => { setDeskPlaying(false); pauseObservation() }
+  const openDocument: OpenDeskDocument = (target, ref, source) => {
+    if (!observationYear || obsLoading || !inCurrentA0(ref) || !sameHistoryYearRef(ref, observationYear.ref)) return
+    setDocumentRequest({ requestId: String(++documentSerial.current), ref, target, source })
+  }
+  const goToDocumentYear: NonNullable<DeskDocumentsProps['onYear']> = (ref, { sourceHistory }) => {
+    // 比較 DTO は現在の観測と同じ参照でも別出典。ここでは置換しない。
+    if (sourceHistory || !inCurrentA0(ref) || !Number.isInteger(ref.year) || ref.year < YEAR_RANGE.min || ref.year > YEAR_RANGE.max) return
+    stopDeskPlayback()
+    setDocumentNavigation(n => n + 1)
+    if (observationYear?.ref.year !== ref.year || obsLoading || obsError) loadObservation(ref.year, false, ref)
+  }
+  const filterFromDocument: NonNullable<DeskDocumentsProps['onFilter']> = (target, ref, context) => {
+    if (context?.sourceHistory || !inCurrentA0(ref)) return
+    setDocumentFilter({ target, ref })
+    goToDocumentYear(ref, { windowId: '' })
+    const chronicle = document.getElementById('obs-desk-chronicle')
+    chronicle?.scrollIntoView?.({ block: 'nearest' })
+  }
+  const interveneFromDocument: NonNullable<DeskDocumentsProps['onIntervene']> = (year, personId, secondPersonId, ref) => {
+    if (!inCurrentA0(ref) || ref.year !== year || obsLoading || running || fetchingCandidates) return
+    stopDeskPlayback()
+    observationToIntervene(year, personId, secondPersonId)
   }
   const stopCandidates = () => {
     candTokenRef.current++
@@ -315,6 +363,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     stopCandidates()
     setCandidateSet(undefined)
     setObservation(undefined)
+    resetDocuments()
     setObsTarget(undefined)
     playRunner.reset?.() // 新規ゲーム/seed変更では前の世界線のA0を引き継がない
     clearProgress()
@@ -491,7 +540,6 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const branchLabel = comparison
     ?activeBranch==='A0'?'A0（介入なしの歴史）':activeBranch==='A1'?'A1（第1介入の歴史）':'A2（第2介入までの歴史）'
     :observation?(observation.mode==='MULTI_HOUSE_EXPERIMENTAL'?'A0（複数家門の原史を観測）':'A0（統合試験の原史を観測）'):'原史（旧・C004試験計算）'
-  const desk = !injected && !isLegacyEntry() && observationMode === DEFAULT_OBSERVATION_MODE
   return (
     <div className="app">
       <header className={desk ? "topbar desk-status" : "topbar"}>
@@ -525,6 +573,9 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       <main className="layout">
         <div className="obs-main">
           <ObservationPanel desk={desk}
+            {...(desk ? { historyYear: observationYear, onOpenDocument: openDocument,
+              documentNavigation, documentFilter, onClearDocumentFilter: () => setDocumentFilter(undefined),
+              playing: deskPlaying, onPlayingChange: setDeskPlaying } : {})}
             worldInspectorVisible={!desk || !comparison || inspectObservationWorld}
             onInspectWorld={()=>setInspectObservationWorld(true)} draining={obsDraining} pendingYear={obsPendingYear} blocked={!!running || fetchingCandidates} onPause={pauseObservation} mode={observationMode} calc={obsCalc} observation={observation} loading={obsLoading} progress={obsProgress} error={obsError}
             seedText={observationSeedText} onSeedText={changeSelectedSeed} onReset={rerun}
@@ -627,6 +678,9 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           </div>
         </details>
       </main>
+      {desk && <DeskDocuments key={documentSession} history={observationYear} slice={observation}
+        openRequest={documentRequest} interventionDisabled={!observationYear || !inCurrentA0(observationYear.ref) || obsLoading || !!running || fetchingCandidates}
+        onYear={goToDocumentYear} onFilter={filterFromDocument} onIntervene={interveneFromDocument} />}
     </div>
   )
 }

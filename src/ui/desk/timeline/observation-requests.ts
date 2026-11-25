@@ -2,12 +2,14 @@ import type { ObservationInput, ObservationSlice } from '../../branch-play-sourc
 import { candidateSetMatches } from '../../play-candidates.ts'
 import type { PlayProgress } from '../../play-progress.ts'
 import type { ObservationHandle, PlayRunner } from '../../play-runner.ts'
-import { matchesObservation } from '../data/history.ts'
+import type { HistoryYearRef } from '../data/history.ts'
+import { historyFromObservation, matchesObservation, sameHistoryYearRef } from '../data/history.ts'
 import { createLatestHistoryRequest } from '../data/latest-request.ts'
 
 export type ObservationError = Readonly<{ code: string; message: string }>
 type Request = Readonly<{
   input: ObservationInput
+  expectedRef?: HistoryYearRef
   playback: boolean
   observe: NonNullable<PlayRunner['observe']>
   progress: (progress: PlayProgress) => void
@@ -53,7 +55,9 @@ export function createObservationRequests(onIdle?: () => void) {
       if (outcome.kind === 'FAILED') return fail(outcome.code, outcome.message)
       if (!outcome.result.ok) return fail(outcome.result.code, outcome.result.message)
       const adopted = ticket.commit(outcome.result.observation,
-        slice => matchesObservation(input, slice) && candidateSetMatches(slice.candidates, input.seed, input.mode),
+        slice => matchesObservation(input, slice) && candidateSetMatches(slice.candidates, input.seed, input.mode, input.configuration)
+          && (slice.branchId === undefined || slice.branchId === 'A0-play') && (slice.playLedger?.length ?? 0) === 0
+          && (!request.expectedRef || sameHistoryYearRef(request.expectedRef, historyFromObservation(slice).at(slice.year).ref)),
         slice => {
           latest = undefined
           success(slice, outcome.computeMs, performance.now() - started)

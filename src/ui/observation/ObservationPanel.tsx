@@ -17,9 +17,13 @@ import { eventHeadline, namesOfYear, EVENT_CATEGORIES, inCategory, isObservation
 import { describeEvent, shortPersonName, unresolvedLabel } from '../event-summary.ts'
 import type { EventLogEntry, DecisionTrace, Id } from '../../simulation/contracts/index.ts'
 import type { GoalFailureCode } from '../../simulation/goal.ts'
-import { historyFromObservation } from '../desk/data/history.ts'
+import type { HistoryYear } from '../desk/data/history.ts'
+import { documentRecordFilter } from '../desk/documents/record-filter.ts'
+import type { DocumentFilter } from '../desk/documents/record-filter.ts'
+import { historyFromObservation, sameHistoryYearRef } from '../desk/data/history.ts'
 import { DeskLayout } from '../desk/layout/DeskLayout.tsx'
-import type { OpenDeskDocument } from '../desk/layout/document-link.ts'
+import { documentKinds, documentPresentation } from '../desk/documents/presentation.ts'
+import type { DeskDocumentTarget, OpenDeskDocument } from '../desk/layout/document-link.ts'
 import './observation.css'
 
 type Props = Readonly<{
@@ -40,7 +44,13 @@ type Props = Readonly<{
   onInspectWorld?:()=>void
   onLoad:(year:number, playback?:true)=>void
   onPause?:()=>void
+  historyYear?:HistoryYear
   onOpenDocument?:OpenDeskDocument
+  documentNavigation?:number
+  documentFilter?:DocumentFilter
+  onClearDocumentFilter?:()=>void
+  playing?:boolean
+  onPlayingChange?:(playing:boolean)=>void
   onCancel:()=>void
   onIntervene:(year:number,personId:string,secondPersonId?:string)=>void
 }>
@@ -71,7 +81,7 @@ const goalStatusText=(status:string)=>status==='ACHIEVED'?'条件を満たして
 /** PR-2: 介入前の原史A0を、証拠のある履歴だけで調べる。WorldStateは選択年の年初。 */
 export function ObservationPanel(p:Props){
   const v=p.observation
-  const historyYear = useMemo(() => v && historyFromObservation(v).at(v.year), [v])
+  const historyYear = useMemo(() => p.historyYear ?? (v && historyFromObservation(v).at(v.year)), [v,p.historyYear])
   const yearStart = historyYear?.start.kind === 'CONFIRMED' ? historyYear.start.world : undefined
   const yearEvents = historyYear?.records.kind === 'COMMITTED' ? historyYear.records.events : undefined
   const yearTraces = historyYear?.records.kind === 'COMMITTED' ? historyYear.records.traces : undefined
@@ -95,18 +105,25 @@ export function ObservationPanel(p:Props){
   const [invTab,setInvTab]=useState<EntityKind>('region')
   const [invSelection,setInvSelection]=useState<Selection|undefined>(undefined)
   // 別の年の記録を開くとき、その年の観測が届いてから対象のEvent/Traceを選ぶ。
-  const [pendingOpen,setPendingOpen]=useState<{kind:'event'|'trace';id:string;year:number;seed:number;error?:Props['error']}|undefined>(undefined)
+  const [pendingOpen,setPendingOpen]=useState<{kind:'event'|'trace';id:string;year:number;seed:number;navigation?:number;error?:Props['error']}|undefined>(undefined)
   const [recordReveal, setRecordReveal] = useState<{kind:'event'|'trace';id:string}>()
   const [recordIdentity,setRecordIdentity]=useState(()=>v?`${v.seed}:${v.year}`:'')
   const [scrubYear,setScrubYear]=useState<number|null>(null) // ドラッグ中のみ表示を更新する
-  const [playing, setPlaying] = useState(false)
+  const [localPlaying, setLocalPlaying] = useState(false)
+  const setPlaying = p.onPlayingChange ?? setLocalPlaying
   const [delay, setDelay] = useState(850)
   const lastYear = v?.counts.at(-1)?.year ?? v?.year
   const atEnd = v !== undefined && v.year === lastYear
   const { onLoad, loading, error, blocked } = p
   const advance = useEffectEvent((year: number) => onLoad(year, true))
   const pause = () => { setPlaying(false); p.onPause?.() }
-  if (playing && (!seedMatches || blocked || error || atEnd)) setPlaying(false)
+  const wantsPlayback = p.playing ?? localPlaying
+  const stopPlayback = !seedMatches || !!blocked || !!error || atEnd
+  const playing = wantsPlayback && !stopPlayback
+  const stopInterruptedPlayback = useEffectEvent(() => setPlaying(false))
+  useEffect(() => {
+    if (wantsPlayback && stopPlayback) stopInterruptedPlayback()
+  }, [wantsPlayback, stopPlayback])
   useEffect(() => {
     if (!playing || !v || loading || error || blocked || !seedMatches || atEnd) return
     const id = setTimeout(() => advance(v.year + 1), delay)
@@ -146,10 +163,22 @@ export function ObservationPanel(p:Props){
   const isPeopleTitleEvent=(e:EventLogEntry)=>isObservationFocusEvent(e)
   const yearHints=(v?.counts??[]).filter(c=>(c.focusEvents??0)>0)
   const types=[...new Set(yearEvents?.map(e=>e.eventType)??[])].sort()
-  const events=(yearEvents??[]).filter(e=>(eventType==='ALL'||e.eventType===eventType)&&
-    (showAllEvents||eventType!=='ALL'||isPeopleTitleEvent(e))&&(!relatedOnly||eventRefs.has(e.eventId)))
-  const traces=(yearTraces??[]).filter(t=>(traceFilter==='ALL'||
-    traceFilter==='EVENTLESS'&&t.eventIds.length===0&&(t.status==='DEFER'||t.status==='REJECT')||
+  const activeDocumentFilter = p.documentFilter && historyYear && sameHistoryYearRef(p.documentFilter.ref, historyYear.ref)
+    ? p.documentFilter : undefined
+  const filterName = useMemo(() => activeDocumentFilter && documentPresentation(historyYear).name(activeDocumentFilter.target), [activeDocumentFilter,historyYear])
+  const filteredRecords = useMemo(() => activeDocumentFilter && documentRecordFilter(activeDocumentFilter.target,
+    yearEvents??[], yearTraces??[], associations?.confirmed??[]), [activeDocumentFilter,yearEvents,yearTraces,associations])
+  const [lastDocumentFilter,setLastDocumentFilter]=useState<DocumentFilter>()
+  if (p.documentFilter !== lastDocumentFilter) {
+    setLastDocumentFilter(p.documentFilter)
+    if (p.documentFilter) {
+      setEventId(''); setTraceId(''); setEventLimit(SHOW); setTraceLimit(SHOW)
+    }
+  }
+  const events=(yearEvents??[]).filter(e=>filteredRecords ? filteredRecords.eventIds.has(e.eventId) :
+    (eventType==='ALL'||e.eventType===eventType)&&(showAllEvents||eventType!=='ALL'||isPeopleTitleEvent(e))&&(!relatedOnly||eventRefs.has(e.eventId)))
+  const traces=(yearTraces??[]).filter(t=>filteredRecords ? filteredRecords.traceIds.has(t.traceId) :
+    (traceFilter==='ALL'||traceFilter==='EVENTLESS'&&t.eventIds.length===0&&(t.status==='DEFER'||t.status==='REJECT')||
     traceFilter===t.status)&&(!relatedOnly||traceRefs.has(t.traceId)))
   const chosenEvent=yearEvents?.find(x=>x.eventId===eventId)
   const chosenTrace=yearTraces?.find(x=>x.traceId===traceId)
@@ -166,14 +195,15 @@ export function ObservationPanel(p:Props){
       .filter(a=>a.source.type==='EVENT'&&a.source.eventId===chosenEvent.eventId&&
         a.role==='NEWBORN'&&a.target.kind==='PERSON'&&!persons.some(p=>p.personId===a.target.id))
       .map(a=>a.target.id))]:[]
-  const requestDocument = (target: Parameters<OpenDeskDocument>[0]) => {
+  const requestDocument = (target: DeskDocumentTarget, source?:DeskDocumentTarget) => {
     if (!historyYear || historyYear.start.kind !== 'CONFIRMED' || p.loading || !seedMatches) return
     pause()
-    p.onOpenDocument?.(target, historyYear.ref)
+    if (source) p.onOpenDocument?.(target, historyYear.ref, source)
+    else p.onOpenDocument?.(target, historyYear.ref)
   }
-  const chooseTrace = (id: string) => {
+  const chooseTrace = (id: string, source?:DeskDocumentTarget) => {
     setTraceId(id); setTraceOpen(true)
-    if (historyYear?.trace(id).kind === 'RECORDED') requestDocument({ kind: 'trace', id })
+    if (historyYear?.trace(id).kind === 'RECORDED') requestDocument({ kind: 'trace', id },source)
   }
   const chooseEvent=(e:EventLogEntry)=>{
     if (historyYear?.event(e.eventId).kind === 'RECORDED') requestDocument({ kind: 'event', id: e.eventId })
@@ -226,7 +256,7 @@ export function ObservationPanel(p:Props){
     setMainTab('investigate')
     if(v&&v.year===year){applyOpen(kind,id);return}
     yearChange(year)
-    if(v)setPendingOpen({kind,id,year,seed:v.seed,error:p.error})
+    if(v)setPendingOpen({kind,id,year,seed:v.seed,navigation:p.documentNavigation,error:p.error})
   }
   const applyOpen=(kind:'event'|'trace',id:string)=>{
     if (p.desk) setRecordReveal({kind,id})
@@ -242,7 +272,8 @@ export function ObservationPanel(p:Props){
   // 失敗やseed変更後に、後から届いた別の観測で保留を復活させない。
   if(pendingOpen){
     if(!seedValid||Number(p.seedText.trim())!==pendingOpen.seed||
-      (v&&v.seed!==pendingOpen.seed)||(p.error&&p.error!==pendingOpen.error)){
+      (v&&v.seed!==pendingOpen.seed)||(p.error&&p.error!==pendingOpen.error)||
+      p.documentNavigation!==pendingOpen.navigation){
       setPendingOpen(undefined)
     }else if(v?.seed===pendingOpen.seed&&v.year===pendingOpen.year&&!p.loading){
       setPendingOpen(undefined)
@@ -270,7 +301,6 @@ export function ObservationPanel(p:Props){
   const revealRecord = useEffectEvent((record: NonNullable<typeof recordReveal>) => {
     const found = record.kind === 'event' ? historyYear?.event(record.id) : historyYear?.trace(record.id)
     if (found?.kind !== 'RECORDED' || !historyYear || loading || !seedMatches) return
-    p.onOpenDocument?.(record, historyYear.ref)
     jumpTo(`obs-desk-${record.kind}-detail`)
   })
   useEffect(() => {
@@ -403,19 +433,23 @@ export function ObservationPanel(p:Props){
         <div className="obs-timeline" data-testid="obs-chronicle" data-year={v.year}>
           <h3>{p.desk ? '年代記' : '年表'}・{v.year}年に記録された出来事</h3>
           <p className="note">最初は婚姻・出生・死亡・王朝帰属・土地Titleなどを示します。人口や補助人物の登録を含む全Eventも下から表示できます。</p>
+          {p.documentFilter && <p data-testid="obs-document-filter" role="status">
+            {activeDocumentFilter ? `${documentKinds[activeDocumentFilter.target.kind]}「${filterName}」に根拠のある記録で絞り込み中` : '資料の参照年にのみ絞り込みを適用'}（{p.documentFilter.ref.year}年）
+            <button type="button" onClick={p.onClearDocumentFilter}>資料の絞り込みを解除</button>
+          </p>}
           <label>Event種別
-            <select data-testid="obs-event-type" value={eventType} onChange={e=>{setEventType(e.target.value);setEventLimit(SHOW)}}>
+            <select data-testid="obs-event-type" disabled={!!activeDocumentFilter} value={activeDocumentFilter ? 'ALL' : eventType} onChange={e=>{setEventType(e.target.value);setEventLimit(SHOW)}}>
               <option value="ALL">全種類</option>
               {eventType !== 'ALL' && !types.includes(eventType) && <option value={eventType}>{labelOf(eventType)}（当年なし）</option>}
               {types.map(x=><option key={x} value={x}>{labelOf(x)}</option>)}
             </select>
           </label>
           <label className="obs-check">
-            <input type="checkbox" checked={relatedOnly} onChange={e=>setRelatedOnly(e.target.checked)}/>
+            <input type="checkbox" disabled={!!activeDocumentFilter} checked={!activeDocumentFilter && relatedOnly} onChange={e=>setRelatedOnly(e.target.checked)}/>
             選択人物に根拠のある記録だけ
           </label>
           <label className="obs-check">
-            <input type="checkbox" data-testid="obs-all-events" checked={showAllEvents}
+            <input type="checkbox" data-testid="obs-all-events" disabled={!!activeDocumentFilter} checked={!!activeDocumentFilter || showAllEvents}
               onChange={e=>{setShowAllEvents(e.target.checked);setEventLimit(SHOW)}}/>
             人口などを含む全Eventを表示
           </label>
@@ -431,12 +465,13 @@ export function ObservationPanel(p:Props){
           {events.length>eventLimit&&<button type="button" onClick={()=>setEventLimit(n=>n+SHOW)}>Eventをさらに表示</button>}
           {chosenEvent&&<div className="obs-record-detail" id={p.desk ? "obs-desk-event-detail" : undefined} tabIndex={p.desk ? -1 : undefined} data-testid="obs-event-detail">
             <h4>{readableEvent(chosenEvent)}</h4>
+            {p.onOpenDocument && <button type="button" onClick={()=>requestDocument({kind:'event',id:chosenEvent.eventId})}>この出来事の資料を開く</button>}
             {describeEvent(chosenEvent,names)?.lines.map(line=><p key={line}>{line}</p>)}
             <p>実際の状態変化 {chosenEvent.stateChanges.length}件。関係する人物と記録上の判断だけを辿れます。</p>
             {describeEvent(chosenEvent,names)===undefined&&<p className="missing" data-testid="obs-event-unexplained">
               この種類の出来事は、通常表示ではまだ内容を読み替えていません。実際の状態差分は下の検証用表示にあります。</p>}
             {evidencePersons.length>0&&<div className="obs-related-links" data-testid="obs-event-people">
-              {evidencePersons.map(id=><button type="button" key={id} onClick={()=>{setSelectedPerson(id);requestDocument({kind:'person',id})}}>
+              {evidencePersons.map(id=><button type="button" key={id} onClick={()=>{setSelectedPerson(id);requestDocument({kind:'person',id},{kind:'event',id:chosenEvent.eventId})}}>
                 {personName(id)}の家系を見る
               </button>)}
             </div>}
@@ -456,7 +491,7 @@ export function ObservationPanel(p:Props){
                   return <p key={id}>{t
                     ?<><strong>{statusText(t.status)}</strong> — {traceActor(t)}／判断規則 {t.ruleId}
                       <span data-testid="obs-trace-reason">（{reasonSentence(t.reasonCodes)}）</span>
-                      <button type="button" onClick={()=>{chooseTrace(id);setTraceFilter('ALL')}}>根拠を詳しく見る</button></>
+                      <button type="button" onClick={()=>{chooseTrace(id,{kind:'event',id:chosenEvent.eventId});setTraceFilter('ALL')}}>根拠を詳しく見る</button></>
                     :<>参照された判断の詳細は、この年の表示にはありません<span hidden data-trace-id={id}/></>}</p>
                 })}
               </div>}
@@ -467,7 +502,7 @@ export function ObservationPanel(p:Props){
             onToggle={e=>setTraceOpen(e.currentTarget.open)}>
           <summary>技術的な詳細：DecisionTrace（実際の採否・判断根拠）</summary>
           <label>判断種別
-            <select data-testid="obs-trace-filter" value={traceFilter} onChange={e=>{setTraceFilter(e.target.value);setTraceLimit(SHOW)}}>
+            <select data-testid="obs-trace-filter" disabled={!!activeDocumentFilter} value={activeDocumentFilter ? 'ALL' : traceFilter} onChange={e=>{setTraceFilter(e.target.value);setTraceLimit(SHOW)}}>
               <option value="EVENTLESS">EventなしのDEFER・REJECT</option>
               <option value="ALL">全判断</option>
               <option value="DEFER">DEFER</option>
@@ -486,6 +521,7 @@ export function ObservationPanel(p:Props){
           {traces.length>traceLimit&&<button type="button" onClick={()=>setTraceLimit(n=>n+SHOW)}>Traceをさらに表示</button>}
           {chosenTrace&&<div className="obs-record-detail" id={p.desk ? "obs-desk-trace-detail" : undefined} tabIndex={p.desk ? -1 : undefined} data-testid="obs-trace-detail">
             <h4>{traceActor(chosenTrace)}についての判断：{statusText(chosenTrace.status)}</h4>
+            {p.onOpenDocument && <button type="button" onClick={()=>requestDocument({kind:'trace',id:chosenTrace.traceId})}>この判断の資料を開く</button>}
             <p>規則 {chosenTrace.ruleId}（{chosenTrace.status}）。記録された理由：{reasonSentence(chosenTrace.reasonCodes)}</p>
             <p className="note">理由コード：{reasonCodes(chosenTrace.reasonCodes)}{reasonView(chosenTrace.reasonCodes).unclassified.length>0?'（未分類のコードを含みます）':''}</p>
             <p>実際に関連づくEvent：{chosenTrace.eventIds.length}件。記録されていない事件は補いません。</p>
@@ -507,6 +543,8 @@ export function ObservationPanel(p:Props){
                 <option value={x.personId} key={x.personId}>{shortPersonName(x.name)}（{x.birthYear}年生）</option>)}
             </select>
           </label>
+          {p.onOpenDocument && person && <button type="button" disabled={p.loading||!seedMatches}
+            onClick={()=>requestDocument({kind:'person',id:person})}>人物の資料を開く</button>}
           <section className="obs-person-year" data-testid="obs-person-year-state">
             <h4>選択年初の状態（{v.year}年初）</h4>
             <p className="note">この年の年初に記録されている関係です。別の年の関係や、この世界線の全期間の履歴は下の別欄にあります。</p>
@@ -532,6 +570,8 @@ export function ObservationPanel(p:Props){
           </label>
           {title&&<div data-testid="obs-title-detail">
             <h4>{titleLabel(title,v.world)}</h4>
+            {p.onOpenDocument && <button type="button" disabled={p.loading||!seedMatches}
+              onClick={()=>requestDocument({kind:'title',id:title.titleId})}>称号の資料を開く</button>}
             <details><summary>技術情報：称号のIDと権利状態</summary>
               <p>ID：{title.titleId}／種類：{title.kind}／有効：{title.valid?'はい':'いいえ'}／承認：{title.recognition.status}</p>
             </details>
