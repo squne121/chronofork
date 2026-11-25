@@ -3,10 +3,20 @@
 import { runPlayComparison } from './branch-play-source.ts'
 import type { ObservationInput, ObservationSlice, PlayInput, PlayResult, PlayView } from './branch-play-source.ts'
 import type { WorkerRequest, WorkerResponse } from './play-worker.ts'
-import { runPlayCandidates } from './play-candidates.ts'
+import { matchesObservation, matchesPlayRequest } from './desk/data/history.ts'
+import { candidateSetMatches, runPlayCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
+import type { PlayConfiguration } from './desk/data/limited-config.ts'
 import type { PlayMode } from './branch-play-source.ts'
 import type { ProgressObserver } from './play-progress.ts'
+
+const historyMismatch={kind:'FAILED',code:'HISTORY_MISMATCH',message:'限定試遊の要求と応答の来歴が一致しません'} as const
+const postFailure=(error:unknown)=>({kind:'FAILED',code:'WORKER_POST_FAILED',message:error instanceof Error?error.message:String(error)} as const)
+const isWorkerEnvelope=(value:unknown):boolean=>value!==null&&typeof value==='object'&&
+  (('ok' in value&&typeof value.ok==='boolean')||('kind' in value&&(value.kind==='PROGRESS'||value.kind==='A0_REUSED')))
+function safelyMatches(check:()=>boolean):boolean{
+  try{return check()}catch{return false}
+}
 
 export type PlayOutcome=
   | Readonly<{kind:'DONE';result:Readonly<{ok:true;view:PlayView}>|Readonly<{ok:true;secondView:PlayView;parentInput:PlayInput;a0Source:'COMPUTED'|'REUSED'}>|Extract<PlayResult,{ok:false}>;computeMs:number}>
@@ -47,7 +57,7 @@ const realWorker=():WorkerLike=>new Worker(new URL('./play-worker.ts',import.met
  * Workerを複数回の実行で共有する。成功・計算上の失敗(HALTED等)では保持し、
  * キャンセル・Worker障害・reset・無操作タイムアウトでは必ずterminateしてA0を捨てる。
  */
-export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
+export function createWorkerPlayRunner(options:RunnerOptions={}){
   const create=options.createWorker??realWorker
   const idleMs=options.idleMs??A0_IDLE_RELEASE_MS
   let worker:WorkerLike|undefined
@@ -87,11 +97,14 @@ export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
       const w=worker
       w.onmessage=(e:MessageEvent<WorkerResponse>)=>{
         const m=e.data
+        if(input.configuration==='LIMITED_PLAYTEST'&&!isWorkerEnvelope(m)){settle(historyMismatch);return}
         if('kind' in m){
           if(done)return
           if(m.kind==='PROGRESS')onProgress?.(m.progress);else hooks?.onA0Reused?.()
           return
         }
+        if(input.configuration==='LIMITED_PLAYTEST'&&m.ok&&
+          !safelyMatches(()=> 'view' in m && matchesPlayRequest(input,m.view))){settle(historyMismatch);return}
         if(m.ok&&!('view' in m)&&!('secondView' in m)){settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'想定外の応答です'});return}
         settle({kind:'DONE',computeMs:m.computeMs,
           result:m.ok?'view' in m?{ok:true,view:m.view}:{ok:true,secondView:m.secondView,parentInput:m.parentInput,a0Source:m.a0Source}
@@ -99,7 +112,7 @@ export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
       }
       w.onerror=e=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_ERROR',message:e.message||'Workerで未捕捉のエラーが発生しました'})
       w.onmessageerror=()=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'計算結果をWorkerから受け取れませんでした'})
-      w.postMessage({input})
+      try{w.postMessage({input})}catch(error){settle(postFailure(error))}
     })
     return {promise,cancel:()=>settle({kind:'CANCELLED'})}
   }
@@ -130,7 +143,10 @@ export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
       const w=worker
       w.onmessage=(e:MessageEvent<WorkerResponse>)=>{
         const m=e.data
+        if(input.configuration==='LIMITED_PLAYTEST'&&!isWorkerEnvelope(m)){settle(historyMismatch);return}
         if('kind' in m){if(!done&&m.kind==='PROGRESS')onProgress?.(m.progress);return}
+        if(input.configuration==='LIMITED_PLAYTEST'&&m.ok&&
+          !safelyMatches(()=> 'observation' in m && matchesObservation(input,m.observation))){settle(historyMismatch);return}
         if(m.ok&&!('observation' in m)){
           settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'観測以外の応答です'});return
         }
@@ -139,11 +155,11 @@ export function createWorkerPlayRunner(options:RunnerOptions={}):PlayRunner{
       }
       w.onerror=e=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_ERROR',message:e.message||'Worker障害'})
       w.onmessageerror=()=>done?dropWorker():settle({kind:'FAILED',code:'WORKER_MESSAGE_ERROR',message:'観測結果を受信できません'})
-      w.postMessage({observe:input})
+      try{w.postMessage({observe:input})}catch(error){settle(postFailure(error))}
     })
     return {promise,cancel:()=>settle({kind:'CANCELLED'})}
   }
-  const runner:PlayRunner=Object.assign(run,{observe,reset:()=>{
+  const runner=Object.assign(run,{observe,reset:()=>{
     const a=active
     if(a)a.settle({kind:'CANCELLED'}) // 内部でdropWorker
     dropWorker()
@@ -169,13 +185,13 @@ export type CandidatesOutcome=
   | Readonly<{kind:'CANCELLED'}>
   | Readonly<{kind:'FAILED';code:string;message:string}>
 export type CandidatesRunHandle=Readonly<{promise:Promise<CandidatesOutcome>;cancel:()=>void}>
-export type CandidatesRunner=(seed:number,mode:PlayMode)=>CandidatesRunHandle
+export type CandidatesRunner=(seed:number,mode:PlayMode,configuration?:PlayConfiguration)=>CandidatesRunHandle
 
 /**
  * 実ブラウザ用。明示操作でA0を1回計算し、人物候補だけを受け取る(EventLog/DecisionTraceは転送しない)。
  * 使い捨てのWorkerで実行し、完了・失敗・キャンセルで必ずterminateする。比較用の共有Worker・A0キャッシュには触れない。
  */
-export const workerCandidatesRunner:CandidatesRunner=(seed,mode)=>{
+export const workerCandidatesRunner:CandidatesRunner=(seed,mode,configuration)=>{
   let worker:Worker|undefined
   let done=false
   let settle:(o:CandidatesOutcome)=>void=()=>{}
@@ -190,7 +206,10 @@ export const workerCandidatesRunner:CandidatesRunner=(seed,mode)=>{
     }
     worker.onmessage=(e:MessageEvent<WorkerResponse>)=>{
       const m=e.data
+      if(configuration==='LIMITED_PLAYTEST'&&!isWorkerEnvelope(m)){settle(historyMismatch);return}
       if('kind' in m)return
+      if(configuration==='LIMITED_PLAYTEST'&&m.ok&&
+        !safelyMatches(()=> 'candidates' in m && candidateSetMatches(m.candidates,seed,mode,configuration))){settle(historyMismatch);return}
       settle(m.ok&&'candidates' in m
         ?{kind:'DONE',computeMs:m.computeMs,result:{ok:true,set:m.candidates}}
         :!m.ok?{kind:'DONE',computeMs:m.computeMs,result:{ok:false,code:m.code,message:m.message}}
@@ -198,15 +217,15 @@ export const workerCandidatesRunner:CandidatesRunner=(seed,mode)=>{
     }
     worker.onerror=e=>settle(fail('WORKER_ERROR',e.message||'Workerで未捕捉のエラーが発生しました'))
     worker.onmessageerror=()=>settle(fail('WORKER_MESSAGE_ERROR','計算結果をWorkerから受け取れませんでした'))
-    const request:WorkerRequest={candidates:{seed,mode}}
-    worker.postMessage(request)
+    const request:WorkerRequest={candidates:{seed,mode,...(configuration===undefined?{}:{configuration})}}
+    try{worker.postMessage(request)}catch(error){settle(postFailure(error))}
   })
   return {promise,cancel:()=>settle({kind:'CANCELLED'})}
 }
 
 /** テスト用。同期でA0候補を計算し、Workerと同じ形で返す。 */
-export const inlineCandidatesRunner:CandidatesRunner=(seed,mode)=>{
+export const inlineCandidatesRunner:CandidatesRunner=(seed,mode,configuration)=>{
   const t0=performance.now()
-  const r=runPlayCandidates(seed,mode)
+  const r=runPlayCandidates(seed,mode,configuration)
   return {promise:Promise.resolve({kind:'DONE',computeMs:performance.now()-t0,result:r} as CandidatesOutcome),cancel:()=>{}}
 }

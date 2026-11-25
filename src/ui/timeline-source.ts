@@ -1,3 +1,4 @@
+import type { StatModifier } from '../simulation/contracts/index.ts'
 // runTimeline の実結果を UI の閲覧用に引く読み取り adapter。
 // ゲーム規則は一切持たない: 人口の増減は EventLog の before/after、Trace の根拠は Trace の記録をそのまま示す。
 // 用途は CALIBRATION_ONLY・experimental/partial の試験閲覧であり、本番の原史でも勝敗でもない。
@@ -18,6 +19,7 @@ export type RunInputs = Readonly<{
   scenarioId: string
   configId?: string
   configDigest?: string
+  configIdentity?: string
   rulesetVersion: string
   rngVersion: string
   evaluatedRuleIds: readonly string[]
@@ -29,6 +31,8 @@ export type TimelineRun = Readonly<{
   initialWorld: WorldState
   /** playの実枝が保持する介入履歴。旧試験TimelineRunには付かない。 */
   playModifierIds?: readonly Id[]
+  /** 限定試遊では実枝の台帳そのものを照合する。 */
+  playLedger?: readonly StatModifier[]
   /** ログに転送省略がある。比較DTOから単独で取り出しても完全版と区別する。 */
   logsOmitted?: true
   /** true の間は旧試験計算を未実行の空run。旧試験を開くとき（または明示計算）に実計算へ置き換える。 */

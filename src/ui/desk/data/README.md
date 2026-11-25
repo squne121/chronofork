@@ -16,7 +16,7 @@
 - `ALIVE` / `DEAD` は年初の `Person.alive`、`NOT_BORN` は同じ枝で出生年が確認できて年初にはまだいない場合です。出生年後に未登録等で見つからなければ `NOT_PRESENT`、全観測期間に実人物が現れなければ `ABSENT_FROM_BRANCH`、未完走で断定できなければ `UNKNOWN`。別枝の同じ ID を代用しません。
 - `RECORDED` は渡された実 Event/Trace です。`NO_RECORD` は照会範囲でそのレコードを確認できないことだけを表し、関係値ゼロ・ルール不成立・因果なしを意味しません。種別/ルールが確かな場合は `event(id, eventType)` / `trace(id, ruleId)` に渡せます。
 - `TRANSFER_OMISSION` は省略件数（新しい DTO は年別、旧 DTO は全期間）。照会が省略の範囲に当たる場合、個別 ID の不存在を断定できないため `POSSIBLY_OMITTED` とします。A0 は同一構成・seed・年の `observe` で完全な年内記録を読み直せます。A1/A2 に個別詳細を再取得する現行 Worker API はなく、省略分は未取得のままです。差分一覧が空でも、転送ビューが完全なログを含むとは表示しません。
-- 年初 `WorldState` の実値と `DecisionTrace` の実評価は別の根拠です。この層は関係の導出 API を提供しません。将来 SIM から正式に根拠付き導出値が提供されたら、実評価記録と別の出典種別で扱ってください。それ以外は不明または転送省略として扱い、値や過去の Event/Trace を補いません。正式 `goal` と `technicalGoal` の区別も従来の DTO のままです。
+- 年初 `WorldState` の基礎値と `DecisionTrace` の実評価は別の根拠です。限定試遊構成でのみ、下記の SIM 読取 API を使えます。通常 v0 では `UNSUPPORTED_CONFIGURATION` です。値や過去の Event/Trace を補いません。正式 `goal` と `technicalGoal` は別のままです。
 
 ## 非同期の採用
 
@@ -33,3 +33,32 @@ if (outcome.kind === 'DONE' && outcome.result.ok) {
 ```
 
 失敗・キャンセルを表示する場合も同じ世代確認が必要です。比較結果の採用には `matchesPlayRequest(input, view)` を使えます（第2介入の Worker 応答は親ビューと合成してから照合）。
+
+## 限定試遊入口（#165）
+
+`limited-playtest.ts` の `createLimitedPlaytestSession()` を限定試遊への明示操作で一度だけ呼びます。通常入口のモード・seed・Worker は切り替えません。限定試遊は固定 seed `20260303`、drift `0`、1250〜1350 年の experimental / CALIBRATION_ONLY。A0/A1 のみです。`session.configuration` には SIM から計算した完全な `configIdentity` と、識別表示用の `configId` / `configDigest` が入ります。履歴照合とキャッシュは短い digest だけに頼りません。資料窓の要求照合には `sameHistoryYearRef(a, b)` を使ってください（既存窓への適用は画面統合時）。介入照合は実枝の `playLedger` を使います。
+
+```ts
+const session = createLimitedPlaytestSession()
+const observed = await session.observe(selectedYear).promise
+if (observed.kind === 'DONE' && observed.result.ok) {
+  const slice = observed.result.observation
+  const year = historyFromObservation(slice).at(selectedYear)
+  const candidates = candidatesAtYear(slice.candidates, interventionYear)
+  const basis = year.relationship(leftId, rightId)
+  // 選択世代がまだ有効なら year / candidates / basis を表示する。
+}
+const compared = await session.compare(interventionYear, playerIntervention).promise
+if (compared.kind === 'DONE' && compared.result.ok && 'view' in compared.result) {
+  const comparison = historyFromPlayView(compared.result.view)?.compare('A0_A1', selectedYear)
+  // 選択世代がまだ有効なら comparison を表示する。
+}
+// 退出・アンマウント時:
+session.reset()
+```
+
+`playerIntervention` はプレイヤーの `{ firstPersonId, secondPersonId, signedDelta, durationYears }`。観測から得る候補は実 A0 の候補で、`observe` と `compare` は同じセッションで A0 を再利用します。ハンドルは `cancel` と `promise` を持ち、来歴不一致は `FAILED / HISTORY_MISMATCH`。表示では従来どおり最新要求の世代を別途照合してください。
+
+`relationship(leftId, rightId)` の `YEAR_START_BASE` は、SIM の `RECORDED` / `DERIVED` / `UNKNOWN` とその根拠を返します。肯定結果の `throughYear` が基礎値の対象年で、閲覧年や当年の介入後の値ではありません。当年の実効値・採否は同じ枝・年の `records` と実 `trace` を参照します。関係値を読めても、Event/Trace に `TRANSFER_OMISSION` がないとは限りません。候補登録上限の `DEFER` は実 Trace の技術的な予算制約であり、世界内の法的理由には置き換えません。技術評価は正式勝利として表示しません。
+
+開発者用の実 Worker 受入は `tests/unit/ui/desk-data/run-limited-browser.ts`（Vitest/標準 E2E には含めない）。専用ポートで `npm run dev -- --host 127.0.0.1 --port 5295 --strictPort`、別シェルで `node --experimental-strip-types tests/unit/ui/desk-data/run-limited-browser.ts http://127.0.0.1:5295 <工程2F証跡ディレクトリ>`。入力例は検証専用で、プレイヤーへの提示には使いません。
