@@ -42,6 +42,10 @@ exit
 
 リポジトリ管理者は Settings → Pages → Build and deployment の Source を **GitHub Actions** に設定してください。main の `ci` の `quick-check` 成功後、同じ SHA の成果物をサブパスでブラウザ検証して配信し、公開 URL でも実Workerの操作を再検証します。Actions の `deploy-pages` の結果と失敗時の証跡を確認してください。公開設定・初回配信前の URL は未検証です。
 
+配信は最大100件の待機キューで直列化します。上限到達やGitHub側の障害・API失敗では配信されない場合があります。Actionsで現行main HEADのpush由来 `ci` を探し、適格な実行を再実行して `quick-check` の成功と新しい `deploy-pages` の完了を確認してください。該当runがなければ通常のPR経由でmainに変更を統合してCIを起動します。mainのHEAD照合とデプロイは原子的ではなく、配信中にmainが進む場合があります。無制限の配信保証はありません。
+
+初回配信後は `deploy-pages` のbuild・deploy・smokeと失敗時の証跡を確認し、公開画面のSHAを現行mainおよび成功したCIのSHAと照合してください。公開URLで観測・介入・比較を実行し、ブラウザエラーとWorkerを確認します。例えば `PAGES_SMOKE_REQUIRED=1 PAGES_SMOKE_URL=https://squne121.github.io/chronofork/ PAGES_EXPECTED_SHA=<mainのフルSHA> npx playwright test tests/e2e/pages-deploy.spec.ts` で再検証できます。
+
 `npm run dev` で起動し、ブラウザで表示されるURLを開きます（既定は http://localhost:5173/）。
 「介入して歴史を比べる」の「法制を試す方式」から、旧2方式に加え **統合法制・世代継続（experimental）** を選べます。
 入力欄にはPR #78 で実測したCALIBRATION_ONLYの例（seed 20260101・人物02/05・1250年・信頼-20・5年間）が入りますが、固定の歴史ではなく、変更した値で1250〜1350年のA0/A1を再計算します。100年分のため端末により1〜数分かかり、計算はWeb Workerで行うため画面は操作できます（キャンセル可）。

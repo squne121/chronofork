@@ -11,15 +11,22 @@ permissions: {}
 concurrency:
   group: pages
   cancel-in-progress: false
+  queue: max
 
 jobs:
   build:
-    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.repository.id == github.event.repository.id &&
+      github.event.workflow_run.head_repository.id == github.event.repository.id
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
       actions: read
+      pages: read
     outputs:
       sha: ${{ steps.check.outputs.sha }}
       eligible: ${{ steps.check.outputs.eligible }}
@@ -34,9 +41,10 @@ jobs:
         run: |
           set -euo pipefail
           current=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
+          latest_attempt=$(gh api "repos/$REPO/actions/runs/$RUN" --jq .run_attempt)
           quick=$(gh api "repos/$REPO/actions/runs/$RUN/attempts/$ATTEMPT/jobs" --jq '[.jobs[] | select(.name == "quick-check" and .conclusion == "success")] | length')
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          if [ "$current" = "$SHA" ] && [ "$quick" = 1 ]; then echo 'eligible=true' >> "$GITHUB_OUTPUT"; fi
+          if [ "$current" = "$SHA" ] && [ "$latest_attempt" = "$ATTEMPT" ] && [ "$quick" = 1 ]; then echo 'eligible=true' >> "$GITHUB_OUTPUT"; fi
       - if: steps.check.outputs.eligible == 'true'
         uses: actions/checkout@v4
         with:
@@ -59,6 +67,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.check.outputs.eligible == 'true'
         env:
+          PAGES_SMOKE_REQUIRED: '1'
           PAGES_SMOKE_URL: http://127.0.0.1:4173/chronofork/
           PAGES_EXPECTED_SHA: ${{ steps.check.outputs.sha }}
           PAGES_LOCAL_PREVIEW: '1'
@@ -94,10 +103,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ needs.build.outputs.sha }}
+          RUN: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
         run: |
           set -euo pipefail
           current=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
-          if [ "$current" = "$SHA" ]; then echo 'current=true' >> "$GITHUB_OUTPUT"; else echo 'main advanced; skipping stale deployment'; fi
+          latest_attempt=$(gh api "repos/$REPO/actions/runs/$RUN" --jq .run_attempt)
+          if [ "$current" = "$SHA" ] && [ "$latest_attempt" = "$ATTEMPT" ]; then echo 'current=true' >> "$GITHUB_OUTPUT"; else echo 'main or CI attempt advanced; skipping stale deployment'; fi
       - id: deployment
         if: steps.latest.outputs.current == 'true'
         uses: actions/deploy-pages@v4
@@ -121,6 +133,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test tests/e2e/pages-deploy.spec.ts
         env:
+          PAGES_SMOKE_REQUIRED: '1'
           PAGES_SMOKE_URL: ${{ needs.deploy.outputs.url }}
           PAGES_EXPECTED_SHA: ${{ needs.build.outputs.sha }}
       - if: failure()
