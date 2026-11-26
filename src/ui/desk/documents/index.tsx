@@ -257,7 +257,9 @@ export function DeskDocuments({ history: suppliedHistory, slice, openRequest, hi
         <details><summary>資料の出典・技術情報</summary>対象ID {w.target.id}{w.source && <> / 参照元ID {w.source.id}</>} / {w.ref.origin.configuration.configId ?? '構成未確認'} / {w.ref.origin.configuration.configDigest ?? 'digest未確認'} / 介入 {w.ref.origin.modifierIds.join(', ') || 'なし'}</details>
         {!w.pinned && w.history?.start.kind === 'CONFIRMED' && onYear && history && !sameHistoryYearRef(w.ref, history.ref) &&
           <button type="button" onClick={() => onYear(w.ref, { windowId: w.id })}>この年を観測</button>}
-        {w.history?.start.kind === 'CONFIRMED' && onFilter && <button type="button" onClick={() => filter(w, w.target)}>年表で絞り込む</button>}
+        {w.history?.start.kind === 'CONFIRMED' && onFilter && <button type="button" onClick={() => filter(w, w.target)}>
+          {w.pinned && w.ref.origin.configuration.configIdentity !== undefined ? 'この資料の出典の比較で絞り込む' : '年表で絞り込む'}
+        </button>}
         {interventionDisabled && w.target.kind === 'person' && w.slice && <p>観測の取得中、別の計算中、または seed が一致しない間は介入フォームへ移れません。</p>}
         {content(w, view)}
         {w.history && (w.history.start.kind !== 'CONFIRMED' || (w.history.records.kind !== 'COMMITTED' && w.history.records.kind !== 'EVALUATION_ONLY')) && <button type="button" onClick={() => onYear?.(w.ref, { windowId: w.id, sourceHistory: w.sourceHistory })}>この参照を取得</button>}

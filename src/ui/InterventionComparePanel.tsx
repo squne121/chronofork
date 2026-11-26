@@ -35,6 +35,7 @@ function ProgressLine({label,p,ended,reused}:{label:string;p?:PlayProgress;ended
 type Props=Readonly<{
   desk?: boolean
   configuration?: PlayConfiguration
+  onEditIntervention?: () => void
   onDeskCompare?: (pair: 'A0_A1' | 'A1_A2') => void
   seedText:string
   year:number
@@ -144,6 +145,7 @@ export function InterventionComparePanel(p:Props){
   const inOptions=(id:string)=>options.some(o=>o.id===id)
   const personsOk=inOptions(firstId)&&inOptions(secondId)
   const canRun=valid&&personsOk&&(!multiHouse||!!activeSet)
+  const locked = !!p.configuration && !!p.running
   // 表示名: 現在の候補→表示中の比較のA0→初期人物。どれにも無いときだけIDを出す。
   const personName=(id:string)=>{
     const c=activeSet?.candidates.find(x=>x.id===id)
@@ -277,25 +279,25 @@ export function InterventionComparePanel(p:Props){
           :multiHouse?'このseedの原史を先に観測すると、介入できる人物が表示されます。':'現在は初期人物のみ表示しています。1251年以降に生まれた人物を選ぶには、上のボタンでA0の候補を取得してください。'}</span>
         {p.candidateError&&<p role="alert" className="halt" data-testid="candidate-error">人物候補を取得できませんでした: {p.candidateError.code} / {p.candidateError.message}</p>}
       </div>
-      <div className="form-grid">
+      <div className="form-grid" onChange={p.onEditIntervention}>
         <label>対象の人物1
-          <select value={firstId} onChange={e=>setFirstId(e.target.value)} data-testid="branch-person-one">
+          <select value={firstId} onChange={e=>setFirstId(e.target.value)} disabled={locked} data-testid="branch-person-one">
             {personOptions(firstId)}
           </select>
         </label>
         <label>対象の人物2
-          <select value={secondId} onChange={e=>setSecondId(e.target.value)} data-testid="branch-person-two">
+          <select value={secondId} onChange={e=>setSecondId(e.target.value)} disabled={locked} data-testid="branch-person-two">
             {personOptions(secondId)}
           </select>
         </label>
         <label>2人の信頼の補正（試験値）
-          <input type="number" min={-200} max={200} step={1} value={deltaText} onChange={e=>setDeltaText(e.target.value)} data-testid="branch-trust-delta"/>
+          <input type="number" min={-200} max={200} step={1} value={deltaText} onChange={e=>setDeltaText(e.target.value)} disabled={locked} data-testid="branch-trust-delta"/>
         </label>
         <label>介入する年
-          <input type="number" min={1250} max={1349} step={1} value={yearText} onChange={e=>setYearText(e.target.value)} data-testid="branch-fork-year"/>
+          <input type="number" min={1250} max={1349} step={1} value={yearText} onChange={e=>setYearText(e.target.value)} disabled={locked} data-testid="branch-fork-year"/>
         </label>
         <label>続ける年数
-          <input type="number" min={1} max={100} step={1} value={durationText} onChange={e=>setDurationText(e.target.value)} data-testid="branch-duration"/>
+          <input type="number" min={1} max={100} step={1} value={durationText} onChange={e=>setDurationText(e.target.value)} disabled={locked} data-testid="branch-duration"/>
         </label>
       </div>
       <h3 className="step-title"><span className="step-no">2</span>再計算する</h3>

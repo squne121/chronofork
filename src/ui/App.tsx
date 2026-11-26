@@ -856,6 +856,7 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
             const draft = input.second ? activeDeskResult : deskDraft
             if (draft) runComparison(input, draft)
           }}
+          onEditIntervention={limited ? () => { setDeskResult(undefined); setNotice(undefined); setPlayError(undefined) } : undefined}
           onDeskCompare={openDeskComparison} />
       </DeskInterventionWindow>}
     </div>
