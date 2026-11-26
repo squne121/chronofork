@@ -24,8 +24,9 @@ cf = load("cloudflare_preview")
 CURRENT = {"state": "success", "head": "a" * 40, "base": "b" * 40, "run": 8, "attempt": 2}
 ARTIFACT = {"build": "c" * 40, "artifact": 9, "digest": "sha256:" + "d" * 64}
 PLAN = dict(operation="deploy", current=CURRENT, **ARTIFACT)
-DEPLOYMENT = {"preview": {"name": "pr-42", "urls": [f"https://pr-42-{cf.WORKER}.example.workers.dev"]},
-              "deployment": {"urls": [f"https://abc123-{cf.WORKER}.example.workers.dev"]}}
+DEPLOYMENT = {"type": "preview", "version": 1, "worker_name": cf.WORKER, "preview_name": "pr-42",
+              "preview_urls": [f"https://pr-42-{cf.WORKER}.example.workers.dev"],
+              "deployment_urls": [f"https://abc123-{cf.WORKER}.example.workers.dev"]}
 
 
 class GitHubTest(unittest.TestCase):
@@ -53,6 +54,28 @@ class GitHubTest(unittest.TestCase):
         changed = dict(CURRENT, attempt=3)
         with patch.object(gh, "snapshot", side_effect=[(CURRENT, object()), (changed, object())]), patch.object(gh, "identity", return_value=ARTIFACT):
             self.assertFalse(gh.current_plan(42, PLAN))
+
+    def test_retarget_cleans_only_previous_target_and_invalidates_notice(self):
+        main = {"id": gh.source.REPO_ID, "full_name": gh.source.REPO}
+        pull = {"number": 42, "head": {"repo": main, "sha": CURRENT["head"]}, "state": "open",
+                "base": {"repo": main, "ref": "release", "sha": CURRENT["base"]}, "user": {"login": "developer"}}
+        payload = {"repository": main, "action": "edited", "pull_request": {"number": 42},
+                   "changes": {"base": {"ref": {"from": "main"}}}}
+        with patch.object(gh, "pr", return_value=pull):
+            self.assertEqual(gh.route(payload), 42)
+            plan = gh.choose(42, payload)
+            self.assertEqual(plan["operation"], "delete")
+            self.assertTrue(gh.current_plan(42, plan))
+            body, _ = gh.notification(42, plan, "deleted", "skipped", "", "", gh.MARKER)
+            self.assertIn("公開対象外。対象 Preview の削除を確認", body)
+            self.assertNotIn("PASS", body)
+            with patch.object(gh, "snapshot", return_value=(CURRENT, object())):
+                self.assertFalse(gh.current_plan(42, plan))
+        outside = dict(pull, head={"repo": {"id": 123}, "sha": CURRENT["head"]})
+        user_comment = {"user": {"login": "developer"}, "body": gh.MARKER}
+        with patch.object(gh, "pr", return_value=outside), patch.object(gh, "pages", return_value=[user_comment]):
+            self.assertIsNone(gh.route(payload))
+            self.assertEqual(gh.choose(42, payload)["operation"], "none")
 
     def test_stale_smoke_never_posts_verified_and_delayed_run_does_not_overwrite(self):
         stable, unique = cf.urls(DEPLOYMENT, "pr-42", "example", gh.require)
@@ -121,9 +144,13 @@ class CloudflareTest(unittest.TestCase):
 
     def test_wrangler_receives_no_github_token_or_runner_environment(self):
         config = self.scratch / "wrangler.json"
+        def completed(*_args, env, **_kwargs):
+            Path(env["WRANGLER_OUTPUT_FILE_PATH"]).write_text(json.dumps(DEPLOYMENT) + "\n", encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout=b"")
+
         with patch.dict(os.environ, {"PATH": "/fixture", "HOME": str(self.scratch), "GH_TOKEN": "github-fixture", "NODE_OPTIONS": "fixture"}, clear=True), \
-                patch.object(cf.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=b"{}")) as process:
-            self.assertEqual(cf.invoke(gh, config, "pr-42", "a" * 32, "cf-fixture", ["--json"]), b"{}")
+                patch.object(cf.subprocess, "run", side_effect=completed) as process:
+            self.assertEqual(cf.invoke(gh, config, "pr-42", "a" * 32, "cf-fixture", ["--json"]), DEPLOYMENT)
             self.assertEqual(process.call_args.args[0][2:], ["preview", "--json", "--config", str(config), "--name", "pr-42", "--worker-name", cf.WORKER])
             env = process.call_args.kwargs["env"]
             self.assertEqual(env["CLOUDFLARE_API_TOKEN"], "cf-fixture")
@@ -137,7 +164,7 @@ class CloudflareTest(unittest.TestCase):
             parsed = json.loads(config.read_bytes())
             self.assertEqual(parsed["assets"], {"directory": str(self.assets)})
             self.assertEqual(set(parsed), {"name", "compatibility_date", "send_metrics", "previews", "assets"})
-            return json.dumps(DEPLOYMENT)
+            return DEPLOYMENT
 
         with patch.dict(os.environ, self.config, clear=True), patch.object(gh, "current_plan", return_value=True), \
                 patch.object(cf, "cloudflare", side_effect=[{"name": cf.WORKER}, None]), patch.object(cf, "invoke", side_effect=fake_cli):
@@ -153,7 +180,7 @@ class CloudflareTest(unittest.TestCase):
                 cf.publish(gh, 42, delete, self.assets)
             cli.assert_not_called()
         with patch.dict(os.environ, self.config, clear=True), patch.object(cf, "cloudflare", side_effect=[parent, existing]), \
-                patch.object(gh, "current_plan", side_effect=[True, True, False]), patch.object(cf, "invoke", return_value=json.dumps(DEPLOYMENT)):
+                patch.object(gh, "current_plan", side_effect=[True, True, False]), patch.object(cf, "invoke", return_value=DEPLOYMENT):
             with self.assertRaises(gh.Reject):
                 cf.publish(gh, 42, PLAN, self.assets)
 
@@ -170,7 +197,7 @@ class CloudflareTest(unittest.TestCase):
                     cli.assert_not_called()
 
     def test_rejects_other_workers_and_malformed_host(self):
-        malformed = dict(DEPLOYMENT, deployment={"urls": [f"https://abc123-{cf.WORKER}.example.workers.dev@other.example.com"]})
+        malformed = dict(DEPLOYMENT, deployment_urls=[f"https://abc123-{cf.WORKER}.example.workers.dev@other.example.com"])
         with self.assertRaises(gh.Reject):
             cf.urls(malformed, "pr-42", "example", gh.require)
         with patch.dict(os.environ, self.config, clear=True), patch.object(gh, "current_plan", return_value=True), \

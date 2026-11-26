@@ -111,12 +111,31 @@ def from_head(run, pull):
             (not run["pull_requests"] or any(p["number"] == pull["number"] for p in run["pull_requests"])))
 
 
+def managed_comment(number):
+    comments = [c for c in pages(f"{REPO}/issues/{id_number(number)}/comments")
+                if c["user"]["login"] == "github-actions[bot]" and (c["body"] or "").startswith(MARKER)]
+    require(len(comments) <= 1, "プレビュー管理コメントが重複しています")
+    return comments[0] if comments else None
+
+
+def past_target(payload, pull):
+    if payload["action"] not in ("edited", "closed", "reopened"):
+        return False
+    previous_base = payload.get("changes", {}).get("base", {}).get("ref", {}).get("from")
+    if payload["action"] == "edited" and previous_base == "main":
+        old_target = dict(pull, base=dict(pull["base"], ref="main"))
+        if approved(old_target):
+            return True
+    # 管理済み PR のみ。PR 作者のコメントや本文にある marker は信頼しない。
+    return managed_comment(pull["number"]) is not None
+
+
 def route(payload):
     if not source.repository(payload["repository"], REPO, source.REPO_ID):
         return None
     if "pull_request" in payload:
         pull = pr(payload["pull_request"]["number"])
-        return pull["number"] if approved(pull) else None
+        return pull["number"] if approved(pull) or past_target(payload, pull) else None
     delivered = payload["workflow_run"]
     if delivered["event"] != "pull_request" or not any(source.repository(delivered.get("head_repository"), name, repo_id)
             for name, repo_id in ((REPO, source.REPO_ID), (source.FORK, source.FORK_ID))):
@@ -133,11 +152,14 @@ def route(payload):
 def snapshot(number):
     pull = pr(number)
     live_fork = fork_for(pull)
-    if not source.approved_pr(pull, live_fork):
+    if not source.repository(pull["base"]["repo"], REPO, source.REPO_ID):
         return {"state": "ineligible"}, None
     head, base = pull["head"]["sha"], pull["base"]["sha"]
     require(source.SHA.fullmatch(head) and source.SHA.fullmatch(base), "PR の SHA が不正です")
     current = {"state": "closed" if pull["state"] == "closed" else "waiting", "head": head, "base": base}
+    if not source.approved_pr(pull, live_fork):
+        current.update(state="out_of_scope", target=pull["base"]["ref"], closed_at=pull.get("closed_at"))
+        return current, None
     if current["state"] == "closed":
         current["closed_at"] = pull["closed_at"]
         return current, None
@@ -175,8 +197,12 @@ def identity(number, context):
 def choose(number, payload):
     current, context = snapshot(number)
     plan = {"current": current, "operation": "none"}
-    if current["state"] == "closed" and payload["action"] == "closed" and "pull_request" in payload:
-        plan["operation"] = "delete"
+    if "pull_request" in payload:
+        closing = current["state"] == "closed" and payload["action"] == "closed"
+        leaving = (current["state"] == "out_of_scope" and payload["action"] in ("edited", "closed") and
+                   past_target(payload, pr(number)))
+        if closing or leaving:
+            plan["operation"] = "delete"
     elif context and payload["action"] == "completed" and "workflow_run" in payload:
         run = payload["workflow_run"]
         if (run["id"], run["run_attempt"], run["conclusion"]) == (current["run"], current["attempt"], "success"):
@@ -192,7 +218,7 @@ def current_plan(number, plan):
     if current != plan["current"]:
         return False
     if plan["operation"] == "delete":
-        return current["state"] == "closed"
+        return current["state"] in ("closed", "out_of_scope")
     if plan["operation"] != "deploy" or context is None:
         return False
     return (identity(number, context) == {key: plan[key] for key in ("build", "artifact", "digest")} and
@@ -227,8 +253,10 @@ def notification(number, plan, status, smoke, alias, unique, previous):
     status = status if same or status == "disabled" else ""
     if status == "disabled":
         message = "未設定のため公開・削除・公開後 smoke は未実施です。"
-    elif current["state"] == "closed":
-        message = "閉鎖済み。対象 Preview の削除を確認しました。" if status == "deleted" else "閉鎖済み。対象 Preview の削除は未確認です。"
+    elif current["state"] in ("closed", "out_of_scope"):
+        reason = "閉鎖済み" if current["state"] == "closed" else "公開対象外"
+        deletion = "対象 Preview の削除を確認しました。" if status == "deleted" else "対象 Preview の削除は未確認です。"
+        message = f"{reason}。{deletion}"
     elif status == "deployed" and context and current_plan(number, plan):
         message = "現行 HEAD の公開後 smoke: PASS。" if smoke == "success" else "公開後 smoke は失敗または未実施です。検証済みではありません。"
     elif plan.get("operation") == "none" and previous and tag in previous and same:
@@ -246,9 +274,7 @@ def notification(number, plan, status, smoke, alias, unique, previous):
 
 
 def notify(number, plan, status, smoke, alias, unique):
-    comments = [c for c in pages(f"{REPO}/issues/{number}/comments") if c["user"]["login"] == "github-actions[bot]" and (c["body"] or "").startswith(MARKER)]
-    require(len(comments) <= 1, "プレビュー管理コメントが重複しています")
-    old = comments[0] if comments else None
+    old = managed_comment(number)
     body, state = notification(number, plan, status, smoke, alias, unique, old["body"] if old else None)
     if body is None:
         return

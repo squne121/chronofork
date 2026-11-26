@@ -16,10 +16,10 @@ HERE = Path(__file__).resolve().parent
 def urls(result, name, subdomain, require):
     stable_host = f"{name}-{WORKER}.{subdomain}.workers.dev"
     stable = f"https://{stable_host}"
-    require(len(stable_host.split('.')[0]) <= 63 and result["preview"]["name"] == name and
-            stable in result["preview"]["urls"], "Cloudflare が期待した固定 URL を返しませんでした")
+    require(len(stable_host.split('.')[0]) <= 63 and result["worker_name"] == WORKER and result["preview_name"] == name and
+            stable in result["preview_urls"], "Cloudflare が期待した固定 URL を返しませんでした")
     suffix = re.escape(f"-{WORKER}.{subdomain}.workers.dev")
-    unique = {u for u in result["deployment"]["urls"] if isinstance(u, str) and u != stable and
+    unique = {u for u in result["deployment_urls"] if isinstance(u, str) and u != stable and
               re.fullmatch(rf"https://[a-z0-9-]{{1,{62 - len(WORKER)}}}{suffix}", u)}
     require(len(unique) == 1, "deployment 固有の workers.dev URL を確認できません")
     return stable + "/chronofork/", unique.pop() + "/chronofork/"
@@ -40,8 +40,9 @@ def cloudflare(gh, account, token, path="", missing=False):
 
 
 def invoke(gh, config, name, account, token, args):
+    output = config.parent / "wrangler-output.ndjson"
     env = {k: os.environ[k] for k in ("PATH", "HOME")}
-    env.update(CI="true", WRANGLER_LOG="error", WRANGLER_SEND_METRICS="false",
+    env.update(CI="true", WRANGLER_LOG="error", WRANGLER_SEND_METRICS="false", WRANGLER_OUTPUT_FILE_PATH=str(output),
                CLOUDFLARE_ACCOUNT_ID=account, CLOUDFLARE_API_TOKEN=token)
     command = ["node", str(HERE / "node_modules/wrangler/bin/wrangler.js"), "preview", *args,
                "--config", str(config), "--name", name, "--worker-name", WORKER]
@@ -49,7 +50,13 @@ def invoke(gh, config, name, account, token, args):
                             timeout=240, check=False)
     # CLI 出力は秘匿情報を含み得るので、ログには転載しない。
     gh.require(result.returncode == 0, f"Wrangler preview: exit {result.returncode}")
-    return result.stdout
+    if args[0] == "delete":
+        return None
+    gh.require(output.is_file() and 0 < output.stat().st_size <= 64 * 1024, "Wrangler の構造化出力が見つかりません")
+    entries = [json.loads(line) for line in output.read_bytes().splitlines()]
+    previews = [entry for entry in entries if entry.get("type") == "preview" and entry.get("version") == 1]
+    gh.require(len(previews) == 1, "Wrangler の Preview 出力が一意ではありません")
+    return previews[0]
 
 
 def publish(gh, number, plan, assets):
@@ -87,7 +94,7 @@ def publish(gh, number, plan, assets):
             gh.require(cloudflare(gh, account, token, path, missing=True) is None and gh.current_plan(number, plan),
                        "削除または PR 状態を確認できません")
             return {"status": "deleted"}
-        result = json.loads(invoke(gh, config, name, account, token, ["--json", "--ignore-base-config"]))
+        result = invoke(gh, config, name, account, token, ["--json", "--ignore-base-config"])
         gh.require(gh.current_plan(number, plan), "公開中に PR または CI が進みました。現行版として通知しません")
         alias, unique = urls(result, name, subdomain, gh.require)
         return {"status": "deployed", "alias": alias, "unique": unique, "build": plan["build"]}

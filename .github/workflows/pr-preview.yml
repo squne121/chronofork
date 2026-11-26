@@ -6,7 +6,6 @@ on:
     types: [requested, in_progress, completed]
   pull_request_target:
     types: [opened, synchronize, reopened, closed, edited]
-    branches: [main]
 
 permissions: {}
 
@@ -21,6 +20,7 @@ jobs:
       contents: read
       actions: read
       pull-requests: read
+      issues: read
     outputs:
       pr: ${{ steps.route.outputs.pr }}
     steps:

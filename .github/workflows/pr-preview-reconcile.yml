@@ -96,7 +96,7 @@ jobs:
     needs: publish
     if: needs.publish.outputs.status == 'deployed'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -119,8 +119,8 @@ jobs:
         shell: bash
         run: |
           result=0
-          PAGES_SMOKE_URL="$PREVIEW_ALIAS" npx playwright test tests/e2e/pages-deploy.spec.ts --output=test-results/fixed || result=1
-          PAGES_SMOKE_URL="$PREVIEW_UNIQUE" npx playwright test tests/e2e/pages-deploy.spec.ts --output=test-results/deployment || result=1
+          PAGES_SMOKE_URL="$PREVIEW_ALIAS" npx playwright test tests/e2e/pages-deploy.spec.ts --retries=0 --output=test-results/fixed || result=1
+          PAGES_SMOKE_URL="$PREVIEW_UNIQUE" npx playwright test tests/e2e/pages-deploy.spec.ts --retries=0 --output=test-results/deployment || result=1
           exit "$result"
       - if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
