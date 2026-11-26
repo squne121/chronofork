@@ -28,7 +28,7 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
   test.setTimeout(10 * 60_000)
   const get = (id: string) => page.getByTestId(id)
   const dialogs = page.getByRole('dialog')
-  const documents = (kind: string, id: string) => get('desk-document').and(page.locator(`[data-kind="${kind}"][data-target="${id}"]`))
+  const documents = (kind: string, id: string) => get('desk-document').and(page.locator(`[data-kind="${kind}"][data-target=${JSON.stringify(id)}]`))
   const person = documents('person', pair[0])
   const back = (doc: Locator) => doc.getByRole('button', { name: '戻る', exact: true }).click()
   const intervention = page.getByRole('dialog', { name: /介入/ })
