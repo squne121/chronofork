@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -56,8 +56,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Vitest shard ${{ matrix.shard }}/3
-        run: npm test -- --shard=${{ matrix.shard }}/3
+      - name: Vitest shard ${{ matrix.shard }}/2
+        run: npm test -- --shard=${{ matrix.shard }}/2
 
   e2e:
     runs-on: ubuntu-latest
@@ -81,6 +81,7 @@ jobs:
       - run: npx playwright test
 
   worker:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -157,6 +158,15 @@ jobs:
           UNIT: ${{ needs.unit.result }}
           E2E: ${{ needs.e2e.result }}
           WORKER: ${{ needs.worker.result }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
         run: |
-          printf 'static=%s unit=%s e2e=%s worker=%s\n' "$STATIC" "$UNIT" "$E2E" "$WORKER"
-          test "$STATIC" = success && test "$UNIT" = success && test "$E2E" = success && test "$WORKER" = success
+          printf 'event=%s ref=%s static=%s unit=%s e2e=%s worker=%s\n' "$EVENT" "$REF" "$STATIC" "$UNIT" "$E2E" "$WORKER"
+          test "$STATIC" = success && test "$UNIT" = success && test "$E2E" = success
+          if [ "$EVENT" = pull_request ]; then
+            test "$WORKER" = success
+          elif [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then
+            test "$WORKER" = skipped
+          else
+            exit 1
+          fi
