@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PlaytestEvidenceControls, useEvidenceObservationGeneration } from './playtest-evidence/PlaytestEvidenceControls.tsx'
+import type { AcceptedComparison, AcceptedObservation } from './playtest-evidence/browser-source.ts'
 import { ObservationPanel } from './observation/ObservationPanel.tsx'
 import { DEFAULT_OBSERVATION_MODE, DEFAULT_OBSERVATION_SEED, INTEGRATED_PLAY_DEFAULTS, isObservationMode, playConfigDigest } from './branch-play-source.ts'
 import type { ObservationMode, ObservationSlice } from './branch-play-source.ts'
@@ -105,10 +107,13 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
   // 古い結果で上書きしないための世代番号と、キャンセル用の実行ハンドル。
   const tokenRef = useRef(0)
   const handleRef = useRef<PlayRunHandle | undefined>(undefined)
+  const { current: observationId, advance: advanceEvidenceObservation, isCurrent: isObservationGeneration } = useEvidenceObservationGeneration()
+  const isEvidenceObservationCurrent = useCallback((id: number) => !handleRef.current && isObservationGeneration(id), [isObservationGeneration])
+  const isEvidenceComparisonCurrent = useCallback((id: number) => tokenRef.current === id && !handleRef.current, [])
   const [a0Reused, setA0Reused] = useState(false)
   // 初回は実A0の観測を主入口にする。旧試験UIは明示的な「開発用」入口でのみ開く。
   const [workspaceOpen,setWorkspaceOpen]=useState(() => !limited && isLegacyEntry())
-  type ObservedYear = { slice: ObservationSlice; history: HistoryYear; calc: CalcInfo }
+  type ObservedYear = { slice: ObservationSlice; history: HistoryYear; calc: CalcInfo; evidence?: AcceptedObservation }
   const [observed, setObservation] = useState<ObservedYear>()
   const observation = observed?.slice
   const observationYear = observed?.history
@@ -122,7 +127,7 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
   const [documentFilter, setDocumentFilter] = useState<DocumentFilter>()
   const [historyUpdate, setHistoryUpdate] = useState<DeskDocumentsProps['historyUpdate']>()
   const [deskDraft, setDeskDraft] = useState<{ context: InvestigationContext; personId: string; year: number; partner?: string; serial: number }>()
-  const [deskResult, setDeskResult] = useState<{ view: PlayView; context: InvestigationContext; serial: number }>()
+  const [deskResult, setDeskResult] = useState<{ view: PlayView; context: InvestigationContext; serial: number; evidence?: AcceptedComparison }>()
   const [deskWindow, setDeskWindow] = useState<'intervention' | DeskComparisonSelection>()
   const comparisonSources = useRef(new WeakMap<HistoryYear, ComparisonSource & { context: InvestigationContext }>())
   const [deskWindowFront, setDeskWindowFront] = useState(false)
@@ -235,6 +240,7 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
     candHandleRef.current?.cancel()
   }, [limited, playRunner, observationRequests])
   const cancelObservation=()=>{
+    if (limited && observationRequests.busy) advanceEvidenceObservation()
     observationRequests.cancel()
     setObsDraining(false)
     setObsPendingYear(undefined)
@@ -296,16 +302,19 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
       setCalc(undefined)
       clearProgress()
     }
+    const evidenceId = limited ? advanceEvidenceObservation() : 0
     setObsPendingYear(year)
     setObsProgress(undefined)
     setObsError(undefined)
+    const input = limited ? limitedObservationInput(year) : { seed, mode: observationMode, year }
     observationRequests.request({
-      input: limited ? limitedObservationInput(year) : { seed, mode: observationMode, year }, expectedRef, playback, observe,
+      input, expectedRef, playback, observe,
       progress: setObsProgress,
       success: (view, computeMs, wallMs) => {
         setObsPendingYear(undefined)
         setObsProgress(undefined)
-        const entry = { slice: view, history: historyFromObservation(view).at(view.year), calc: { computeMs, wallMs } }
+        const entry: ObservedYear = { slice: view, history: historyFromObservation(view).at(view.year), calc: { computeMs, wallMs },
+          evidence: limited ? { input, outcome: { kind: 'DONE', requestId: evidenceId, result: view } } : undefined }
         observationSources.current.set(entry.history, entry)
         for (const [id, request] of pendingInvestigationLinks.current) {
           if (!sameHistoryYearRef(request.ref, entry.history.ref)) continue
@@ -327,6 +336,7 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
   }
   const pauseObservation = () => {
     if (observationRequests.pause()) {
+      if (limited) advanceEvidenceObservation()
       setObsDraining(observationRequests.busy)
       setObsPendingYear(undefined)
       setObsProgress(undefined)
@@ -619,7 +629,8 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
         clearProgress()
         setCalc({ computeMs: o.computeMs, wallMs: Date.now() - started })
         if (draft) {
-          setDeskResult({ view, context: draft.context, serial: draft.serial })
+          setDeskResult({ view, context: draft.context, serial: draft.serial,
+            evidence: limited ? { input, observationId, outcome: { kind: 'DONE', requestId: token, result: view } } : undefined })
           setNotice(input.second ? '第2介入の計算が完了しました。A1とA2の比較を開けます。' : '介入の計算が完了しました。原史と改変史の比較を開けます。')
         } else applyView(view,input)
       })
@@ -711,7 +722,15 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
           {limited ? '限定試遊（試験計算・原史 A0 と改変史 A1）' : '試験計算（仮データ・一部のみ実装）'}
           <span data-testid="build-identity"> / EXPERIMENTAL / {import.meta.env.VITE_BUILD_SHA || 'local'}</span>
           <details className="dev-details"><summary>技術情報</summary>EXPERIMENTAL / CALIBRATION_ONLY
-            {limited && <p data-testid="limited-configuration">{limited.configuration.configId} / {limited.configuration.configDigest} / seed {limited.seed} / drift 0</p>}
+            {limited && <>
+              <p data-testid="limited-configuration">{limited.configuration.configId} / {limited.configuration.configDigest} / seed {limited.seed} / drift 0</p>
+              <PlaytestEvidenceControls observationId={observationId} observation={observed?.evidence} history={observationYear}
+                filter={documentFilter} comparison={activeDeskResult?.evidence}
+                shown={deskSeedMatches && !workspaceOpen && typeof deskWindow === 'object' ? deskWindow : undefined}
+                busy={obsLoading || obsDraining || !!running} observationError={!!obsError}
+                comparisonError={!!playError || progressEnd === 'CANCELLED'}
+                isObservationCurrent={isEvidenceObservationCurrent} isComparisonCurrent={isEvidenceComparisonCurrent} />
+            </>}
           </details>
         </div>
         {limited ? <div aria-label="限定試遊の操作">
