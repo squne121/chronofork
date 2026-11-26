@@ -30,6 +30,9 @@ exit
 
 統合モードは100年のA0/A1を計算するため数分・数GBを要します。GUIの表示用ビューは同一の高頻度Event/Traceを省略しますが、CLIは完全なEventLog・DecisionTraceを保持します。[#99](https://github.com/squne121/chronofork/issues/99) の過去の統合100年実測では、単回介入の最大RSSは約4.4GB、seed 20260101で複数回介入した際は約5.9GBでした。別の2GiB cgroup環境では、同seedの弱い単回介入がOOMで終了コード137（JSONL出力なし）でした。`--max-old-space-size=6144` はNodeの旧世代ヒープ上限で、プロセスRSSやcgroup上限ではありません。**利用可能なメモリが8GB以下の環境では、統合モードの反復介入を避け、短い動作確認には `FIXED_APPROVAL` を使ってください。** RAM・スワップ・cgroupの実効制限は別々に確認してください。参照を外しても即時のメモリ返却は保証されず、統合100年での変更前後のRSS比較は未検証（UNVERIFIED）です。
 
+- [PR #171](https://github.com/squne121/chronofork/pull/171) で、標準出力の書き込みが詰まったら `drain` を待ってから次の応答を生成するようにしました。[実測](https://github.com/squne121/chronofork/pull/171#issuecomment-7162493389)では `FIXED_APPROVAL`（seed 1）で `DEBUG` 64回、読み取りを3秒遅らせたとき、最大 `writableLength` は 5,775,424 → 90,241 bytes、待機中の追加書き込みは 63 → 0 回で、全64応答を維持しました。この値は出力バッファの指標で、RSSではありません。
+- [PR #173](https://github.com/squne121/chronofork/pull/173) で、未計算のA0に対する無効年の `observe` / `inspect` / `debug` がA0計算を起動しなくなりました。`compare` もA1があれば、範囲外（1250〜1350年の外）や非整数の年を、Event/Traceを走査する前に `YEAR_UNAVAILABLE` として拒否します。A1がなければ従来どおり `NO_BRANCH` が優先されます。
+
 統合モードの実計算CLI検証（オプトイン・通常CI対象外）: `CHRONOFORK_LONG_INTEGRATED_TEXT=1 NODE_OPTIONS=--max-old-space-size=6144 npx vitest run tests/unit/text/integrated-mode-long.test.ts`
 
 `debug` は明示したときだけ内部Event/Trace等を出力します。ゲーム内の歴史や勝敗を新たに生成するものではありません。現段階は `CALIBRATION_ONLY` のA0/A1人物ペア信頼試験のみで、正式勝敗・A2以降の保存・全介入方式は未完成です。

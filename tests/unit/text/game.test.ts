@@ -1,5 +1,6 @@
-import {describe,expect,it} from 'vitest'
+import {describe,expect,it,vi} from 'vitest'
 import {createExperimentalWorld} from '../../../src/scenario/experimental/index.ts'
+import * as branchPlay from '../../../src/ui/branch-play-source.ts'
 import {compareYear,runPlayBaseline,runPlayComparison} from '../../../src/ui/branch-play-source.ts'
 import {executeTextCommand} from '../../../src/text/command.ts'
 import {
@@ -92,6 +93,30 @@ describe('プレイヤー用テキストI/Oと明示的デバッグの境界（�
       else throw new Error(`未知のkind: ${e.kind}`)
     }
     expect(JSON.stringify(r.data)).not.toContain('technicalGoal')
+  })
+
+  it('比較: A1不在を優先し、無効年の差分計算をせず、境界年は実履歴を比較する',()=>{
+    const s=new TextGameSession(1,'FIXED_APPROVAL')
+    const compare=vi.spyOn(branchPlay,'compareYear')
+    try{
+      expect(s.compare(1400)).toMatchObject({ok:false,code:'NO_BRANCH'})
+      expect(compare).not.toHaveBeenCalled()
+      expect(s.intervene(INTERVENTION)).toMatchObject({ok:true,channel:'PLAYER',action:'intervene'})
+      for(const year of [1249,1400,1250.5]){
+        expect(s.compare(year)).toEqual({
+          ok:false,code:'YEAR_UNAVAILABLE',message:'比較対象年が計算済みではありません',
+        })
+      }
+      expect(compare).not.toHaveBeenCalled()
+      for(const year of [1250,1350]){
+        expect(s.compare(year)).toMatchObject({ok:true,channel:'PLAYER',action:'compare',data:{
+          year,a0:{year},a1:{year},
+        }})
+      }
+      expect(compare.mock.calls.map(([,year])=>year)).toEqual([1250,1350])
+    }finally{
+      compare.mockRestore()
+    }
   })
 
   it('inspect: Event/Traceは実履歴を参照し、存在しない対象や年は失敗する',()=>{

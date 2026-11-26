@@ -40,6 +40,12 @@ Playwright CLIによるAIのGUI試遊、正式Goal公開、正式シナリオデ
 - [#99](https://github.com/squne121/chronofork/issues/99) の過去の統合100年CLI実測では、単回介入の最大RSSは約4.4GB、seed 20260101で複数回介入した際は約5.9GB。これらとは別の2GiB cgroup隔離環境（`daf4d932`、Node 22.23.3、`INTEGRATED_EXPERIMENTAL`、同seed）では、単独A0観測と強い介入（`-75 40`）は終了コード0、弱い単回介入（`-20 5`）はOOM killで終了コード137、JSONL出力なし。cgroupの `memory.peak`（2147516416 bytes）はプロセスの最大RSSとは異なる。
 - `npm run play:text` の `--max-old-space-size=6144` はNodeの旧世代ヒープ上限で、RSSやcgroup上限ではない。RAM・スワップ・cgroupの実効制限は別々に確認する。**利用可能なメモリが8GB以下の環境では統合モードの反復介入を避け、短い動作確認には `FIXED_APPROVAL` を使う。** 旧履歴への参照を外しても即時のメモリ返却は保証されない。統合100年の変更前後のRSS比較は高メモリ環境で行う必要があり、未検証（UNVERIFIED）。
 
+### CLIの出力待機と無効年の早期拒否
+
+- [PR #171](https://github.com/squne121/chronofork/pull/171) 以降、`stdout.write()` が `false` を返したら `drain` を待って次の応答を生成する。[FIXED_APPROVAL・seed 1での計測](https://github.com/squne121/chronofork/pull/171#issuecomment-7162493389)では、`debug 1260 A0` 64回・stdout読み取り3秒遅延の条件で、最大 `writableLength` は 5,775,424 → 90,241 bytes、`needDrain` 中の追加書き込みは 63 → 0 回、全64応答を維持した。出力バッファの値でありRSSではない。
+- [PR #173](https://github.com/squne121/chronofork/pull/173) 以降、未計算A0への `observe` / `inspect` / `debug` は範囲外・非整数の年でA0計算を起動しない。`compare` はA1不在なら先に `NO_BRANCH`、A1があれば1250〜1350年（両端含む）の整数でない年を `compareYear` の前に `YEAR_UNAVAILABLE` として拒否する。有効な年では従来どおり両枝のスナップショットの実在を確認し、完全なEventLog・DecisionTraceを用いて比較する。
+- 比較修正前の軽量モードでの計測（`FIXED_APPROVAL`、seed 1、`intervene 1260 person-exp-04 person-exp-05 20 5` 後の `compare 1400`）では、拒否までに両枝のEvent 1,729 / 2,103件、Trace 3,159 / 3,542件をそれぞれ走査し、両枝の全EventからMapを構築した（1.116 ms）。早期拒否でこの処理を省く。これは修正前の軽量モードの処理時間であり、統合100年のRSS計測ではない。
+
 ### `intervene` の履歴切り替え境界
 
 - 引数個数・整数構文の拒否は共有エンジンを呼ぶ前に行い、既存のA0/A1を変更しない。エラーメッセージで履歴が変わらないことを明示する。

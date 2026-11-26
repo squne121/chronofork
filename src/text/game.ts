@@ -17,6 +17,8 @@ const success=(channel:'PLAYER'|'DEBUG',action:string,data:unknown):TextResult=>
 const fail=(code:string,message:string):Extract<TextResult,{ok:false}>=>({ok:false,code,message})
 const PLAYER_YEAR_UNAVAILABLE='この歴史に指定年の計算済み状態はありません'
 const DEBUG_YEAR_UNAVAILABLE='指定年の状態を参照できません'
+const COMPARE_YEAR_UNAVAILABLE='比較対象年が計算済みではありません'
+const isPlayableYear=(year:number)=>Number.isSafeInteger(year)&&year>=START_YEAR&&year<=GOAL_YEAR
 
 /** UI閲覧と同じWorldStateを読み取る。帳簿・試験係数・乱数値はPLAYER出力に含めない。 */
 export function summarizeWorld(w:WorldState){
@@ -98,8 +100,7 @@ export class TextGameSession {
     }
     if(this.comparison)return {ok:true,run:this.comparison.a0}
     if(this.baseline)return {ok:true,run:this.baseline}
-    if(!Number.isSafeInteger(year)||year<START_YEAR||year>GOAL_YEAR)
-      return fail('YEAR_UNAVAILABLE',yearUnavailable)
+    if(!isPlayableYear(year))return fail('YEAR_UNAVAILABLE',yearUnavailable)
     const base=runPlayBaseline(this.seed,this.mode)
     if(!base.ok)return base
     this.baseline=base.a0
@@ -193,8 +194,9 @@ export class TextGameSession {
 
   compare(year:number):TextResult{
     if(!this.comparison)return fail('NO_BRANCH','先にinterveneでA1を作成してください')
+    if(!isPlayableYear(year))return fail('YEAR_UNAVAILABLE',COMPARE_YEAR_UNAVAILABLE)
     const diff=compareYear(this.comparison,year)
-    if(!diff.a0World||!diff.a1World)return fail('YEAR_UNAVAILABLE','比較対象年が計算済みではありません')
+    if(!diff.a0World||!diff.a1World)return fail('YEAR_UNAVAILABLE',COMPARE_YEAR_UNAVAILABLE)
     return success('PLAYER','compare',{
       provenance:'EXPERIMENTAL / CALIBRATION_ONLY',year,
       events:diff.events.map(x=>({kind:x.kind,eventId:x.event.eventId,eventType:x.event.eventType,
