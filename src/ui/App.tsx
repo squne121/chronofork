@@ -358,8 +358,12 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
     }
   }
   const openDocument: OpenDeskDocument = (target, ref, source) => {
-    if (!observationYear || obsLoading || !inCurrentA0(ref) || !sameHistoryYearRef(ref, observationYear.ref)) return
-    rememberInvestigation(observationYear, { ref, target, source })
+    if (!observationYear || obsLoading || !inCurrentA0(ref) || !Number.isInteger(ref.year) || ref.year < YEAR_RANGE.min || ref.year > YEAR_RANGE.max) return
+    if (sameHistoryYearRef(ref, observationYear.ref)) rememberInvestigation(observationYear, { ref, target, source })
+    else {
+      if (handleRef.current || candHandleRef.current) return
+      goToDocumentYear(ref, { windowId: '' })
+    }
     setDocumentRequest({ requestId: String(++documentSerial.current), ref, target, source })
   }
   const goToDocumentYear: NonNullable<DeskDocumentsProps['onYear']> = (ref, { windowId, sourceHistory }) => {
@@ -404,12 +408,19 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
     setDeskWindow('intervention')
     setDeskWindowFront(true)
   }
-  const interveneFromDocument: NonNullable<DeskDocumentsProps['onIntervene']> = (year, personId, secondPersonId, ref) => {
+  const interveneFromDocument: NonNullable<DeskDocumentsProps['onIntervene']> = (year, personId, secondPersonId, ref, evidence) => {
     if (!inCurrentA0(ref) || ref.year !== year || obsLoading || running || fetchingCandidates) return
-    if (!observationYear) return
-    const links = investigationLinks.current.get(`${ref.year}:${personId}`) ?? []
-    const source = links.find(link => sameHistoryYearRef(ref, link.history.ref))?.history ?? observationYear
-    beginDeskIntervention(investigationForIntervention(source, links, personId, secondPersonId), year, secondPersonId)
+    if (!sameHistoryYearRef(ref, evidence.history.ref) || !observationSources.current.has(evidence.history)) return
+    if (evidence.traceId === undefined) {
+      const links = investigationLinks.current.get(`${ref.year}:${personId}`) ?? []
+      beginDeskIntervention(investigationForIntervention(evidence.history, links, personId, secondPersonId), year, secondPersonId)
+      return
+    }
+    const trace = evidence.history.trace(evidence.traceId)
+    if (trace.kind !== 'RECORDED' || trace.record.ruleId !== 'B-004' || trace.record.actorRef.kind !== 'PERSON_PAIR' ||
+      secondPersonId === undefined || secondPersonId === personId || !trace.record.actorRef.ids.includes(personId) ||
+      !trace.record.actorRef.ids.includes(secondPersonId)) return
+    beginDeskIntervention({ history: evidence.history, target: {kind:'person',id:personId}, evidence: {kind:'trace',id:evidence.traceId} }, year, secondPersonId)
   }
   const openComparisonEvidence = ({ history, kind, id }: EvidenceRequest) => {
     if (typeof deskWindow !== 'object') return

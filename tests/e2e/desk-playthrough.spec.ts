@@ -100,6 +100,7 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
   await reference(person, 'A0')
   await expect(person).toContainText('参照元: Event')
 
+  await person.getByText('生涯の婚姻・称号・過去の判断を調べる', { exact: true }).click()
   const partner = person.getByTestId('history-partner').filter({ has: page.locator('summary').filter({ hasText: partnerName }) })
   await front(person)
   await partner.locator('> summary').click()
@@ -291,7 +292,6 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
   expect(await readRecord<DecisionTrace>(restored, /技術詳細（実判断: B-005 \/ DEFER）/)).toEqual(originalTrace)
   const zIndex = (window: Locator) => window.evaluate(el => Number(getComputedStyle(el).zIndex))
   expect(await zIndex(restored)).toBeGreaterThan(await zIndex(person.first()))
-  await page.getByText('シナリオ目標と1350年の参考判定', { exact: true }).press('Enter')
   await expect(get('obs-goal')).toContainText('正式勝敗：未成立')
 
   await page.getByRole('button', { name: 'A0とA1の比較を開く', exact: true }).press('Enter')

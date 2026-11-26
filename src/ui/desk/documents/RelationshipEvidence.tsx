@@ -44,8 +44,38 @@ export function PersonRelationship({ history, personId, nameOf, onTrace }: Reado
 
 export function RecordedTrust({ trace }: Readonly<{ trace: DecisionTrace }>) {
   if (trace.ruleId !== 'B-004') return null
-  const inputs = trace.candidates.find(candidate => typeof candidate.inputs?.effectiveTrust === 'number')?.inputs
-  if (!inputs) return null
-  return <p data-testid="recorded-effective-trust">当年の婚姻候補審査で使った実効信頼：{String(inputs.effectiveTrust)}
-    （{trace.modifierIds.length ? '介入の補正を反映' : '適用された介入なし'}）</p>
+  return trace.candidates.map(candidate => {
+    const value = candidate.inputs?.effectiveTrust
+    if (typeof value !== 'number') return null
+    const weight = candidate.inputs?.trustWeight
+    return <p key={candidate.candidateId} data-testid="recorded-effective-trust">当年の婚姻候補審査で使った実効信頼：{value}
+      （{trace.modifierIds.length ? '介入の補正を反映' : '適用された介入なし'}）。
+      {typeof weight === 'number' && `信頼の重み ${weight}。`}
+      {typeof candidate.score === 'number' && `比較に使った得点 ${candidate.score}。`}
+      {typeof candidate.threshold === 'number' && `採用の閾値 ${candidate.threshold}。`}</p>
+  })
+}
+
+export function RecordedNegotiation({ trace, nameOf, dynastyOf }: Readonly<{ trace: DecisionTrace; nameOf: (id:string) => string; dynastyOf: (id:string) => string | undefined }>) {
+  if (trace.ruleId !== 'B-005' || trace.actorRef.kind !== 'PERSON_PAIR') return null
+  const [left, right] = trace.actorRef.ids.map(nameOf)
+  return trace.candidates.map(candidate => {
+    const { sourceB004Score, contractOptions, selectedContractKey, partnerHouseInterests } = candidate.inputs ?? {}
+    const options = Array.isArray(contractOptions) ? contractOptions.flatMap(option => {
+      if (option === null || typeof option !== 'object' || Array.isArray(option) || !('key' in option) ||
+        typeof option.firstConsentScore !== 'number' || typeof option.secondConsentScore !== 'number') return []
+      return [option]
+    }) : []
+    return <div key={candidate.candidateId}>
+      {typeof sourceB004Score === 'number' && <p>交渉が参照した婚姻候補審査の得点：{sourceB004Score}。</p>}
+      {Array.isArray(partnerHouseInterests) && typeof partnerHouseInterests[0] === 'number' && typeof partnerHouseInterests[1] === 'number' &&
+        <p>候補比較に記録された家門の利害値：{left} {partnerHouseInterests[0]}／{right} {partnerHouseInterests[1]}。</p>}
+      {options.length > 0 && <details><summary>記録された契約案と両者の同意値（{options.length}件）</summary>
+        <ol>{options.map((option, i) => <li key={i}>案{i + 1}{typeof option.dynastyId === 'string' ? `（王朝条項：${dynastyOf(option.dynastyId) ?? '名称未確認'}）`
+          : option.dynastyId === null ? '（王朝の指定なし）' : ''}：{left} {String(option.firstConsentScore)}／{right} {String(option.secondConsentScore)}。
+          {option.mutuallyAccepted === true ? '相互同意あり。' : option.mutuallyAccepted === false ? '相互同意なし。' : ''}
+          {typeof selectedContractKey === 'string' && option.key === selectedContractKey && '記録上の選択案。'}</li>)}</ol>
+      </details>}
+    </div>
+  })
 }

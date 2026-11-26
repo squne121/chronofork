@@ -18,6 +18,7 @@ export type PersonHistoryProps = Readonly<{
   onSelectTitle: (titleId: Id, year: number) => void
   /** 婚姻候補の2人を介入フォームへ渡す。未指定なら導線を出さない。 */
   onIntervene?: (year: number, personId: Id, partnerId: Id) => void
+  onReviewIntervention?: (judgment: JudgmentSpan, personId: Id, partnerId: Id) => void
 }>
 
 const RULE_LABEL: Readonly<Record<JudgmentSpan['ruleId'], string>> = {
@@ -82,7 +83,7 @@ export function PersonHistory(p: PersonHistoryProps) {
   const supplySpans = rec.judgments.filter(s => s.ruleId === 'B-001')
   const candidateSpans = rec.judgments.filter(s => s.ruleId === 'B-004')
   const traceButton = (s: JudgmentSpan) => <button type="button" disabled={p.disabled} data-testid="history-open-trace"
-    onClick={() => p.onOpenTrace(s.firstTraceId, s.fromYear)}>{s.fromYear}年の判断記録を開く</button>
+    onClick={() => p.onOpenTrace(s.firstTraceId, s.fromYear)}>{s.fromYear}年の判断記録を開く{p.onReviewIntervention && `（${RULE_LABEL[s.ruleId]}）`}</button>
   const detail = (s: JudgmentSpan) => {
     const v = reasonView(s.reasonCodes)
     return <details className="dev-details"><summary>技術詳細</summary>
@@ -93,7 +94,7 @@ export function PersonHistory(p: PersonHistoryProps) {
     const v = reasonView(s.reasonCodes)
     const kin = s.knownKinship ? `記録上の続柄：${KINSHIP_LABEL[s.knownKinship] ?? '未分類（' + s.knownKinship + '）'}` : undefined
     const trust = s.trustMin !== undefined && s.threshold !== undefined
-      ? `信頼値 ${s.trustMin === s.trustMax ? s.trustMin : s.trustMin + '〜' + s.trustMax}／採用の閾値 ${s.threshold}` : undefined
+      ? `審査の信頼重み ${s.trustMin === s.trustMax ? s.trustMin : s.trustMin + '〜' + s.trustMax}／設定上の得点基準 ${s.threshold}（実際の比較は年ごとの判断資料へ）` : undefined
     const ages = s.motherAge !== undefined ? `母 ${s.motherAge}歳${s.fatherAge === undefined ? '' : '・父 ' + s.fatherAge + '歳'}（判断時点の記録）` : undefined
     return <li key={s.firstTraceId + s.status}>
       <strong>{yearsText(s)}（判断{s.count}件）：{outcomeLabel(s)}</strong><span className="note"> {RULE_LABEL[s.ruleId]}・記録上の判断：{s.ruleId === 'B-001' && s.status === 'ACCEPT' ? '提示' : STATUS_LABEL[s.status]}</span>
@@ -174,15 +175,15 @@ export function PersonHistory(p: PersonHistoryProps) {
             <span className="note">・{yearsText({ fromYear: Math.min(...spans.map(x => x.fromYear)), toYear: Math.max(...spans.map(x => x.toYear)) })}・{outcomeLabel((b4.length > 0 ? b4 : spans).at(-1)!)}</span></summary>
           {partnerId && <div>{link(partnerId, '相手')}</div>}
           <ul>{spans.map(spanLine)}</ul>
-          {p.onIntervene && firstB4 && partner && !rec.supporting && !partner.supporting &&
+          {(p.onIntervene || p.onReviewIntervention) && firstB4 && partner && !rec.supporting && !partner.supporting &&
             Math.max(rec.firstYear, partner.firstYear) <= firstB4.fromYear && firstB4.fromYear < 1350 && !kin &&
             !spans.some(x => x.reasonCodes.includes('COMMON_ANCESTOR_WITHIN_TWO_GENERATIONS')) &&
             <button type="button" disabled={p.disabled} data-testid="history-intervene-pair"
-              onClick={() => p.onIntervene!(firstB4.fromYear, rec.personId, partnerId)}>
-              この2人の信頼を介入として検討する（{firstB4.fromYear}年）</button>}
+              onClick={() => p.onReviewIntervention ? p.onReviewIntervention(firstB4, rec.personId, partnerId) : p.onIntervene?.(firstB4.fromYear, rec.personId, partnerId)}>
+              {p.onReviewIntervention && firstB4.fromYear !== p.currentYear ? '介入を検討する前にこの2人の判断を開く' : 'この2人の信頼を介入として検討する'}（{firstB4.fromYear}年）</button>}
         </details>
       })}
-      {candidateSpans.length > 0 && <p className="note">信頼の数値介入は、信頼の閾値、相手候補の順位や契約案への同意を通じて判断に影響することがあります。
+      {candidateSpans.length > 0 && <p className="note">信頼の数値介入は、候補審査の得点、相手候補の順位や契約案への同意を通じて判断に影響することがあります。
         血縁や共通祖先の記録が理由のときは、信頼値だけでは変わるとは限りません（変わらないとも断定しません）。</p>}
       <h5>出生の判断（この人物が親として記録されたもの）</h5>
       {birthSpans.length === 0

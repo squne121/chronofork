@@ -79,7 +79,7 @@ test('編纂机で実 A0 の重大事件を開き、同期した年代記・世�
   await hint.click()
   await atYear(eventYear)
   await get('obs-event-list').getByRole('button').first().click()
-  await expect(get('obs-event-detail')).toBeVisible()
+  await expect(get('obs-event-detail')).toHaveCount(0)
   await expect(get('region-map')).toBeVisible()
   const dialogs = page.getByRole('dialog')
   const close = async () => { await dialogs.last().getByRole('button', { name: '資料を閉じる' }).press('Escape') }
@@ -179,6 +179,7 @@ test('編纂机で実 A0 の重大事件を開き、同期した年代記・世�
   await page.evaluate(() => { window.deskResponseTest.next = 'hold' })
   const targetYear = 1251
   const partnerName = (await get('obs-person').locator('option[value="person-exp-04"]').innerText()).split('（')[0]!.split('・')[0]!
+  await person.getByText('生涯の婚姻・称号・過去の判断を調べる', { exact: true }).click()
   const partner = person.getByTestId('history-partner').filter({ has: page.locator('summary').filter({ hasText: partnerName }) })
   await partner.locator('> summary').click()
   await partner.locator('li').filter({ hasText: 'B-005' }).getByTestId('history-open-trace')
@@ -221,7 +222,6 @@ test('編纂机で実 A0 の重大事件を開き、同期した年代記・世�
   await expect(get('obs-event-count')).toContainText('確定Event 0件')
   await expect(play).toBeDisabled()
   await expect(get('obs-time-controls')).toContainText('計算済み履歴の末尾')
-  await page.getByText('シナリオ目標と1350年の参考判定', { exact: true }).click()
   await expect(get('obs-goal')).toContainText('正式勝敗：未成立')
   expect(errors).toEqual([])
 })

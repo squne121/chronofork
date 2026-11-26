@@ -126,3 +126,9 @@
 .desk-region-map .region-node {width:30%;overflow-wrap:anywhere;}
 .desk-map-events {font-weight:700;}
 @media(max-width:760px){.obs-desk-grid{grid-template-columns:minmax(0,1fr);}}
+
+/* 結末は折り畳まず、各領地の根拠を短く表示する。 */
+.obs-ending-territories {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.4rem 0.8rem;list-style:none;padding:0;}
+.obs-ending-territories li {border-top:1px solid var(--line);padding:0.25rem 0;}
+.obs-ending-territories button {margin-block-start:0.2rem;}
+@media(max-width:700px){.obs-ending-territories{grid-template-columns:1fr;}}

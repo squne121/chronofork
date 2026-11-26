@@ -197,6 +197,30 @@ describe('実A0の独立資料', () => {
     expect(screen.getByRole('dialog', { name: `人物 ${second}` })).toBeTruthy()
   })
 
+  it('信頼を参照した実B-004だけが、取得済みの同じ原史とペアを介入フォームへ渡す', () => {
+    const slice = initialSlice
+    const trace = slice.traces.find(t => t.ruleId === 'B-004' && t.actorRef.kind === 'PERSON_PAIR' &&
+      t.candidates.some(c => typeof c.inputs?.effectiveTrust === 'number') && t.actorRef.ids.every(id =>
+        slice.world.persons.some(p => p.personId === id && p.alive && p.interactionRole !== 'SUPPORTING')))
+    if (trace?.actorRef.kind !== 'PERSON_PAIR') throw new Error('介入適格な実判断がありません')
+    const [left, right] = trace.actorRef.ids
+    const history = historyFromObservation(slice).at(slice.year)
+    const target = { kind: 'trace' as const, id: trace.traceId }
+    const onIntervene = vi.fn()
+    const common = { history, slice, onIntervene }
+    const { rerender } = render(<DeskDocuments {...common} openRequest={{ requestId: 'actual', ref: history.ref, target }} />)
+    const action = /この2人の信頼を介入として検討する/
+    const live = within(screen.getByRole('dialog'))
+    expect(live.getByTestId('recorded-effective-trust')).toHaveProperty('textContent', expect.stringContaining('採用の閾値'))
+    fireEvent.click(live.getByRole('button', { name: action }))
+    expect(onIntervene).toHaveBeenCalledExactlyOnceWith(slice.year, left, right, history.ref, { history, traceId: trace.traceId })
+    // 比較が持つ同じA0参照でも、取得した出典は読み取り専用。
+    rerender(<DeskDocuments {...common} openRequest={{ requestId: 'pinned', ref: history.ref, target, history }} />)
+    const pinned = within(screen.getAllByRole('dialog').at(-1)!)
+    expect(pinned.queryByRole('button', { name: action })).toBeNull()
+    expect(pinned.getByText('この資料は参照専用です。')).toBeTruthy()
+  })
+
   it('同じ参照でも各窓が取得範囲の異なる判断を混ぜない', () => {
     const history = historyFromObservation(slice).at(slice.year)
     const trace = slice.traces[0]!

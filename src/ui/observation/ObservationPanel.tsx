@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react'
+import { endingHolderEvidence } from './ending-evidence.ts'
 import { titleLabel } from './title-history.ts'
 import { A0FutureContext } from './A0FutureContext.tsx'
 import type { ObservationMode, ObservationSlice } from '../branch-play-source.ts'
@@ -94,7 +95,6 @@ export function ObservationPanel(p:Props){
   const [invSelection,setInvSelection]=useState<Selection|undefined>(undefined)
   // 別の年の記録を開くとき、その年の観測が届いてから対象のEvent/Traceを選ぶ。
   const [pendingOpen,setPendingOpen]=useState<{kind:'event'|'trace';id:string;year:number;seed:number;navigation?:number;error?:Props['error']}|undefined>(undefined)
-  const [recordReveal, setRecordReveal] = useState<{kind:'event'|'trace';id:string}>()
   const [recordIdentity,setRecordIdentity]=useState(()=>v?`${v.seed}:${v.year}`:'')
   const [scrubYear,setScrubYear]=useState<number|null>(null) // ドラッグ中のみ表示を更新する
   const [localPlaying, setLocalPlaying] = useState(false)
@@ -183,11 +183,14 @@ export function ObservationPanel(p:Props){
       .filter(a=>a.source.type==='EVENT'&&a.source.eventId===chosenEvent.eventId&&
         a.role==='NEWBORN'&&a.target.kind==='PERSON'&&!persons.some(p=>p.personId===a.target.id))
       .map(a=>a.target.id))]:[]
-  const requestDocument = (target: DeskDocumentTarget, source?:DeskDocumentTarget) => {
-    if (!historyYear || historyYear.start.kind !== 'CONFIRMED' || p.loading || !seedMatches) return
+  const documentDisabled = p.loading || !seedMatches
+  const yearDocumentDisabled = (year: number) => documentDisabled || (blocked && year !== historyYear?.ref.year)
+  const requestDocument = (target: DeskDocumentTarget, source?:DeskDocumentTarget, year?:number) => {
+    if (!historyYear || historyYear.start.kind !== 'CONFIRMED' || yearDocumentDisabled(year ?? historyYear.ref.year)) return
     pause()
-    if (source) p.onOpenDocument?.(target, historyYear.ref, source)
-    else p.onOpenDocument?.(target, historyYear.ref)
+    const ref = year === undefined ? historyYear.ref : { ...historyYear.ref, year }
+    if (source) p.onOpenDocument?.(target, ref, source)
+    else p.onOpenDocument?.(target, ref)
   }
   const chooseTrace = (id: string, source?:DeskDocumentTarget) => {
     setTraceId(id); setTraceOpen(true)
@@ -219,16 +222,14 @@ export function ObservationPanel(p:Props){
     titleEvents.some(e=>e.sourceTraceIds.includes(t.traceId)&&t.eventIds.includes(e.eventId))):[]
   const goal=v?.technicalGoal
   const assessments=(goal?.status==='NOT_ACHIEVED'||goal?.status==='ACHIEVED')?goal.assessments:[]
-  const territorialAssessments=assessments.filter(a=>v?.world.titles.find(t=>t.titleId===a.titleId)?.kind==='TERRITORIAL')
-  const central = p.fixedSeed ? territorialAssessments.find(a => a.titleId === 'title-exp-central') : undefined
-  const centralTitle = central && v?.world.titles.find(t => t.titleId === central.titleId)
+  const territorialAssessments=assessments.filter(a=>(v?.titleHistories.find(t=>t.titleId===a.titleId)?.kind ??
+    v?.world.titles.find(t=>t.titleId===a.titleId)?.kind)==='TERRITORIAL')
   const budgetDeferrals = p.fixedSeed ? traces.filter(t => t.ruleId === 'A-LEG-01' && t.status === 'DEFER' &&
     t.reasonCodes.includes('SUPPORTING_REGISTRATION_BUDGET_EXCEEDED')) : undefined
   const yearChange=(y:number)=>{
     pause()
     setScrubYear(null)
     setPendingOpen(undefined)
-    setRecordReveal(undefined)
     setEventId('');setTraceId('')
     if (!p.desk) { setEventType('ALL'); setRelatedOnly(false) }
     setEventLimit(SHOW);setTraceLimit(SHOW)
@@ -251,7 +252,6 @@ export function ObservationPanel(p:Props){
     if(v)setPendingOpen({kind,id,year,seed:v.seed,navigation:p.documentNavigation,error:p.error})
   }
   const applyOpen=(kind:'event'|'trace',id:string)=>{
-    if (p.desk) setRecordReveal({kind,id})
     if(kind==='event'){setEventId(id);setTraceId('');setEventType('ALL');setShowAllEvents(true);setRelatedOnly(false)}
     else{setTraceId(id);setTraceOpen(true);setEventId('');setTraceFilter('ALL');setRelatedOnly(false)}
   }
@@ -290,31 +290,35 @@ export function ObservationPanel(p:Props){
     target?.focus({preventScroll:true})
     target?.scrollIntoView?.({block:'nearest'})
   }
-  const revealRecord = useEffectEvent((record: NonNullable<typeof recordReveal>) => {
-    const found = record.kind === 'event' ? historyYear?.event(record.id) : historyYear?.trace(record.id)
-    if (found?.kind !== 'RECORDED' || !historyYear || loading || !seedMatches) return
-    jumpTo(`obs-desk-${record.kind}-detail`)
-  })
-  useEffect(() => {
-    if (!recordReveal) return
-    const id = requestAnimationFrame(() => revealRecord(recordReveal))
-    return () => cancelAnimationFrame(id)
-  }, [recordReveal])
   const goalPanel = v && (
       <div className="obs-goal" data-testid="obs-goal">
-        <h3>1350年の王朝存続条件 — 何が不足している？</h3>
+        <h3>{p.desk ? '原史A0の結末 — 1350年初の王朝存続条件' : '1350年の王朝存続条件 — 何が不足している？'}</h3>
         <p>ナルヴェン王朝の存命人物が、承認済みで世襲可能な領地を保持し、直接支配または有効な委任を持つことが条件です。王位のみでは達成できません。</p>
         {territorialAssessments.length>0&&<p data-testid="obs-goal-snapshot">
           領地称号 {territorialAssessments.length}件中、条件を満たすもの {territorialAssessments.filter(a=>a.qualifies).length}件。
         </p>}
         <p>正式勝敗：未成立。参考判定：{goal?goalStatusText(goal.status):'記録なし'}
           （介入前A0・1350年初の実状態。正式なゲームの勝敗ではありません）</p>
-        {central && centralTitle && <div data-testid="limited-central-assessment">
-          <p><strong>{titleLabel(centralTitle, v.world)}：</strong>{central.qualifies ? '条件を満たしている' : reason(central.failures)}。</p>
-          <p className="note">称号の保持条件を評価しています。未達だけで王朝の絶滅を示すものではありません。</p>
-          {v.year !== 1350 && <button type="button" disabled={blocked} onClick={() => yearChange(1350)}>判定時点の1350年初へ</button>}{' '}
-          <button type="button" onClick={() => selectTitleAt(central.titleId, v.year)}>中央領地の称号資料を開く（{v.year}年初）</button>
-        </div>}
+        {p.desk && territorialAssessments.length > 0 && <ul className="obs-ending-territories">
+          {territorialAssessments.map(a => {
+            const history = v.titleHistories.find(h => h.titleId === a.titleId)
+            const evidence = endingHolderEvidence(history, v.titleLossRecords.find(l => l.titleId === a.titleId), v.counts[0]?.year, 1350)
+            const loss = evidence.kind === 'LOST' ? evidence.loss : undefined
+            return <li key={a.titleId}>
+              <strong>{history?.label ?? '領地称号'}：</strong>{a.qualifies ? '条件を満たしている' : reason(a.failures)}。
+              {loss ? <>
+                <div>{loss.lostFromYear}年初に保持者が未確定となり、1350年初も未確定。</div>
+                <button type="button" disabled={yearDocumentDisabled(loss.lostFromYear)} aria-label={`${history?.label ?? '領地称号'}：${loss.lostFromYear}年初の称号と継承判断を開く`}
+                  onClick={() => requestDocument({kind:'title',id:a.titleId}, undefined, loss.lostFromYear)}>{loss.lostFromYear}年初の称号と判断</button>{' '}
+                <button type="button" disabled={yearDocumentDisabled(loss.lostFromYear - 1)} aria-label={`${personName(loss.lastHolderId)}の人物資料を開く`}
+                  onClick={() => requestDocument({kind:'person',id:loss.lastHolderId}, {kind:'title',id:a.titleId}, loss.lostFromYear - 1)}>前の保持者</button>{' '}
+              </> : !a.qualifies && a.failures.includes('HOLDER_UNDETERMINED') && <p>{evidence.kind === 'NEVER_HELD' ? '観測期間の最初から保持者が未確定です。' : '取得できた記録から保持者の喪失年は確定できません。'}</p>}
+              {' '}<button type="button" disabled={yearDocumentDisabled(1350)} aria-label={`1350年初の${history?.label ?? '領地称号'}の資料を開く`}
+                onClick={() => requestDocument({kind:'title',id:a.titleId}, undefined, 1350)}>1350年初の資料</button>
+            </li>
+          })}
+        </ul>}
+        {p.desk && territorialAssessments.length > 0 && <p className="note">保持者未確定は王朝の絶滅を意味しません。個別称号の喪失時点は、全目標条件の喪失や介入の成否を示すものではありません。</p>}
         {assessments.length>0&&<details data-testid="obs-goal-reasons">
           <summary>各称号の不足理由（王位と領主権を区別・{assessments.length}件）</summary>
           <ul>{assessments.map(a=><li key={a.titleId}>
@@ -323,18 +327,27 @@ export function ObservationPanel(p:Props){
               {a.qualifies?'条件を満たしている（参考判定）':'不足している条件：'+reason(a.failures)}
             {(()=>{
               const loss=v.titleLossRecords.find(l=>l.titleId===a.titleId)
-              if(loss)return <div className="obs-related-links" data-testid="obs-loss-link">
+              if(loss && !p.desk)return <div className="obs-related-links" data-testid="obs-loss-link">
                 <button type="button" disabled={p.loading||!seedMatches}
                   onClick={()=>loss.transferEventId&&loss.transferYear!==undefined?openRecord('event',loss.transferEventId,loss.transferYear):yearChange(loss.lostFromYear)}>
                   最後に保持者を失った記録を開く（{loss.transferYear??loss.lostFromYear}年）</button></div>
-              return a.failures.includes('HOLDER_UNDETERMINED')&&!v.titleHistories.find(h=>h.titleId===a.titleId)?.intervals.some(i=>i.holder.status==='HELD')?<p className="note" data-testid="obs-no-loss">
+              if (p.desk && loss && !territorialAssessments.some(t => t.titleId === a.titleId)) {
+                const history = v.titleHistories.find(h => h.titleId === a.titleId)
+                if (endingHolderEvidence(history, loss, v.counts[0]?.year, 1350).kind === 'LOST') return <div>
+                  {loss.lostFromYear}年初に保持者が未確定（王冠称号の保持は世襲領地の条件とは別です）。{' '}
+                  <button type="button" disabled={yearDocumentDisabled(loss.lostFromYear)} onClick={() => requestDocument({kind:'title',id:a.titleId}, undefined, loss.lostFromYear)}>
+                    {loss.lostFromYear}年初の称号資料を開く
+                  </button>
+                </div>
+              }
+              return !p.desk&&a.failures.includes('HOLDER_UNDETERMINED')&&!v.titleHistories.find(h=>h.titleId===a.titleId)?.intervals.some(i=>i.holder.status==='HELD')?<p className="note" data-testid="obs-no-loss">
                 この称号は、観測期間に保持者が確認できた年初の記録がありません（最初から未確定）。喪失ではありません。</p>:null
             })()}
             <details className="dev-details"><summary>技術詳細</summary>
               <span className="note">titleId {a.titleId} / 理由コード {reasonCodes(a.failures)}</span></details>
           </li>)}</ul>
         </details>}
-        {v.titleLossRecords.length>0&&<section className="obs-loss" data-testid="obs-loss-records">
+        {!p.desk&&v.titleLossRecords.length>0&&<section className="obs-loss" data-testid="obs-loss-records">
           <h4>保持者を失った称号の記録</h4>
           <p className="note">1350年初に保持者を確認できない称号のうち、以前は保持者がいた称号について、最後に保持者を確認できなくなった年を年初履歴から示します。
             原因は断定せず、該当年のEvent・判断の記録で確認します。</p>
@@ -422,9 +435,9 @@ export function ObservationPanel(p:Props){
               onSelect={id=>{p.onInspectWorld?.();selectIns({kind:'region',id})}}/>
             {p.worldInspectorVisible === false
               ? <button type="button" onClick={p.onInspectWorld}>原史A0の世界資料を表示</button>
-              : <Inspector source={inspSource} index={inspIndex} tab={invTab} selection={inspSel} onTab={changeInvTab} onSelect={selectIns}/>}
+              : <Inspector indexOnly={p.desk} source={inspSource} index={inspIndex} tab={invTab} selection={inspSel} onTab={changeInvTab} onSelect={selectIns}/>}
           </div>
-          {p.worldInspectorVisible !== false && inspSel?.kind==='person'&&records.some(r=>r.personId===inspSel.id)&&<button type="button" data-testid="obs-world-to-person"
+          {!p.desk && p.worldInspectorVisible !== false && inspSel?.kind==='person'&&records.some(r=>r.personId===inspSel.id)&&<button type="button" data-testid="obs-world-to-person"
             onClick={()=>{setSelectedPerson(inspSel.id);setMainTab('investigate');if(p.desk)jumpTo('obs-desk-person')}}>この人物のこの世界線の履歴を{p.desk ? '人物資料' : '調査欄'}で見る</button>}
   </>
   const chronicle = v && (
@@ -461,7 +474,7 @@ export function ObservationPanel(p:Props){
             </li>)}
           </ol>
           {events.length>eventLimit&&<button type="button" onClick={()=>setEventLimit(n=>n+SHOW)}>Eventをさらに表示</button>}
-          {chosenEvent&&<div className="obs-record-detail" id={p.desk ? "obs-desk-event-detail" : undefined} tabIndex={p.desk ? -1 : undefined} data-testid="obs-event-detail">
+          {!p.desk&&chosenEvent&&<div className="obs-record-detail" id={p.desk ? "obs-desk-event-detail" : undefined} tabIndex={p.desk ? -1 : undefined} data-testid="obs-event-detail">
             <h4>{readableEvent(chosenEvent)}</h4>
             {p.onOpenDocument && <button type="button" onClick={()=>requestDocument({kind:'event',id:chosenEvent.eventId})}>この出来事の資料を開く</button>}
             {describeEvent(chosenEvent,names)?.lines.map(line=><p key={line}>{line}</p>)}
@@ -505,7 +518,7 @@ export function ObservationPanel(p:Props){
           </section>}
           <details className="obs-technical" data-testid="obs-technical" open={traceOpen}
             onToggle={e=>setTraceOpen(e.currentTarget.open)}>
-          <summary>技術的な詳細：DecisionTrace（実際の採否・判断根拠）</summary>
+          <summary>{p.desk ? '判断を調べる（出来事のない保留・不採用も含む）' : '技術的な詳細：DecisionTrace（実際の採否・判断根拠）'}</summary>
           <label>判断種別
             <select data-testid="obs-trace-filter" disabled={!!activeDocumentFilter} value={activeDocumentFilter ? 'ALL' : traceFilter} onChange={e=>{setTraceFilter(e.target.value);setTraceLimit(SHOW)}}>
               <option value="EVENTLESS">EventなしのDEFER・REJECT</option>
@@ -524,7 +537,7 @@ export function ObservationPanel(p:Props){
             </li>)}
           </ol>
           {traces.length>traceLimit&&<button type="button" onClick={()=>setTraceLimit(n=>n+SHOW)}>Traceをさらに表示</button>}
-          {chosenTrace&&<div className="obs-record-detail" id={p.desk ? "obs-desk-trace-detail" : undefined} tabIndex={p.desk ? -1 : undefined} data-testid="obs-trace-detail">
+          {!p.desk&&chosenTrace&&<div className="obs-record-detail" id={p.desk ? "obs-desk-trace-detail" : undefined} tabIndex={p.desk ? -1 : undefined} data-testid="obs-trace-detail">
             <h4>{traceActor(chosenTrace)}についての判断：{statusText(chosenTrace.status)}</h4>
             {p.onOpenDocument && <button type="button" onClick={()=>requestDocument({kind:'trace',id:chosenTrace.traceId})}>この判断の資料を開く</button>}
             <p>規則 {chosenTrace.ruleId}（{chosenTrace.status}）。記録された理由：{reasonSentence(chosenTrace.reasonCodes)}</p>
@@ -550,7 +563,7 @@ export function ObservationPanel(p:Props){
           </label>
           {p.onOpenDocument && person && <button type="button" disabled={p.loading||!seedMatches}
             onClick={()=>requestDocument({kind:'person',id:person})}>人物の資料を開く</button>}
-          <section className="obs-person-year" data-testid="obs-person-year-state">
+          {!p.desk && <><section className="obs-person-year" data-testid="obs-person-year-state">
             <h4>選択年初の状態（{v.year}年初）</h4>
             <p className="note">この年の年初に記録されている関係です。別の年の関係や、この世界線の全期間の履歴は下の別欄にあります。</p>
             {person&&seedMatches&&<A0FutureContext observation={v} personId={person}
@@ -566,14 +579,15 @@ export function ObservationPanel(p:Props){
           {person&&<PersonHistory records={records} personId={person} currentYear={v.year} nameOf={nameOf}
             disabled={p.loading||!seedMatches} onFocusPerson={focusPerson} onOpenEvent={(id,y)=>openRecord('event',id,y)}
             onOpenTrace={(id,y)=>openRecord('trace',id,y)} onYear={yearChange} onSelectTitle={selectTitleAt}
-            {...(seedMatches?{onIntervene:(y:number,a:string,b:string)=>{pause();p.onIntervene(y,a,b)}}:{})}/>}
+            {...(seedMatches?{onIntervene:(y:number,a:string,b:string)=>{pause();p.onIntervene(y,a,b)}}:{})}/>}</>}
           <label>称号の歴代保持者を調べる（王位・領地別）
             <select data-testid="obs-title-select" value={title?.titleId??''} onChange={e=>setSelectedTitle(e.target.value)}>
               <option value="">選択してください</option>
               {v.world.titles.map(t=><option key={t.titleId} value={t.titleId}>{titleLabel(t,v.world)}</option>)}
             </select>
           </label>
-          {title&&<div data-testid="obs-title-detail">
+          {p.desk && title && <button type="button" disabled={documentDisabled} onClick={()=>requestDocument({kind:'title',id:title.titleId})}>称号の資料を開く</button>}
+          {!p.desk&&title&&<div data-testid="obs-title-detail">
             <h4>{titleLabel(title,v.world)}</h4>
             {p.onOpenDocument && <button type="button" disabled={p.loading||!seedMatches}
               onClick={()=>requestDocument({kind:'title',id:title.titleId})}>称号の資料を開く</button>}
@@ -618,15 +632,12 @@ export function ObservationPanel(p:Props){
               </button>
             </li>)}</ul>}
           </div>}
-          {person&&v.year<1350&&persons.find(x=>x.personId===person)?.interactionRole!=='SUPPORTING'&&
+          {!p.desk&&person&&v.year<1350&&persons.find(x=>x.personId===person)?.interactionRole!=='SUPPORTING'&&
             persons.some(x=>x.personId===person)&&
-            <button type="button" className="cta" data-testid="obs-to-intervention" disabled={!seedMatches||p.loading} onClick={()=>{pause()
-              if (p.desk && chosenTrace && traceRefs.has(chosenTrace.traceId)) p.onIntervene(v.year,person,undefined,{kind:'trace',id:chosenTrace.traceId})
-              else if (p.desk && chosenEvent && eventRefs.has(chosenEvent.eventId)) p.onIntervene(v.year,person,undefined,{kind:'event',id:chosenEvent.eventId})
-              else p.onIntervene(v.year,person)}}>
+            <button type="button" className="cta" data-testid="obs-to-intervention" disabled={!seedMatches||p.loading} onClick={()=>{pause();p.onIntervene(v.year,person)}}>
               この人物と年から介入を検討する
             </button>}
-          <p className="note">介入は既存の人物間信頼調整のみです。対象者の適格性・成立・歴史変化は保証しません。</p>
+          {!p.desk && <p className="note">介入は既存の人物間信頼調整のみです。対象者の適格性・成立・歴史変化は保証しません。</p>}
         </aside>
   )
   return <section className={p.desk ? "panel obs obs-desk" : "panel obs"} aria-labelledby="obs-heading" data-testid="observation-main">
@@ -685,13 +696,12 @@ export function ObservationPanel(p:Props){
     {v&&<div className="obs-body">
       {p.desk ? <>
         <div className="obs-desk-content" inert={loading} aria-busy={loading}>
+          {goalPanel}
           {contextLine}
           <DeskLayout
             chronicle={<>
-              {p.fixedSeed && <details><summary>シナリオ目標と1350年の参考判定</summary>{goalPanel}</details>}
               {chronicle}
               {yearIndex}
-              {!p.fixedSeed && <details><summary>シナリオ目標と1350年の参考判定</summary>{goalPanel}</details>}
             </>}
             world={<div data-testid="obs-world-explorer" data-year={yearStart?.year}>
               {worldPanel}

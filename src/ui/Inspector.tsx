@@ -21,6 +21,7 @@ type Props = Readonly<{
   index: WorldIndex
   tab: EntityKind
   selection: Selection | undefined
+  indexOnly?: boolean
   onTab: (kind: EntityKind) => void
   onSelect: (selection: Selection) => void
 }>
@@ -39,7 +40,7 @@ function listItems(source: InspectionSource, index: WorldIndex, kind: EntityKind
   }
 }
 
-export function Inspector({ source, index, tab, selection, onTab, onSelect }: Props) {
+export function Inspector({ source, index, tab, selection, onTab, onSelect, indexOnly }: Props) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const items = listItems(source, index, tab)
   const selectedId = selection?.kind === tab ? selection.id : undefined
@@ -58,7 +59,7 @@ export function Inspector({ source, index, tab, selection, onTab, onSelect }: Pr
 
   return (
     <section aria-labelledby="inspector-heading" className="panel">
-      <h2 id="inspector-heading">選択年の状態（閲覧のみ）</h2>
+      <h2 id="inspector-heading">{indexOnly ? '資料の対象索引' : '選択年の状態（閲覧のみ）'}</h2>
       <div role="tablist" aria-label="閲覧対象" className="tabs">
         {TABS.map((t, i) => (
           <button
@@ -94,13 +95,13 @@ export function Inspector({ source, index, tab, selection, onTab, onSelect }: Pr
             </li>
           ))}
         </ul>
-        <div data-testid="detail" className="detail" aria-live="polite">
+        {!indexOnly && <div data-testid="detail" className="detail" aria-live="polite">
           {selection ? (
-            <Detail selection={selection} source={source} index={index} onSelect={onSelect} />
+            <InspectorDetail selection={selection} source={source} index={index} onSelect={onSelect} />
           ) : (
             <p className="note">地域・集団・人物・称号を選ぶと詳細を表示します。</p>
           )}
-        </div>
+        </div>}
       </div>
     </section>
   )
@@ -146,7 +147,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function Detail({ selection, source, index, onSelect }: DetailProps) {
+export function InspectorDetail({ selection, source, index, onSelect }: DetailProps) {
   switch (selection.kind) {
     case 'region': {
       const r = index.region(selection.id)
