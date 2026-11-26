@@ -5,6 +5,7 @@ Run from any directory: python3 -IB scripts/test_quick_check.py
 The deliberately narrow extractor fails closed if the workflow structure changes.
 """
 
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -91,6 +92,20 @@ class QuickCheckTest(unittest.TestCase):
         for status in ("success", "failure", "cancelled", ""):
             with self.subTest(dependency="WORKER", status=status):
                 self.check_case(False, **(base | {"WORKER": status}))
+
+    def test_preview_job_names_match_matrix(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        match = re.search(r"(?m)^        shard: \[([0-9, ]+)\]$", text)
+        self.assertIsNotNone(match)
+        shards = [int(value.strip()) for value in match.group(1).split(",")]
+        self.assertEqual(shards, list(range(1, len(shards) + 1)))
+        self.assertIn(f"--shard=${{{{ matrix.shard }}}}/{len(shards)}", text)
+        path = WORKFLOW.parents[2] / "scripts/preview/source.py"
+        spec = importlib.util.spec_from_file_location("preview_source", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.REQUIRED_JOBS, {"static", "e2e", "worker", "quick-check"} |
+                         {f"unit ({number})" for number in shards})
 
     def test_multiple_failures(self):
         self.check_case(False, STATIC="failure", UNIT="failure", E2E="failure", WORKER="failure")

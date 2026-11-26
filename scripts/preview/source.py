@@ -9,7 +9,7 @@ FORK_ID = 1465044544
 CI = ".github/workflows/ci.yml"
 SHA = re.compile(r"[0-9a-f]{40}")
 # CI の表示名と一致させる。attempt 内の全ジョブを要求し部分 rerun は拒否する。
-REQUIRED_JOBS = frozenset({"static", "unit (1)", "unit (2)", "unit (3)", "e2e", "worker", "quick-check"})
+REQUIRED_JOBS = frozenset({"static", "unit (1)", "unit (2)", "e2e", "worker", "quick-check"})
 
 
 def repository(repo, name, repo_id):
