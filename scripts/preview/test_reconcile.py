@@ -41,6 +41,20 @@ class GitHubTest(unittest.TestCase):
         with patch.object(gh, "snapshot", return_value=(CURRENT, object())), patch.object(gh, "identity", return_value=None):
             self.assertEqual(gh.choose(42, completed)["operation"], "inspect")
 
+    def test_identity_uses_exact_attempt_and_artifact_name(self):
+        pull = {"head": {"sha": CURRENT["head"]}}
+        run = {"id": 8, "run_attempt": 2}
+        merge = {"sha": ARTIFACT["build"]}
+        blob = {"sha": "trusted"}
+        with patch.object(gh, "github", side_effect=[merge, blob]), \
+                patch.object(gh.subprocess, "check_output", return_value="trusted\n"), \
+                patch.object(gh, "pages", side_effect=[[], []]) as pages, \
+                patch.object(gh.source, "select_artifact", return_value=None) as select:
+            self.assertIsNone(gh.identity(42, (pull, run)))
+            self.assertEqual(pages.call_args_list[0].args, (f"{gh.REPO}/actions/runs/8/attempts/2/jobs", "jobs"))
+            self.assertEqual(pages.call_args_list[1].kwargs, {"name": "preview-8-2"})
+            self.assertEqual(select.call_args.args[4:6], (blob, "trusted"))
+
     def test_close_reopen_and_update_after_artifact_lookup(self):
         closed = dict(CURRENT, state="closed", closed_at="2026-11-26T07:00:00Z")
         payload = {"action": "closed", "pull_request": {"number": 42}}

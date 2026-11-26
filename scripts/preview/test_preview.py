@@ -155,8 +155,10 @@ class SourceTest(unittest.TestCase):
                         conclusion="success", head_branch="feature", head_sha=IDENTITY["head"], repository=self.repo,
                         head_repository=self.repo, actor=self.actor, triggering_actor=self.actor, pull_requests=[],
                         created_at="2026-11-26T12:00:00Z")
-        self.jobs = [dict(name="quick-check", conclusion="success", run_attempt=2, run_id=123, head_sha=IDENTITY["head"],
-                          steps=[dict(name="PR preview artifact ready", conclusion="success")])]
+        self.jobs = [dict(name=name, status="completed", conclusion="success", run_attempt=2, run_id=123,
+                          head_sha=IDENTITY["head"], steps=([dict(name="PR preview artifact ready", conclusion="success")]
+                                                         if name == "worker" else []))
+                     for name in sorted(source.REQUIRED_JOBS)]
         self.merge = dict(sha=IDENTITY["build"], parents=[dict(sha=IDENTITY[key]) for key in ("base", "head")])
         self.workflow_blob = dict(type="file", sha="e" * 40)
         self.artifact = dict(id=987, name="preview-123-2", size_in_bytes=2000, expired=False, digest="sha256:" + "0" * 64,
@@ -196,14 +198,27 @@ class SourceTest(unittest.TestCase):
 
     def test_artifact_source_and_exact_attempt(self):
         def select(jobs=None, merge=None, blob=None, artifacts=None):
-            return source.select_artifact(self.pr, self.run, jobs or self.jobs, merge or self.merge, blob or self.workflow_blob,
-                                          "e" * 40, artifacts or [self.artifact], preview.ZIP_LIMIT)
+            return source.select_artifact(self.pr, self.run, self.jobs if jobs is None else jobs, merge or self.merge, blob or self.workflow_blob,
+                                          "e" * 40, [self.artifact] if artifacts is None else artifacts, preview.ZIP_LIMIT)
 
         self.assertEqual(select(), dict(build=IDENTITY["build"], artifact=987, digest=self.artifact["digest"]))
-        self.assertIsNone(select(jobs=[dict(self.jobs[0], run_attempt=1)]))
-        self.assertIsNone(select(jobs=[dict(self.jobs[0], steps=[])]))
-        self.assertIsNone(select(jobs=[dict(self.jobs[0], steps=[dict(name="Upload verified PR build", conclusion="success"),
-                                                              dict(name="PR preview artifact ready", conclusion="skipped")])]))
+        self.assertIsNone(select(jobs=[]))
+        self.assertIsNone(select(artifacts=[]))
+        for change in (dict(status="in_progress"), dict(conclusion="failure"), dict(conclusion="cancelled")):
+            self.assertIsNone(source.select_artifact(self.pr, dict(self.run, **change), self.jobs, self.merge,
+                                                    self.workflow_blob, "e" * 40, [self.artifact], preview.ZIP_LIMIT))
+        for index, job in enumerate(self.jobs):
+            for change in (dict(run_attempt=1), dict(run_id=124), dict(head_sha="f" * 40),
+                           dict(status="in_progress"), dict(conclusion="failure"), dict(conclusion="cancelled"),
+                           dict(conclusion="skipped")):
+                with self.subTest(job=job["name"], change=change):
+                    self.assertIsNone(select(jobs=[*self.jobs[:index], dict(job, **change), *self.jobs[index + 1:]]))
+            self.assertIsNone(select(jobs=self.jobs[:index] + self.jobs[index + 1:]))
+            self.assertIsNone(select(jobs=[*self.jobs, job]))
+        worker = next(i for i, job in enumerate(self.jobs) if job["name"] == "worker")
+        for steps in ([], [dict(name="PR preview artifact ready", conclusion="skipped")],
+                      [dict(name="PR preview artifact ready", conclusion="success")] * 2):
+            self.assertIsNone(select(jobs=[*self.jobs[:worker], dict(self.jobs[worker], steps=steps), *self.jobs[worker + 1:]]))
         self.assertIsNone(select(blob=dict(self.workflow_blob, sha="f" * 40)))
         self.assertIsNone(select(merge=dict(self.merge, parents=list(reversed(self.merge["parents"])))))
         self.assertIsNone(select(artifacts=[self.artifact, self.artifact]))

@@ -48,3 +48,5 @@ jobs:
     uses: ./.github/workflows/pr-preview-reconcile.yml
     with:
       pr: ${{ needs.route.outputs.pr }}
+    secrets:
+      CLOUDFLARE_PREVIEW_TOKEN: ${{ secrets.CLOUDFLARE_PREVIEW_TOKEN }}
