@@ -10,14 +10,17 @@ import { checkedModifier, evidenceBuild, EVIDENCE_MAX_BYTES, EvidenceError, expo
   limitedEvidenceConfiguration, limitedReplayInput, parseEvidence } from '../src/ui/playtest-evidence.ts'
 import type { Evidence, EvidenceBuild } from '../src/ui/playtest-evidence.ts'
 
-const checkout = fileURLToPath(new URL('..', import.meta.url))
+const checkout = realpathSync(fileURLToPath(new URL('..', import.meta.url)))
+// 呼び出し側の GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE で別のソースと照合しない。
+const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.toUpperCase().startsWith('GIT_')))
 const git = (...args: string[]) => execFileSync('git', ['-c', 'core.fsmonitor=false', ...args], {
   cwd: checkout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-  env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0' },
+  env: { ...gitEnv, GIT_NO_LAZY_FETCH: '1', GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0' },
 }).trim()
 
 export function readCheckoutBuild(): EvidenceBuild {
   try {
+    if (realpathSync(git('rev-parse', '--show-toplevel')) !== checkout) return evidenceBuild(undefined)
     const sha = git('rev-parse', '--verify', 'HEAD')
     // assume-unchanged / skip-worktree のパスは status に現れない。正確な checkout として採用しない。
     const hidden = git('ls-files', '-v', '-z').split('\0').some(path => /^[a-zS] /.test(path))
