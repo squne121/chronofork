@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+          persist-credentials: false
       - name: Check decision register
         run: |
           python3 -I scripts/check_decision_records.py --self-test
@@ -39,6 +40,8 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
+      - name: Check PR preview safety fixtures
+        run: python3 -IB scripts/preview/test_preview.py
       - name: Build for GitHub Pages
         if: github.event_name == 'pull_request'
         env:
@@ -53,3 +56,20 @@ jobs:
           PAGES_EXPECTED_SHA: ${{ github.sha }}
           PAGES_LOCAL_PREVIEW: '1'
         run: npx playwright test tests/e2e/pages-deploy.spec.ts
+      - name: Package verified PR build
+        id: package-preview
+        if: >-
+          github.event_name == 'pull_request' && github.event.repository.id == 1439901120 &&
+          github.event.pull_request.base.ref == 'main' &&
+          (github.event.pull_request.head.repo.id == 1439901120 || github.event.pull_request.head.repo.id == 1465044544) &&
+          github.event.pull_request.user.login != 'dependabot[bot]' && github.actor != 'dependabot[bot]' &&
+          github.triggering_actor != 'dependabot[bot]'
+        run: python3 -I scripts/preview/preview.py package
+      - name: Upload verified PR build
+        if: steps.package-preview.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preview-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/preview-upload/
+          if-no-files-found: error
+          retention-days: 7

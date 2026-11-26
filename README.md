@@ -57,6 +57,19 @@ exit
 - 表示の省略（experimental試遊限定の技術的処置）: A0/A1で内容が完全に同一の高頻度記録（`PERSON_PAIR_TRUST_SET` Event と `B-009` DecisionTrace）だけを、メモリ保護のため画面転送・一覧表示から省略します。全件数と省略件数は画面に表示し、差分のある記録は全て残します。省略した個別詳細は現在のUIでは後から閲覧できません（正式版の履歴省略・保存・閲覧は未設計）。
 - 残件: 正式Goal（`goal=null`）・未実装37ルール・本人試遊は未完了。
 
+## PR 試遊（Phase 2、未有効化）
+
+[#182](https://github.com/squne121/chronofork/issues/182) の PR CI は、従来の `/chronofork/` ビルドと実 Web Worker smoke が成功した後、対象 PR の同じ `dist` を GitHub Actions artifact に保存します。`preview-<run ID>-<attempt>` 内の manifest は PR 番号・head SHA・base SHA・実 build SHA を区別します。artifact ID と SHA-256 digest は GitHub 側のメタデータです。この時点では Cloudflare に公開されません。一般 Fork・Dependabot では梱包せず、通常の `quick-check` は続行します。
+
+公開・削除・通知・公開後 smoke の workflow がレビューされ、main に統合されるまでは、Cloudflare や GitHub に配信用の設定・secret を登録しないでください。以下はその後の管理者受入手順です。
+
+1. Cloudflare の Workers Free を確認し、専用の既存 Worker を 1 件、静的 asset 専用で用意します。サーバー側コード・bindings・custom domain・cron は設定しません。Workers の [Previews](https://developers.cloudflare.com/workers/previews/) を使い、通常の version preview や Cloudflare Pages は使いません。`workers.dev` のプレビュー URL は既定で公開されます。
+2. Cloudflare の **Manage Account → Account API tokens** で [個別 Worker 限定の account-owned API token](https://developers.cloudflare.com/workers/authorization/workers/) を作成します。まず対象 Worker だけの **Editor** を候補とし、Preview の作成・更新・削除が可能か実アカウントで確認します。拒否された場合は停止し、無断で対象・ロール・課金を拡大しません。固定版 Wrangler には親 Worker 不在時の作成経路があるため、Worker を作成できない token と既存 Worker の事前確認を必須にします。
+3. GitHub **Settings → Environments** で試遊専用 Environment を作り、deployment branches を **Selected branches and tags** の `main` ブランチだけに限定します。token は公開・削除 job だけが参照する Environment secret に登録し、repository-wide secret にしません。公開 URL の smoke job は token を参照しません。実装済みの workflow と Environment 名・設定キーが一致することを確認してから有効化します。
+4. 本体 PR の作成・更新・閉鎖、承認 Bot Fork と別 PR の並列・異なる host、並びに失敗 CI・未承認 Fork・古い HEAD・閉鎖/再開・不正 artifact・未設定の否定ケースを段階受入します。固定 URL と deployment 固有 URL、表示 SHA、Web Worker の観測・介入・比較、閉鎖後の削除、main の GitHub Pages に影響がないことを確認します。fixture と実サービスの結果は別に記録し、実機受入完了まで Issue を閉じません。
+
+Free の上限は Worker あたり 100 Preview で、上限に達すると最も長く再配信されていない Preview が削除されます。GitHub のキュー・API 障害や Cloudflare の伝播・障害では、コメントと URL が直ちに追随する保証はありません。古いコメントや配信の成功だけを試遊の成功として扱わないでください。
+
 ## 運用
 
 - `main` へは PR 経由のみ（Squash merge）。必須チェックは `quick-check`（型検査・ESLint・Vitest・ビルド・Playwright smoke）。
