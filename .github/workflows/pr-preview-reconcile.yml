@@ -6,6 +6,9 @@ on:
       pr:
         required: true
         type: string
+    secrets:
+      CLOUDFLARE_PREVIEW_TOKEN:
+        required: true
 
 permissions: {}
 
