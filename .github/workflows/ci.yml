@@ -37,6 +37,7 @@ jobs:
         run: |
           python3 -IB scripts/preview/test_preview.py
           python3 -IB scripts/preview/test_reconcile.py
+          python3 -IB scripts/test_quick_check.py
 
   unit:
     name: unit (${{ matrix.shard }})
@@ -162,7 +163,9 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           printf 'event=%s ref=%s static=%s unit=%s e2e=%s worker=%s\n' "$EVENT" "$REF" "$STATIC" "$UNIT" "$E2E" "$WORKER"
-          test "$STATIC" = success && test "$UNIT" = success && test "$E2E" = success
+          test "$STATIC" = success
+          test "$UNIT" = success
+          test "$E2E" = success
           if [ "$EVENT" = pull_request ]; then
             test "$WORKER" = success
           elif [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then
