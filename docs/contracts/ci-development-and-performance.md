@@ -12,7 +12,8 @@ Issue #185 で採用されたCI高速化と引継ぎの技術方針。ゲーム�
 ## Phase 2の依存準備
 
 - PR CIのPlaywright準備は、OS依存とbrowser binaryを別stepで実行する。どちらもChromium用の公式CLIを使い、OSのフォント・ライブラリやcold cache時のbrowser取得を省略しない。分離は遅延・失敗箇所の可視化であり、それ自体を高速化とみなさない。
-- 依存の正本は引き続きnpm lockfileとし、auditを含む `npm ci` を使う。`--prefer-offline` はCI比較で短時間だった一方、auditの報告内容に差が観測され、同等性・最新性を確認できなかったため採用しない。原因は未確定。pnpm・Bunへの移行も、audit・lifecycle・解決内容の同等性と運用負担の検証が不足しているため行わない。実測と未検証項目はIssue #189とPR #191を参照する。
+- 依存の正本は引き続きnpm lockfileとし、`static` は従来どおり `npm ci` で同じ依存範囲を監査する。`unit` の全shard、`e2e`、`worker` は `npm ci --prefer-offline` でキャッシュを優先し、キャッシュにない依存は取得する。全ジョブでauditとlifecycleを実行し、既存の終了条件を変えない。`npm ci` のaudit報告は、脆弱性の報告自体でジョブを失敗させる独立したゲートではない。
+- キャッシュ優先ジョブのauditもregistryへ直接advisoryを照会するが、依存メタデータのキャッシュにより派生するmetavulnerabilityの報告は通常監査と同一とは限らない。この報告は補助情報とし、`static` の通常監査の代わりにしない。過去のCIで観測した報告件数差の根本原因は未確定。pnpm・Bunへの移行は、audit・lifecycle・解決内容の同等性と運用負担の検証が不足しているため行わない。実測と未検証項目はIssue #189とPR #191を参照する。
 - Playwright公式Dockerイメージやrunner OS固定は、取得・運用・既存検証との互換性を含む有効性を確認できておらず、採用しない。OS依存準備が失敗した場合はbrowser準備・後続テストを成功扱いしない。
 
 ## PR previewの信頼境界
