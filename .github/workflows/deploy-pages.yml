@@ -1,0 +1,131 @@
+name: deploy-pages
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+      eligible: ${{ steps.check.outputs.eligible }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
+          quick=$(gh api "repos/$REPO/actions/runs/$RUN/attempts/$ATTEMPT/jobs" --jq '[.jobs[] | select(.name == "quick-check" and .conclusion == "success")] | length')
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          if [ "$current" = "$SHA" ] && [ "$quick" = 1 ]; then echo 'eligible=true' >> "$GITHUB_OUTPUT"; fi
+      - if: steps.check.outputs.eligible == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.check.outputs.sha }}
+      - if: steps.check.outputs.eligible == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - if: steps.check.outputs.eligible == 'true'
+        run: npm ci
+      - if: steps.check.outputs.eligible == 'true'
+        uses: actions/configure-pages@v5
+      - if: steps.check.outputs.eligible == 'true'
+        run: npm run build
+        env:
+          VITE_BASE_PATH: /chronofork/
+          VITE_BUILD_SHA: ${{ steps.check.outputs.sha }}
+      - if: steps.check.outputs.eligible == 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.check.outputs.eligible == 'true'
+        env:
+          PAGES_SMOKE_URL: http://127.0.0.1:4173/chronofork/
+          PAGES_EXPECTED_SHA: ${{ steps.check.outputs.sha }}
+          PAGES_LOCAL_PREVIEW: '1'
+        run: npx playwright test tests/e2e/pages-deploy.spec.ts
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-build-smoke-evidence
+          path: test-results/
+          if-no-files-found: ignore
+      - if: steps.check.outputs.eligible == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.eligible == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      url: ${{ steps.deployment.outputs.page_url }}
+      deployed: ${{ steps.latest.outputs.current }}
+    steps:
+      - id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)
+          if [ "$current" = "$SHA" ]; then echo 'current=true' >> "$GITHUB_OUTPUT"; else echo 'main advanced; skipping stale deployment'; fi
+      - id: deployment
+        if: steps.latest.outputs.current == 'true'
+        uses: actions/deploy-pages@v4
+
+  smoke:
+    needs: [build, deploy]
+    if: needs.deploy.outputs.deployed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/e2e/pages-deploy.spec.ts
+        env:
+          PAGES_SMOKE_URL: ${{ needs.deploy.outputs.url }}
+          PAGES_EXPECTED_SHA: ${{ needs.build.outputs.sha }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-public-smoke-evidence
+          path: test-results/
+          if-no-files-found: ignore

@@ -698,6 +698,7 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
         {!desk && <h1>Project Chronofork</h1>}
         <div className="badge badge-warn" role="status" data-testid="experimental-banner">
           {limited ? '限定試遊（試験計算・原史 A0 と改変史 A1）' : '試験計算（仮データ・一部のみ実装）'}
+          <span data-testid="build-identity"> / EXPERIMENTAL / {import.meta.env.VITE_BUILD_SHA || 'local'}</span>
           <details className="dev-details"><summary>技術情報</summary>EXPERIMENTAL / CALIBRATION_ONLY
             {limited && <p data-testid="limited-configuration">{limited.configuration.configId} / {limited.configuration.configDigest} / seed {limited.seed} / drift 0</p>}
           </details>
