@@ -1,6 +1,25 @@
-.desk-document { position: fixed; width: min(420px, 100vw); max-height: calc(100vh - 20px); display: flex; flex-direction: column; background: #fffdf7; color: #24211d; border: 1px solid #756957; box-shadow: 0 4px 18px #0005; }
+.app:has(.desk-entry-tools) { --desk-window-top: 56px; }
+@media (max-width: 760px) { .app:has(.desk-entry-tools) { --desk-window-top: 90px; } }
+.desk-document { position: fixed; width: min(30rem, calc((100vw - 36px) / 2)); max-height: calc(100dvh - var(--desk-window-top, 12px) - 12px); display: flex; flex-direction: column; box-sizing: border-box; background: #fffdf7; color: #24211d; border: 1px solid #756957; box-shadow: 0 4px 18px #0005; }
 .desk-document > header { display: flex; align-items: center; gap: .5rem; padding: .4rem; background: #e7dfcf; }
 .desk-document > header strong { flex: 1; overflow-wrap: anywhere; }
-.desk-document > header button:first-of-type { cursor: move; touch-action: none; }
-.desk-document-body { overflow: auto; padding: .75rem; }
+.desk-document > header button { flex-shrink: 0; }
+.desk-document-body { overflow: auto; overscroll-behavior: contain; padding: .7rem; min-height: 0; overflow-wrap: anywhere; }
 .desk-document pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.desk-document-work, .desk-document-fixed { top: var(--desk-window-top, 12px); z-index: 10; }
+.desk-document-work { left: 12px; }
+.desk-document-fixed { right: 12px; }
+.app:has(.desk-intervention:not([hidden])) .desk-document-fixed { left: 12px; right: auto; }
+.app:has(.desk-intervention:not([hidden])):has(.desk-document-work):has(.desk-document-fixed) .desk-document-work,
+.app:has(.desk-intervention:not([hidden])):has(.desk-document-work) .desk-document-fixed { max-height: calc((100dvh - var(--desk-window-top, 12px) - 24px) / 2); }
+.app:has(.desk-intervention:not([hidden])):has(.desk-document-work) .desk-document-fixed { top: calc((100dvh + var(--desk-window-top, 12px)) / 2); }
+.desk-document-body :is(h3,h4,p,ol,ul) { margin-block: .4rem; }
+.desk-document-body :is(ol,ul) { padding-inline-start: 1.35rem; }
+.desk-document-body button { max-width: 100%; text-align: start; }
+.desk-document-body > button { margin-inline-end: .25rem; }
+.desk-succession li { margin-block: .4rem; }
+.desk-partners label { display: block; margin-block: .25rem; }
+.desk-partners input[type=search] { max-width: 75%; }
+.desk-partners ul { list-style: none; padding: 0; }
+.desk-partners li + li { margin-block-start: .25rem; }

@@ -11,6 +11,7 @@ type Request = Readonly<{
   input: ObservationInput
   expectedRef?: HistoryYearRef
   playback: boolean
+  document?: true
   observe: NonNullable<PlayRunner['observe']>
   progress: (progress: PlayProgress) => void
   success: (slice: ObservationSlice, computeMs: number, wallMs: number) => void
@@ -70,16 +71,22 @@ export function createObservationRequests(onIdle?: () => void) {
     })
   }
   const discard = () => {
+    const discarded = latest
     gate.invalidate()
     queued = undefined
     latest = undefined
+    if (discarded?.document) discarded.failure({ code: 'DOCUMENT_SUPERSEDED', message: '別の要求を優先しました。資料を取得し直せます。' })
   }
   return {
     get busy() { return active !== undefined },
     request(request: Request) {
+      if (latest?.document) discard()
       latest = request
       queued = { request, ticket: gate.begin() }
       drain()
+    },
+    discardDocument() {
+      if (latest?.document) discard()
     },
     pause() {
       if (!latest?.playback) return false

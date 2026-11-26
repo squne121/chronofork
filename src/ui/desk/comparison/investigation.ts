@@ -14,7 +14,7 @@ export function comparisonHistoryAt(source: ComparisonSource, ref: HistoryYearRe
 }
 
 export function comparisonTarget(target: DocumentTarget): ComparisonTarget | undefined {
-  if (target.kind === 'trace' || target.kind === 'event') return undefined
+  if (target.kind === 'trace' || target.kind === 'event' || target.kind === 'records' || target.kind === 'ending') return undefined
   if (target.kind === 'family') return { kind: 'person', id: target.id }
   return target
 }

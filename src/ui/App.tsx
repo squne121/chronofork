@@ -74,14 +74,31 @@ function isLegacyEntry():boolean{
 type AppProps = Readonly<{ run?: TimelineRun; playRunner?: PlayRunner; candidatesRunner?: CandidatesRunner }>
 type LimitedSession = ReturnType<typeof createLimitedPlaytestSession>
 
+const isLimitedEntry = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('play') === 'limited'
+
 export default function App(props: AppProps) {
-  const [limited, setLimited] = useState<{ session: LimitedSession; generation: number }>()
+  const [limited, setLimited] = useState(() => !props.run && isLimitedEntry() ? { session: createLimitedPlaytestSession(), generation: 0 } : undefined)
   const generation = useRef(0)
-  const start = () => setLimited({ session: createLimitedPlaytestSession(), generation: ++generation.current })
+  useEffect(() => {
+    if (props.run) return
+    const onPopState = () => {
+      const next = isLimitedEntry() ? { session: createLimitedPlaytestSession(), generation: ++generation.current } : undefined
+      setLimited(current => next ? current ?? next : undefined)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [props.run])
+  const switchEntry = (enter: boolean) => {
+    const url = new URL(window.location.href)
+    if (enter) url.searchParams.set('play', 'limited')
+    else url.searchParams.delete('play')
+    if (url.href !== window.location.href) window.history.pushState(null, '', url)
+    setLimited(enter ? { session: createLimitedPlaytestSession(), generation: ++generation.current } : undefined)
+  }
   // 入口をまたぐと Worker だけでなく候補・資料・比較・要求世代も持ち越さない。
   return limited
-    ? <Workspace key={limited.generation} limited={limited.session} onLimitedStart={start} onLimitedExit={() => setLimited(undefined)} />
-    : <Workspace key="normal" {...props} onLimitedStart={start} />
+    ? <Workspace key={limited.generation} limited={limited.session} onLimitedStart={() => switchEntry(true)} onLimitedExit={() => switchEntry(false)} />
+    : <Workspace key="normal" {...props} onLimitedStart={() => switchEntry(true)} />
 }
 
 /** run は試験用の注入口。通常入口では明示操作なしに旧試験を計算しない。 */
@@ -126,8 +143,8 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
   const [deskWindow, setDeskWindow] = useState<'intervention' | DeskComparisonSelection>()
   const comparisonSources = useRef(new WeakMap<HistoryYear, ComparisonSource & { context: InvestigationContext }>())
   const [deskWindowFront, setDeskWindowFront] = useState(false)
-  const investigationLinks = useRef(new Map<string, InvestigationContext[]>())
-  const pendingInvestigationLinks = useRef(new Map<string, DocumentOpenRequest>())
+  const investigationLinks = useRef(new WeakMap<HistoryYear, InvestigationContext[]>())
+  const documentYears = useRef(new Map<number, ObservedYear>())
   const resetDeskIntervention = () => {
     setDeskDraft(undefined)
     setDeskResult(undefined)
@@ -138,8 +155,8 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
     setHistoryUpdate(undefined)
     comparisonSources.current = new WeakMap()
     observationSources.current = new WeakMap()
-    investigationLinks.current.clear()
-    pendingInvestigationLinks.current.clear()
+    investigationLinks.current = new WeakMap()
+    documentYears.current.clear()
     setDocumentSession(n => n + 1)
     setDocumentRequest(undefined)
     setDocumentFilter(undefined)
@@ -307,11 +324,7 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
         setObsProgress(undefined)
         const entry = { slice: view, history: historyFromObservation(view).at(view.year), calc: { computeMs, wallMs } }
         observationSources.current.set(entry.history, entry)
-        for (const [id, request] of pendingInvestigationLinks.current) {
-          if (!sameHistoryYearRef(request.ref, entry.history.ref)) continue
-          rememberInvestigation(entry.history, request)
-          pendingInvestigationLinks.current.delete(id)
-        }
+        if (desk) cacheDocumentYear(entry)
         setObservation(entry)
         setObsCalc(entry.calc)
         setSeedText(String(view.seed))
@@ -351,37 +364,74 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
   const rememberInvestigation = (history: HistoryYear, request: Pick<DocumentOpenRequest, 'ref' | 'target' | 'source'>) => {
     const context = investigationFromLink(history, request)
     if (context?.target?.kind !== 'person') return
-    const key = `${request.ref.year}:${context.target.id}`
-    const known = investigationLinks.current.get(key) ?? []
-    if (!known.some(x => x.history === context.history && x.evidence?.kind === context.evidence?.kind && x.evidence?.id === context.evidence?.id)) {
-      investigationLinks.current.set(key, [...known, context])
+    const known = investigationLinks.current.get(history) ?? []
+    if (!known.some(x => x.target?.id === context.target?.id && x.evidence?.kind === context.evidence?.kind && x.evidence?.id === context.evidence?.id)) {
+      investigationLinks.current.set(history, [...known, context])
     }
   }
-  const openDocument: OpenDeskDocument = (target, ref, source) => {
-    if (!observationYear || obsLoading || !inCurrentA0(ref) || !Number.isInteger(ref.year) || ref.year < YEAR_RANGE.min || ref.year > YEAR_RANGE.max) return
-    if (sameHistoryYearRef(ref, observationYear.ref)) rememberInvestigation(observationYear, { ref, target, source })
-    else {
-      if (handleRef.current || candHandleRef.current) return
-      goToDocumentYear(ref, { windowId: '' })
-    }
-    setDocumentRequest({ requestId: String(++documentSerial.current), ref, target, source })
+  const cacheDocumentYear = (entry: ObservedYear) => {
+    const years = documentYears.current
+    years.delete(entry.slice.year)
+    years.set(entry.slice.year, entry)
+    if (years.size > 6) years.delete(years.keys().next().value!)
   }
-  const goToDocumentYear: NonNullable<DeskDocumentsProps['onYear']> = (ref, { windowId, sourceHistory }) => {
+  const resolveDocument: NonNullable<DeskDocumentsProps['onResolve']> = request => {
+    const { requestId, ref, sourceHistory, comparison } = request
+    const update = (data: Pick<NonNullable<DeskDocumentsProps['historyUpdate']>, 'history' | 'slice' | 'error'>) =>
+      setHistoryUpdate({ ...data, requestId, ref, comparison })
     if (sourceHistory) {
-      // 明示比較の窓には、元 DTO と同じ比較・同じ側の年だけを返す。
       const source = comparisonSources.current.get(sourceHistory)
-      const history = source && comparisonHistoryAt(source, ref)
-      if (history) setHistoryUpdate({ windowId, history })
+      const sourceView = source?.pair === 'A1_A2' ? source.view.second : source?.view
+      const history = sourceView === comparison && source && comparisonHistoryAt(source, ref)
+      if (history) update({ history })
+      else update({ error: '比較の出典が一致しません' })
       return
     }
+    if (comparison || !inCurrentA0(ref) || !Number.isInteger(ref.year) || ref.year < YEAR_RANGE.min || ref.year > YEAR_RANGE.max) return
+    const adopt = (entry: ObservedYear) => {
+      cacheDocumentYear(entry)
+      rememberInvestigation(entry.history, request)
+      update({ history: entry.history, slice: entry.slice })
+    }
+    observationRequests.discardDocument()
+    const cached = (request.history && observationSources.current.get(request.history)) ??
+      (observed?.slice.year === ref.year ? observed : documentYears.current.get(ref.year))
+    if (cached && sameHistoryYearRef(cached.history.ref, ref)) { adopt(cached); return }
+    if (handleRef.current || candHandleRef.current || obsLoading) {
+      update({ error: '別の計算中です。終了後に取得してください' })
+      return
+    }
+    const observe: PlayRunner['observe'] = limited ? (input, progress) => limited.observe(input.year, progress) : playRunner.observe
+    if (!observe) { update({ error: '資料を取得できません' }); return }
+    stopDeskPlayback()
+    update({ error: `${ref.year}年の資料を取得中` })
+    setObsDraining(true)
+    observationRequests.request({
+      input: limited ? limitedObservationInput(ref.year) : { seed: ref.origin.seed, mode: observationMode, year: ref.year },
+      expectedRef: ref, playback: false, document: true, observe, progress: () => {},
+      success: (slice, computeMs, wallMs) => {
+        const entry = { slice, history: historyFromObservation(slice).at(slice.year), calc: { computeMs, wallMs } }
+        observationSources.current.set(entry.history, entry)
+        adopt(entry)
+      },
+      failure: error => update({ error: `資料を取得できません（${error.code}）` }),
+    })
+  }
+  const openDocument: OpenDeskDocument = (target, ref, source) => {
+    if (!inCurrentA0(ref)) return
+    const request = { requestId: String(++documentSerial.current), ref, target, source }
+    setDocumentRequest(request)
+    resolveDocument(request)
+  }
+  const goToDocumentYear: NonNullable<DeskDocumentsProps['onYear']> = ref => {
     if (!inCurrentA0(ref) || !Number.isInteger(ref.year) || ref.year < YEAR_RANGE.min || ref.year > YEAR_RANGE.max) return
     stopDeskPlayback()
     setDocumentNavigation(n => n + 1)
     if (observationYear?.ref.year !== ref.year || obsLoading || obsError) loadObservation(ref.year, false, ref)
   }
-  const filterFromDocument: NonNullable<DeskDocumentsProps['onFilter']> = (target, ref, context) => {
-    if (context?.sourceHistory) {
-      const source = comparisonSources.current.get(context.sourceHistory)
+  const filterFromDocument: NonNullable<DeskDocumentsProps['onFilter']> = (target, ref, sourceHistory) => {
+    if (sourceHistory) {
+      const source = comparisonSources.current.get(sourceHistory)
       const original = source && inCurrentA0(source.context.history.ref) && !handleRef.current && comparisonHistoryAt(source, ref)
       if (source && original) {
         const focus = target.kind === 'event' || target.kind === 'trace' ? { ...target, branch: ref.origin.branch } : undefined
@@ -393,12 +443,10 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
     }
     if (!inCurrentA0(ref)) return
     setDocumentFilter({ target, ref })
-    goToDocumentYear(ref, { windowId: '' })
-    const chronicle = document.getElementById('obs-desk-chronicle')
-    chronicle?.scrollIntoView?.({ block: 'nearest' })
+    document.getElementById('obs-desk-chronicle')?.scrollIntoView?.({ block: 'nearest' })
   }
   const beginDeskIntervention = (context: InvestigationContext, year: number, partner?: string) => {
-    if (context.target?.kind !== 'person' || !inCurrentA0(context.history.ref) || handleRef.current || candHandleRef.current || obsLoading) return
+    if (context.target?.kind !== 'person' || !inCurrentA0(context.history.ref) || handleRef.current || candHandleRef.current || observationRequests.busy) return
     stopDeskPlayback()
     setWorkspaceOpen(false)
     setPlayError(undefined)
@@ -412,7 +460,7 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
     if (!inCurrentA0(ref) || ref.year !== year || obsLoading || running || fetchingCandidates) return
     if (!sameHistoryYearRef(ref, evidence.history.ref) || !observationSources.current.has(evidence.history)) return
     if (evidence.traceId === undefined) {
-      const links = investigationLinks.current.get(`${ref.year}:${personId}`) ?? []
+      const links = (investigationLinks.current.get(evidence.history) ?? []).filter(x => x.target?.id === personId)
       beginDeskIntervention(investigationForIntervention(evidence.history, links, personId, secondPersonId), year, secondPersonId)
       return
     }
@@ -426,27 +474,17 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
     if (typeof deskWindow !== 'object') return
     setDeskWindowFront(false)
     comparisonSources.current.set(history, { view: deskWindow.view, pair: deskWindow.pair, context: deskWindow.context })
-    setDocumentRequest({ requestId: String(++documentSerial.current), ref: history.ref, history, target: { kind, id } })
+    observationRequests.discardDocument()
+    setDocumentRequest({ requestId: String(++documentSerial.current), ref: history.ref, history, sourceHistory: history, comparison: deskWindow.pair === 'A1_A2' ? deskWindow.view.second : deskWindow.view, target: { kind, id } })
   }
   const returnToInvestigation = (context: InvestigationContext) => {
     if (!inCurrentA0(context.history.ref)) return
     setDeskWindow(undefined)
     setDeskWindowFront(false)
     stopDeskPlayback()
-    cancelObservation()
-    setObsError(undefined)
-    setDocumentNavigation(n => n + 1)
-    const original = observationSources.current.get(context.history)
-    if (original) {
-      setObservation(original)
-      setObsCalc(original.calc)
-      setCandidateSet(original.slice.candidates)
-    }
     const target = context.evidence ?? context.target
-    if (target && target.kind !== 'house') setDocumentRequest({
-      requestId: String(++documentSerial.current), ref: context.history.ref, target,
-      source: context.evidence && context.target?.kind === 'person' ? context.target : undefined,
-    })
+    if (target && target.kind !== 'house') openDocument(target, context.history.ref,
+      context.evidence && context.target?.kind === 'person' ? context.target : undefined)
   }
   const activeDeskResult = deskResult?.serial === deskDraft?.serial ? deskResult : undefined
   const openDeskComparison = (pair: DeskPair) => {
@@ -714,9 +752,9 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
             {limited && <p data-testid="limited-configuration">{limited.configuration.configId} / {limited.configuration.configDigest} / seed {limited.seed} / drift 0</p>}
           </details>
         </div>
-        {limited ? <div aria-label="限定試遊の操作">
-          <button type="button" onClick={onLimitedExit}>限定試遊を退出して通常入口へ</button>{' '}
-          <button type="button" onClick={onLimitedStart}>限定試遊を最初からやり直す</button>
+        {limited ? <div className="desk-entry-tools" aria-label="限定試遊の操作">
+          <button type="button" onClick={onLimitedExit} aria-label="限定試遊を退出して通常入口へ">通常入口へ</button>{' '}
+          <button type="button" onClick={onLimitedStart} aria-label="限定試遊を最初からやり直す">最初から</button>
         </div> : desk && <button type="button" onClick={onLimitedStart}>限定試遊を開始</button>}
         <dl className="status-list">
           {(!observation||!!comparison)&&<div>
@@ -850,12 +888,8 @@ function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRun
         </details>}
       </main>
       {desk && <div onPointerDownCapture={() => setDeskWindowFront(false)} onFocusCapture={() => setDeskWindowFront(false)}><DeskDocuments key={documentSession} history={observationYear} slice={observation}
-        openRequest={documentRequest} interventionDisabled={!observationYear || !inCurrentA0(observationYear.ref) || obsLoading || !!running || fetchingCandidates}
-        historyUpdate={historyUpdate} onOpenRelated={request => {
-          if (request.sourceHistory || !inCurrentA0(request.ref)) return
-          if (request.history) rememberInvestigation(request.history, request)
-          else if (request.target.kind === 'person') pendingInvestigationLinks.current.set(request.requestId, request)
-        }} onYear={goToDocumentYear} onFilter={filterFromDocument} onIntervene={interveneFromDocument} /></div>}
+        openRequest={documentRequest} interventionDisabled={!observationYear || !inCurrentA0(observationYear.ref) || obsLoading || obsDraining || !!running || fetchingCandidates}
+        historyUpdate={historyUpdate} onResolve={resolveDocument} onYear={goToDocumentYear} onFilter={filterFromDocument} onIntervene={interveneFromDocument} /></div>}
       {desk && deskDraft && !workspaceOpen && <DeskInterventionWindow open={!!deskSeedMatches && deskWindow !== undefined}
         front={deskWindowFront} onFront={() => setDeskWindowFront(true)}
         comparison={typeof deskWindow === 'object' ? deskWindow : undefined} onCompare={setDeskWindow}

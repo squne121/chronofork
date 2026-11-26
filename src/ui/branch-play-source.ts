@@ -32,6 +32,8 @@ import type { PlayCandidateSet } from './play-candidates.ts'
 import { isObservationFocusEvent } from './integrated-overview.ts'
 import { buildTitleHoldingHistories } from './observation/title-history.ts'
 import { buildA0KnownEnding } from './observation/a0-known-ending.ts'
+import { buildHistoryDigest } from './observation/history-digest.ts'
+import type { HistoryDigest } from './observation/history-digest.ts'
 import type { A0KnownEnding } from './observation/a0-known-ending.ts'
 import type { TitleHoldingHistory } from './observation/title-history.ts'
 import type { PersonRecord, TitleLossRecord } from './observation/person-record.ts'
@@ -521,6 +523,7 @@ export type ObservationSlice = Readonly<{
   goal:TimelineResult['goal']
   status:TimelineResult['status']
   a0Source:A0Source
+  digest?:HistoryDigest
 }>
 export type ObservationInput = Readonly<{seed:number;mode:PlayMode;year:number;configuration?:PlayConfiguration}>
 export type ObservationResult =
@@ -530,7 +533,7 @@ export type ObservationResult =
 // 保持中の同じA0に対して軽量KEY人物候補を再集計しない。Worker破棄でGC可能。
 const observationCandidateCache=new WeakMap<TimelineRun,PlayCandidateSet>()
 const observationTitleHistoryCache=new WeakMap<TimelineRun,readonly TitleHoldingHistory[]>()
-const observationRecordCache=new WeakMap<TimelineRun,Readonly<{persons:readonly PersonRecord[];losses:readonly TitleLossRecord[]}>>()
+const observationRecordCache=new WeakMap<TimelineRun,Readonly<{persons:readonly PersonRecord[];losses:readonly TitleLossRecord[];digest:HistoryDigest}>>()
 /** 実A0の確定結果だけを読む。UIが計算規則や架空の歴史を生成しないための純粋関数。 */
 export function sliceA0Observation(
   a0:TimelineRun,year:number,mode:ObservationMode,a0Source:A0Source,configuration?:PlayConfiguration,
@@ -573,7 +576,8 @@ export function sliceA0Observation(
   let records=observationRecordCache.get(a0)
   if(!records){
     const persons=buildPersonRecords(a0.result.snapshots,a0.result.eventLog,a0.result.decisionTraces,titleHistories)
-    records={persons,losses:buildTitleLossRecords(titleHistories,persons)}
+    const losses=buildTitleLossRecords(titleHistories,persons)
+    records={persons,losses,digest:buildHistoryDigest(a0,losses,persons)}
     observationRecordCache.set(a0,records)
   }
   const finalWorld=a0.result.snapshots.find(w=>w.year===GOAL_YEAR)
@@ -582,7 +586,7 @@ export function sliceA0Observation(
     seed:a0.inputs.seed,mode,configId:a0.inputs.configId,configDigest:a0.inputs.configDigest,year,world,events,traces,counts,candidates,titleHistories,knownA0Ending,
     ...(configuration==='LIMITED_PLAYTEST'?{configuration,configIdentity:a0.inputs.configIdentity,
       branchId:a0.result.branchId,playLedger:a0.playLedger}:{}),
-    personRecords:records.persons,titleLossRecords:records.losses,
+    personRecords:records.persons,titleLossRecords:records.losses,digest:records.digest,
     goal:a0.result.goal,technicalGoal:a0.result.technicalGoal,status:a0.result.status,a0Source,
   }
 }

@@ -21,10 +21,6 @@ async function readRecord<T>(dialog: Locator, summary: RegExp): Promise<T> {
   return JSON.parse((await details.locator('pre').textContent())!) as T
 }
 
-async function front(dialog: Locator) {
-  await dialog.getByRole('button', { name: '資料を移動', exact: true }).focus()
-}
-
 // Reuses the real C1 input and evidence from multi-house-browser. Success is the
 // actual usual-entry Worker run, not the old workspace or a replacement view.
 test('通常入口の実 v0：年代記から介入し、2枝の実記録を照合して元の調査に戻る', async ({ page }, testInfo) => {
@@ -32,8 +28,9 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
   test.setTimeout(10 * 60_000)
   const get = (id: string) => page.getByTestId(id)
   const dialogs = page.getByRole('dialog')
-  const documents = (kind: string, id: string) => page.getByRole('dialog', { name: `${kind} ${id}`, exact: true })
-  const person = documents('人物', pair[0])
+  const documents = (kind: string, id: string) => get('desk-document').and(page.locator(`[data-kind="${kind}"][data-target="${id}"]`))
+  const person = documents('person', pair[0])
+  const back = (doc: Locator) => doc.getByRole('button', { name: '戻る', exact: true }).click()
   const intervention = page.getByRole('dialog', { name: /介入/ })
   const comparison = page.getByRole('dialog', { name: /歴史の比較/ })
   const showComparison = intervention.getByRole('button', { name: '同じ年の歴史を比較', exact: true })
@@ -86,11 +83,12 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
 
   // A0 actually registers a different marriage for this person in the same year.
   // Enter the investigation through that Event in the chronicle, not a dev tab.
-  const optionLabel = async (id: string) => (await get('obs-person').locator(`option[value="${id}"]`).innerText()).split('（')[0]!
+  const optionLabel = async (id: string) => (await get('obs-person').locator(`option[value="${id}"]`).textContent() ?? '').trim().split('（')[0]!
   const targetName = await optionLabel(pair[0])
   const partnerName = (await optionLabel(pair[1])).split('・')[0]!
-  await get('obs-event-type').selectOption('MARRIAGE_REGISTER')
-  await get('obs-event-list').getByRole('button').filter({ hasText: targetName.split('・')[0]! }).click()
+  const chronicle = get('obs-chronicle')
+  await chronicle.getByRole('combobox', { name: '種類' }).selectOption('marriage')
+  await chronicle.locator('[aria-current=date] ol').getByRole('button').filter({ hasText: targetName.split('・')[0]! }).click()
   const originEvent = dialogs.filter({ has: page.getByRole('heading', { name: /^年内の出来事：/ }) })
   await reference(originEvent, 'A0')
   const originalMarriage = await readRecord<EventLogEntry>(originEvent, /^技術詳細：MARRIAGE_REGISTER/)
@@ -98,15 +96,16 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
   expect(originalMarriage.involvedRefs).not.toContainEqual({ kind: 'PERSON_PAIR', ids: pair })
   await originEvent.getByTestId(`document-link-person-${pair[0]}`).click()
   await reference(person, 'A0')
-  await expect(person).toContainText('参照元: Event')
+  await expect(person).toContainText('参照元: 出来事')
 
   await person.getByText('生涯の婚姻・称号・過去の判断を調べる', { exact: true }).click()
   const partner = person.getByTestId('history-partner').filter({ has: page.locator('summary').filter({ hasText: partnerName }) })
-  await front(person)
+  await expect(person).toBeVisible()
   await partner.locator('> summary').click()
+  await person.getByRole('button', { name: '固定', exact: true }).click()
   await partner.locator('li').filter({ hasText: 'B-005' }).getByTestId('history-open-trace')
     .filter({ hasText: `${year}年の判断記録を開く` }).click()
-  const originalTraceDoc = page.getByRole('dialog', { name: /^Trace / })
+  const originalTraceDoc = page.getByRole('dialog', { name: /^判断 / })
   await reference(originalTraceDoc, 'A0')
   const originalTrace = await readRecord<DecisionTrace>(originalTraceDoc, /技術詳細（実判断: B-005 \/ DEFER）/)
   expect(originalTrace).toMatchObject({ year, actorRef: { kind: 'PERSON_PAIR', ids: pair }, status: 'DEFER', eventIds: [] })
@@ -115,7 +114,7 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
   // 資料の参照年は、年代記の年を移動しても維持する。
   await get('obs-year-slider').press('Home')
   await atYear(firstYear)
-  await front(person)
+  await expect(person).toHaveAttribute('data-slot', 'fixed')
   await partner.getByTestId('history-intervene-pair').click()
   await expect(intervention).toBeVisible()
   await expect(intervention.getByTestId('branch-fork-year')).toHaveValue(String(year))
@@ -207,16 +206,16 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
     await expect(revised).toHaveCount(1)
     const traceId = (await revised.getAttribute('data-testid'))!.replace('comparison-trace-', '')
     await revised.click()
-    const evidence = documents('Trace', traceId).last()
+    const evidence = documents('trace', traceId).last()
     await reference(evidence, 'A1')
-    await expect(evidence.getByText('資料の出典・技術情報')).toHaveCount(1)
-    const provenance = evidence.getByText('資料の出典・技術情報').locator('..')
+    await expect(evidence.getByText('出典')).toHaveCount(1)
+    const provenance = evidence.getByText('出典').locator('..')
     expect(await provenance.textContent()).toContain(digest)
     const revisedTrace = await readRecord<DecisionTrace>(evidence, /技術詳細（実判断: B-005 \/ ACCEPT）/)
     expect(revisedTrace).toMatchObject({ traceId, year, actorRef: { kind: 'PERSON_PAIR', ids: pair }, ruleId: 'B-005', status: 'ACCEPT' })
     expect(revisedTrace.reasonCodes).toContain('BOTH_PARTIES_ACCEPT_UNIQUE_CONTRACT')
     expect(revisedTrace.modifierIds).not.toHaveLength(0)
-    await evidence.getByRole('button', { name: '年表で絞り込む', exact: true }).click()
+    await evidence.getByRole('button', { name: '比較で絞る', exact: true }).click()
     await expect(changes).toContainText('指定した根拠')
     await expect(a1.getByTestId(`comparison-trace-${traceId}`)).toBeVisible()
     await comparison.getByRole('button', { name: '根拠の絞り込みを解除' }).click()
@@ -224,7 +223,7 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
 
     await a1.getByText(/^年内の出来事（直接関与/).click()
     await a1.getByTestId(/^comparison-event-.*:A-LEG-01:/).filter({ hasText: '婚姻' }).click()
-    const marriageDoc = page.getByRole('dialog', { name: /^Event / }).last()
+    const marriageDoc = page.getByRole('dialog', { name: /^出来事 / }).last()
     await reference(marriageDoc, 'A1')
     const marriage = await readRecord<EventLogEntry>(marriageDoc, /^技術詳細：MARRIAGE_REGISTER/)
     expect(marriage).toMatchObject({ year, eventType: 'MARRIAGE_REGISTER' })
@@ -235,11 +234,11 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
     const legalTrace = marriage.sourceTraceIds.find(id => id.includes('A-LEG-01'))
     expect(legalTrace).toBeDefined()
     await marriageDoc.getByTestId(`document-link-trace-${legalTrace}`).click()
-    const legalDoc = documents('Trace', legalTrace!)
+    const legalDoc = documents('trace', legalTrace!)
     await reference(legalDoc, 'A1')
     const legal = await readRecord<DecisionTrace>(legalDoc, /技術詳細（実判断: A-LEG-01 \/ ACCEPT）/)
     expect(legal.eventIds).toContain(marriage.eventId)
-    await legalDoc.getByRole('button', { name: '資料を閉じる' }).press('Escape')
+    await back(legalDoc)
     await marriageDoc.getByRole('button', { name: '資料を閉じる' }).press('Escape')
   })
 
@@ -260,38 +259,39 @@ test('通常入口の実 v0：年代記から介入し、2枝の実記録を照�
   await test.step('実 A0 の年内登録を年初の存在と混同せず、A1 に別枝の人物を流用しない', async () => {
     await a0.getByText(/^年内の出来事（直接関与/).click()
     await a0.getByTestId(`comparison-event-${originalMarriage.eventId}`).click()
-    const event = documents('Event', originalMarriage.eventId).last()
+    const event = documents('event', originalMarriage.eventId).last()
     await reference(event, 'A0')
     const supporting = originalMarriage.involvedRefs.find(ref => ref.kind === 'PERSON')
     if (supporting?.kind !== 'PERSON') throw new Error('実 A0 の婚姻 Event に補助人物の参照がない')
-    await front(event)
+    await expect(event).toBeVisible()
     await event.getByTestId(`document-link-person-${supporting.id}`).first().press('Enter')
-    const absent = documents('人物', supporting.id)
+    const absent = documents('person', supporting.id)
     await reference(absent, 'A0')
     await expect(absent).toContainText('年初に不在（NOT_PRESENT）')
     await expect(absent.getByText('技術詳細：人物の年初状態', { exact: true })).toHaveCount(0)
-    await front(absent)
-    await absent.getByRole('button', { name: '年表で絞り込む', exact: true }).press('Enter')
+    await expect(absent).toBeVisible()
+    await absent.getByRole('button', { name: '比較で絞る', exact: true }).press('Enter')
     await expect(a1).toContainText('対象は存在しません')
     await expect(a1.getByText('対象の年初状態（実値）', { exact: true })).toHaveCount(0)
     await expect(state).toContainText('両枝での比較はできません')
-    await absent.getByRole('button', { name: '資料を閉じる' }).press('Escape')
+    await back(absent)
     await event.getByRole('button', { name: '資料を閉じる' }).press('Escape')
   })
 
-  // Change the browsing year after forking so that returning must actually
-  // restore the original investigation, not merely close the comparison.
+  // 比較を閉じて元の資料を復元しても、背景の観測年は変更しない。
   await get('obs-year-slider').press('Home')
   await atYear(firstYear)
   await comparison.getByRole('button', { name: '元の調査へ戻る', exact: true }).press('Enter')
   await expect(comparison).toHaveCount(0)
-  await atYear(year)
+  await atYear(firstYear)
   await reference(person.last(), 'A0')
-  const restored = documents('Trace', originalTrace.traceId).last()
+  const restored = documents('trace', originalTrace.traceId).last()
   await reference(restored, 'A0')
   expect(await readRecord<DecisionTrace>(restored, /技術詳細（実判断: B-005 \/ DEFER）/)).toEqual(originalTrace)
-  const zIndex = (window: Locator) => window.evaluate(el => Number(getComputedStyle(el).zIndex))
-  expect(await zIndex(restored)).toBeGreaterThan(await zIndex(person.first()))
+  await expect(restored).toHaveAttribute('data-slot', 'work')
+  await expect(person).toHaveAttribute('data-slot', 'fixed')
+  const [workBox, fixedBox] = await Promise.all([restored.boundingBox(), person.boundingBox()])
+  expect(workBox!.x + workBox!.width).toBeLessThan(fixedBox!.x)
   await expect(get('obs-goal')).toContainText('正式勝敗：未成立')
 
   await page.getByRole('button', { name: 'A0とA1の比較を開く', exact: true }).press('Enter')
