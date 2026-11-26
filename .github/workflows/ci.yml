@@ -58,6 +58,7 @@ jobs:
         run: npx playwright test tests/e2e/pages-deploy.spec.ts
       - name: Package verified PR build
         id: package-preview
+        continue-on-error: true
         if: >-
           github.event_name == 'pull_request' && github.event.repository.id == 1439901120 &&
           github.event.pull_request.base.ref == 'main' &&
@@ -66,10 +67,24 @@ jobs:
           github.triggering_actor != 'dependabot[bot]'
         run: python3 -I scripts/preview/preview.py package
       - name: Upload verified PR build
+        id: upload-preview
         if: steps.package-preview.outcome == 'success'
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: preview-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/preview-upload/
           if-no-files-found: error
           retention-days: 7
+      - name: PR preview artifact ready
+        if: >-
+          steps.package-preview.outcome == 'success' && steps.upload-preview.outcome == 'success' &&
+          steps.upload-preview.outputs.artifact-id != '' && steps.upload-preview.outputs.artifact-digest != ''
+        run: printf '%s\n' 'PR 試遊用の成果物を保存しました。公開は未実施です。'
+      - name: Report unavailable PR preview artifact
+        if: >-
+          steps.package-preview.outcome == 'failure' ||
+          (steps.package-preview.outcome == 'success' &&
+           (steps.upload-preview.outcome != 'success' ||
+            steps.upload-preview.outputs.artifact-id == '' || steps.upload-preview.outputs.artifact-digest == ''))
+        run: printf '%s\n' '::warning::PR 試遊用の成果物を保存できませんでした。プレビューは未提供です。'

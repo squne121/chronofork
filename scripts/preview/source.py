@@ -53,7 +53,7 @@ def select_artifact(pr, run, jobs, merge, workflow_blob, trusted_blob, artifacts
     head = pr["head"]["sha"]
     good = [job for job in jobs if job["name"] == "quick-check" and job["conclusion"] == "success" and
             job["run_id"] == run_id and job["run_attempt"] == attempt and job["head_sha"] == head and
-            sum(s["name"] == "Upload verified PR build" and s["conclusion"] == "success" for s in job["steps"]) == 1]
+            sum(s["name"] == "PR preview artifact ready" and s["conclusion"] == "success" for s in job["steps"]) == 1]
     if (len(good) != 1 or not SHA.fullmatch(merge["sha"]) or
             [p["sha"] for p in merge["parents"]] != [pr["base"]["sha"], head] or
             workflow_blob["type"] != "file" or workflow_blob["sha"] != trusted_blob):

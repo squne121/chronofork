@@ -59,7 +59,7 @@ exit
 
 ## PR 試遊（Phase 2、未有効化）
 
-[#182](https://github.com/squne121/chronofork/issues/182) の PR CI は、従来の `/chronofork/` ビルドと実 Web Worker smoke が成功した後、対象 PR の同じ `dist` を GitHub Actions artifact に保存します。`preview-<run ID>-<attempt>` 内の manifest は PR 番号・head SHA・base SHA・実 build SHA を区別します。artifact ID と SHA-256 digest は GitHub 側のメタデータです。この時点では Cloudflare に公開されません。一般 Fork・Dependabot では梱包せず、通常の `quick-check` は続行します。
+[#182](https://github.com/squne121/chronofork/issues/182) の PR CI は、従来の `/chronofork/` ビルドと実 Web Worker smoke が成功した後、対象 PR の同じ `dist` を GitHub Actions artifact に保存します。`preview-<run ID>-<attempt>` 内の manifest は PR 番号・head SHA・base SHA・実 build SHA を区別します。artifact ID と SHA-256 digest は GitHub 側のメタデータです。この時点では Cloudflare に公開されません。一般 Fork・Dependabot では梱包しません。対象 PR でも梱包・保存だけが失敗した場合は試遊用 artifact を利用不可として警告し、既存の `quick-check` の判定は変更しません。
 
 公開・削除・通知・公開後 smoke の workflow がレビューされ、main に統合されるまでは、Cloudflare や GitHub に配信用の設定・secret を登録しないでください。以下はその後の管理者受入手順です。
 

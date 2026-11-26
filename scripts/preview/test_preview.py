@@ -4,11 +4,13 @@ import hashlib
 import importlib.util
 import io
 import json
+import random
 import stat
 import tempfile
 import unittest
 import warnings
 import zipfile
+import zlib
 from pathlib import Path
 
 def load(name):
@@ -94,6 +96,35 @@ class ArtifactTest(unittest.TestCase):
         self.invalid(archive([*BASE_FILES, ("chronofork/assets/large-1.js", b"0" * preview.FILE_LIMIT),
                               ("chronofork/assets/large-2.js", b"0" * preview.FILE_LIMIT)]))
 
+    def test_decode_checks_actual_size_and_stream_end(self):
+        content = BASE_FILES[1][1]
+        encoder = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+        payload = encoder.compress(content) + encoder.flush()
+        crc = zlib.crc32(content)
+        self.assertEqual(preview.bounded_decode(payload, zipfile.ZIP_DEFLATED, len(content), crc), content)
+        for value, size in ((payload, len(content) - 1), (payload + b"extra", len(content)), (payload[:-1], len(content))):
+            with self.assertRaises(preview.Reject):
+                preview.bounded_decode(value, zipfile.ZIP_DEFLATED, size, crc)
+
+    def test_zip_limit_includes_compression_overhead(self):
+        rng = random.Random(42)
+        size = (preview.EXPANDED_LIMIT - 512) // 2
+        files = [BASE_FILES[0], *[(f"chronofork/assets/{char * 100}.js", rng.randbytes(size)) for char in "ab"]]
+        raw = archive(files)
+        self.assertGreater(len(raw), preview.EXPANDED_LIMIT)
+        self.verify(raw)
+
+    def test_streaming_zip_with_data_descriptor(self):
+        class Unseekable(io.BytesIO):
+            def seek(self, *args):
+                raise io.UnsupportedOperation("fixture")
+
+        data = Unseekable()
+        with zipfile.ZipFile(data, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, content in [*BASE_FILES, ("manifest.json", json.dumps(IDENTITY))]:
+                z.writestr(name, content)
+        self.verify(data.getvalue())
+
     def test_package_copies_dist(self):
         dist = self.root / "dist"
         dist.mkdir()
@@ -125,7 +156,7 @@ class SourceTest(unittest.TestCase):
                         head_repository=self.repo, actor=self.actor, triggering_actor=self.actor, pull_requests=[],
                         created_at="2026-11-26T12:00:00Z")
         self.jobs = [dict(name="quick-check", conclusion="success", run_attempt=2, run_id=123, head_sha=IDENTITY["head"],
-                          steps=[dict(name="Upload verified PR build", conclusion="success")])]
+                          steps=[dict(name="PR preview artifact ready", conclusion="success")])]
         self.merge = dict(sha=IDENTITY["build"], parents=[dict(sha=IDENTITY[key]) for key in ("base", "head")])
         self.workflow_blob = dict(type="file", sha="e" * 40)
         self.artifact = dict(id=987, name="preview-123-2", size_in_bytes=2000, expired=False, digest="sha256:" + "0" * 64,
@@ -166,15 +197,17 @@ class SourceTest(unittest.TestCase):
     def test_artifact_source_and_exact_attempt(self):
         def select(jobs=None, merge=None, blob=None, artifacts=None):
             return source.select_artifact(self.pr, self.run, jobs or self.jobs, merge or self.merge, blob or self.workflow_blob,
-                                          "e" * 40, artifacts or [self.artifact], preview.LIMIT)
+                                          "e" * 40, artifacts or [self.artifact], preview.ZIP_LIMIT)
 
         self.assertEqual(select(), dict(build=IDENTITY["build"], artifact=987, digest=self.artifact["digest"]))
         self.assertIsNone(select(jobs=[dict(self.jobs[0], run_attempt=1)]))
         self.assertIsNone(select(jobs=[dict(self.jobs[0], steps=[])]))
+        self.assertIsNone(select(jobs=[dict(self.jobs[0], steps=[dict(name="Upload verified PR build", conclusion="success"),
+                                                              dict(name="PR preview artifact ready", conclusion="skipped")])]))
         self.assertIsNone(select(blob=dict(self.workflow_blob, sha="f" * 40)))
         self.assertIsNone(select(merge=dict(self.merge, parents=list(reversed(self.merge["parents"])))))
         self.assertIsNone(select(artifacts=[self.artifact, self.artifact]))
-        for change in (dict(name="preview-123-1"), dict(expired=True), dict(digest=""), dict(size_in_bytes=preview.LIMIT + 1),
+        for change in (dict(name="preview-123-1"), dict(expired=True), dict(digest=""), dict(size_in_bytes=preview.ZIP_LIMIT + 1),
                        dict(workflow_run=dict(self.artifact["workflow_run"], id=122)),
                        dict(workflow_run=dict(self.artifact["workflow_run"], head_repository_id=source.FORK_ID))):
             with self.subTest(change=change):
