@@ -25,7 +25,7 @@ jobs:
         run: |
           python3 -I scripts/check_decision_records.py --self-test
           python3 -I scripts/check_decision_records.py --github
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -52,7 +52,7 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -68,7 +68,7 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -90,7 +90,7 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
