@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quick-check:
+  static:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -32,7 +32,45 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
+      - run: npm run build
+      - name: Check PR preview safety fixtures
+        run: |
+          python3 -IB scripts/preview/test_preview.py
+          python3 -IB scripts/preview/test_reconcile.py
+
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Vitest shard ${{ matrix.shard }}/3
+        run: npm test -- --shard=${{ matrix.shard }}/3
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - run: npm run build
       - uses: actions/cache@v4
         with:
@@ -40,10 +78,25 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
-      - name: Check PR preview safety fixtures
-        run: |
-          python3 -IB scripts/preview/test_preview.py
-          python3 -IB scripts/preview/test_reconcile.py
+
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
       - name: Build for GitHub Pages
         if: github.event_name == 'pull_request'
         env:
@@ -90,3 +143,19 @@ jobs:
            (steps.upload-preview.outcome != 'success' ||
             steps.upload-preview.outputs.artifact-id == '' || steps.upload-preview.outputs.artifact-digest == ''))
         run: printf '%s\n' '::warning::PR 試遊用の成果物を保存できませんでした。プレビューは未提供です。'
+
+  quick-check:
+    if: always()
+    needs: [static, unit, e2e, worker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require every verification job
+        env:
+          STATIC: ${{ needs.static.result }}
+          UNIT: ${{ needs.unit.result }}
+          E2E: ${{ needs.e2e.result }}
+          WORKER: ${{ needs.worker.result }}
+        run: |
+          printf 'static=%s unit=%s e2e=%s worker=%s\n' "$STATIC" "$UNIT" "$E2E" "$WORKER"
+          test "$STATIC" = success && test "$UNIT" = success && test "$E2E" = success && test "$WORKER" = success

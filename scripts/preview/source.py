@@ -8,6 +8,8 @@ FORK = "squne-chatgpt-to-claudecode/chronofork"
 FORK_ID = 1465044544
 CI = ".github/workflows/ci.yml"
 SHA = re.compile(r"[0-9a-f]{40}")
+# CI の表示名と一致させる。attempt 内の全ジョブを要求し部分 rerun は拒否する。
+REQUIRED_JOBS = frozenset({"static", "unit (1)", "unit (2)", "unit (3)", "e2e", "worker", "quick-check"})
 
 
 def repository(repo, name, repo_id):
@@ -51,10 +53,16 @@ def select_artifact(pr, run, jobs, merge, workflow_blob, trusted_blob, artifacts
     """正規のジョブ・live merge ref・CI の blob に対応する単一 artifact のみ返す。"""
     run_id, attempt = run["id"], run["run_attempt"]
     head = pr["head"]["sha"]
-    good = [job for job in jobs if job["name"] == "quick-check" and job["conclusion"] == "success" and
-            job["run_id"] == run_id and job["run_attempt"] == attempt and job["head_sha"] == head and
-            sum(s["name"] == "PR preview artifact ready" and s["conclusion"] == "success" for s in job["steps"]) == 1]
-    if (len(good) != 1 or not SHA.fullmatch(merge["sha"]) or
+    required = [job for job in jobs if job["name"] in REQUIRED_JOBS]
+    if (run.get("status") != "completed" or run.get("conclusion") != "success" or
+            len(required) != len(REQUIRED_JOBS) or {job["name"] for job in required} != REQUIRED_JOBS or
+            any(job.get("status") != "completed" or job.get("conclusion") != "success" or
+                job.get("run_id") != run_id or job.get("run_attempt") != attempt or job.get("head_sha") != head
+                for job in required)):
+        return None
+    worker = next(job for job in required if job["name"] == "worker")
+    ready = [step for step in worker["steps"] if step["name"] == "PR preview artifact ready"]
+    if (len(ready) != 1 or ready[0]["conclusion"] != "success" or not SHA.fullmatch(merge["sha"]) or
             [p["sha"] for p in merge["parents"]] != [pr["base"]["sha"], head] or
             workflow_blob["type"] != "file" or workflow_blob["sha"] != trusted_blob):
         return None

@@ -6,3 +6,4 @@
 |---|---|
 | [mvp-implementation-contract.md](mvp-implementation-contract.md) | 型、書込 owner、原子性、台帳、人口/人物、法制/Goal、年次境界、乱数/介入/保存、37 RuleID |
 | [first-vertical-slice.md](first-vertical-slice.md) | 最初のプレイアブル縦断経路の実装順と完了条件 |
+| [ci-development-and-performance.md](ci-development-and-performance.md) | CIの必須検証、previewの信頼境界、性能計測と今後の検討 |

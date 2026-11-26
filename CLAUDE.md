@@ -15,5 +15,5 @@
 
 ## テスト
 - `npm run check`（型検査・ESLint・Vitest・ビルド）、`npm run test:e2e`（Playwright smoke）
-- PR必須チェックは CI の `quick-check`。main へは PR + Squash merge のみ。
+- PR必須チェックは CI の `quick-check`。CIの並列化・性能計測・previewの不変条件は [`docs/contracts/ci-development-and-performance.md`](docs/contracts/ci-development-and-performance.md) を参照。main へは PR + Squash merge のみ。
 - 未実行のテストや失敗を PASS と報告しない。
