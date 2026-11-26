@@ -11,7 +11,7 @@ import { reasonSentence } from '../../observation/reason-labels.ts'
 import { titleLabel } from '../../observation/title-history.ts'
 
 export const documentKinds: Record<DocumentTarget['kind'], string> = {
-  person: '人物', group: '集団', region: '地域', title: '称号', country: '国家', family: '家系', event: 'Event', trace: 'Trace',
+  person: '人物', group: '集団', region: '地域', title: '称号', country: '国家', family: '家系', event: '出来事', trace: '判断', ending: '継承', records: '年代記',
 }
 
 function createPresentation(history?: HistoryYear) {
@@ -28,7 +28,8 @@ function createPresentation(history?: HistoryYear) {
   function name(target: DocumentTarget): string {
     switch (target.kind) {
       case 'person': case 'family': return names.person(target.id) ?? '名前未確認の人物'
-      case 'title': return names.title(target.id) ?? '名前未確認の称号'
+      case 'records': return `${target.id}年`
+      case 'ending': case 'title': return names.title(target.id) ?? '名前未確認の称号'
       case 'region': return names.region(target.id) ?? '名前未確認の地域'
       case 'group': return names.group(target.id) ?? '名前未確認の集団'
       case 'country': return names.country?.(target.id) ?? '名前未確認の国家'

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PlayView } from '../../branch-play-source.ts'
 import { DeskComparison } from './DeskComparison.tsx'
@@ -23,14 +22,12 @@ export function DeskInterventionWindow({ open, front, onFront, comparison, onCom
   onEvidence: (request: EvidenceRequest) => void
   children: ReactNode
 }>) {
-  const [left, setLeft] = useState(false)
   const label = comparison ? '歴史の比較' : '介入'
-  return <section hidden={!open} role="dialog" aria-label={label} className={`desk-document desk-intervention${left ? ' desk-intervention-left' : ''}`}
+  return <section hidden={!open} role="dialog" aria-label={label} className="desk-document desk-intervention"
     style={front ? { zIndex: 10000 } : undefined} onPointerDown={onFront} onFocus={onFront}
     onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
     <header>
       <strong>{label}</strong>
-      <button type="button" onClick={() => setLeft(!left)}>{left ? '右へ移動' : '左へ移動'}</button>
       <button type="button" onClick={onClose}>{label}を閉じる</button>
     </header>
     <div className="desk-document-body" key={comparison ? 'comparison' : 'intervention'} hidden={!comparison}>

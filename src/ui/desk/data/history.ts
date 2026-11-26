@@ -229,6 +229,19 @@ function validOmission(omission: DisplayOmission): boolean {
   return events === sumCounts(omission.omittedEventsByType) && traces === sumCounts(omission.omittedTracesByRule)
 }
 
+// 分岐時の年初検証はオブジェクトを再構築するため、キーの挿入順だけが変わり得る。
+// 配列の順序、キーの集合、値はすべて一致が必要で、DTOの来歴や実状態の差は許容しない。
+function sameSnapshotValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) !== Array.isArray(b)) return false
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+  } else if (Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false
+  const left = Object.entries(a)
+  const right = b as Record<string, unknown>
+  return left.length === Object.keys(right).length && left.every(([key, value]) => Object.hasOwn(right, key) && sameSnapshotValue(value, right[key]))
+}
+
 const expectedBranchId: Readonly<Record<HistoryBranch, string>> = { A0: 'A0-play', A1: 'A1-play', A2: 'A2-play' }
 
 function isPair(view: PlayView, parentModifierId?: Id): boolean {
@@ -257,7 +270,7 @@ function isPair(view: PlayView, parentModifierId?: Id): boolean {
         && jsonSame(view.modifier, playModifier(input, pair))
         && a0.playLedger?.length === 0 && a1.playLedger?.length === 1 && jsonSame(a1.playLedger[0]!, view.modifier)
         && isLimitedTimeline(a0, 'A0-play') && isLimitedTimeline(a1, 'A1-play')
-        && jsonSame(a0.result.snapshots[input.year - START_YEAR]!, a1.result.snapshots[input.year - START_YEAR]!))
+        && sameSnapshotValue(a0.result.snapshots[input.year - START_YEAR], a1.result.snapshots[input.year - START_YEAR]))
     && a0.result.branchId === expectedBranchId[before] && a1.result.branchId === expectedBranchId[after]
     && [a0, a1].every(run => run.inputs.seed === input.seed && run.result.seed === input.seed)
     && a0.inputs.configId === a1.inputs.configId && a0.inputs.configDigest === a1.inputs.configDigest

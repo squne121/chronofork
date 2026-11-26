@@ -248,7 +248,7 @@ it('編纂机は同じ年の地図と年代記を同時に表示し、開くた�
   const region=world.regions[0]!.regionId
   fireEvent.click(screen.getByTestId(`region-node-${region}`))
   expect(onOpenDocument).toHaveBeenLastCalledWith({kind:'region',id:region},{origin,year:1250})
-  const button=screen.getByTestId('obs-event-list').querySelector('button')!
+  const button=screen.getByTestId('obs-chronicle').querySelector('ol button')!
   fireEvent.click(button)
   fireEvent.click(button)
   expect(onOpenDocument).toHaveBeenCalledTimes(3)

@@ -113,9 +113,14 @@
 .obs-desk .obs-question {margin:0.25rem 0;font-size:1rem;}
 .obs-desk .obs-head .note {margin:0.25rem 0;}
 .obs-desk .obs-seed-tools input {width:9rem;}
-.obs-desk .obs-year-nav {margin-inline-start:auto;width:min(100%,28rem);}
-.obs-desk .obs-year-nav-playing {width:min(100%,17rem);}
-.obs-desk .obs-year-nav-playing output {font-size:0.9rem;}
+.obs-desk .obs-year-nav {margin-inline-start:auto;width:min(100%,28rem);grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:0.15rem 0.45rem;}
+.obs-desk .obs-year-nav input[type="range"] {margin:0;}
+.obs-desk .obs-year-ticks {grid-column:2;grid-row:2;font-size:0.75rem;}
+.obs-desk .obs-year-nav output {grid-column:3;grid-row:1;}
+.obs-desk .obs-year-controls,.obs-desk .obs-year-nav > .note {grid-column:1 / -1;margin:0;}
+.obs-desk .obs-year-nav-playing {width:min(100%,17rem);grid-template-columns:auto 1fr;}
+.obs-desk .obs-year-nav-playing output {grid-column:1;font-size:0.9rem;}
+.obs-desk .obs-year-nav-playing .obs-year-controls {grid-column:2;grid-row:1;}
 .obs-desk-jumps {display:flex;gap:0.4rem;margin-block:0.4rem;}
 .obs-desk-grid {display:grid;grid-template-columns:minmax(0,4fr) minmax(0,6fr);gap:1rem;}
 .obs-desk-grid>section {min-width:0;}
@@ -128,7 +133,23 @@
 @media(max-width:760px){.obs-desk-grid{grid-template-columns:minmax(0,1fr);}}
 
 /* 結末は折り畳まず、各領地の根拠を短く表示する。 */
-.obs-ending-territories {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0.4rem 0.8rem;list-style:none;padding:0;}
-.obs-ending-territories li {border-top:1px solid var(--line);padding:0.25rem 0;}
-.obs-ending-territories button {margin-block-start:0.2rem;}
-@media(max-width:700px){.obs-ending-territories{grid-template-columns:1fr;}}
+.obs-ending-heading {display:flex;align-items:baseline;flex-wrap:wrap;gap:0 1rem;}
+.obs-ending-territories {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr));gap:0.25rem 0.65rem;list-style:none;padding:0;margin:0.4rem 0 0;font-size:0.875rem;}
+@media(max-width:850px){.obs-ending-territories {grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media(max-width:540px){.obs-ending-territories {grid-template-columns:repeat(2,minmax(0,1fr));}}
+.obs-ending-territories li {border-top:1px solid var(--line);padding-block-start:0.25rem;}
+.obs-ending-territories button {margin-block-start:0.15rem;}
+.obs-desk .obs-goal :is(h3,p) {margin:0;}
+.obs-ending-territories p {overflow-wrap:anywhere;}
+.desk-chronicle h3 {margin:0;}
+.desk-chronicle-filters {display:flex;gap:.65rem;}
+.desk-chronicle-filters label {min-width:0;flex:1;}
+.desk-chronicle-years {max-height:26rem;overflow:auto;overscroll-behavior:contain;position:relative;border:1px solid var(--line);}
+.desk-chronicle-years section {padding:.35rem .55rem;border-block-end:1px solid var(--line);}
+.desk-chronicle-years section[aria-current] {background:#eef5fd;border-inline-start:3px solid var(--accent);}
+.desk-chronicle-years header {display:flex;align-items:center;justify-content:space-between;gap:.35rem;}
+.desk-chronicle-years :is(p,ol) {margin:.25rem 0;}
+.desk-chronicle-years ol {padding-inline-start:1.15rem;}
+.desk-chronicle-years li button {border:0;background:transparent;color:var(--accent);text-align:start;cursor:pointer;}
+.desk-chronicle-years li button:hover {text-decoration:underline;}
+.chronicle-all {font-size:.85rem;}

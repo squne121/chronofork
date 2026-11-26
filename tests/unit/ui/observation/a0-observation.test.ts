@@ -10,7 +10,7 @@ const fakeRun={
   inputs:{seed:20260101,configId:'INTEGRATED_EXPERIMENTAL'},
   result:{status:'COMPLETED',seed:20260101,branchId:'A0-play',goal:null,technicalGoal:null,
     snapshots:[{year:1250,persons:[],titles:[],legal:{marriages:[]}},{year:1251,persons:[],titles:[],legal:{marriages:[]}}],
-    eventLog:[{eventId:'e',year:1250,eventType:'PERSON_BIRTH',stateChanges:[],involvedRefs:[]}],
+    eventLog:[{eventId:'e',year:1250,phase:3,eventType:'PERSON_BIRTH',stateChanges:[],involvedRefs:[],sourceTraceIds:[]}],
     decisionTraces:[{traceId:'t',year:1250,status:'DEFER',ruleId:'B-005',eventIds:[],candidates:[],reasonCodes:[],actorRef:{kind:'PERSON',id:'p'}}],
   },
 } as unknown as TimelineRun

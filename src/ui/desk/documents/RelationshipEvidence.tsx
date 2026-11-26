@@ -18,27 +18,58 @@ export function pairJudgments(history: HistoryYear, left: string, right: string)
     trace.actorRef.ids.includes(left) && trace.actorRef.ids.includes(right)) : []
 }
 
-export function PersonRelationship({ history, personId, nameOf, onTrace }: Readonly<{
+export function PersonRelationship({ history, personId, nameOf, onTrace, partner, onIntervene }: Readonly<{
   history: HistoryYear; personId: string; nameOf: (id: string) => string; onTrace: (trace: DecisionTrace) => void
+  partner?: string; onIntervene?: (id: string) => void
 }>) {
-  const [right, setRight] = useState('')
+  const [right, setRight] = useState(partner ?? '')
+  const [query, setQuery] = useState('')
+  const [region, setRegion] = useState('')
+  const [relatedOnly, setRelatedOnly] = useState(false)
+  const [historical, setHistorical] = useState(false)
+  const [limit, setLimit] = useState(8)
   if (history.start.kind !== 'CONFIRMED') return null
-  const others = history.start.world.persons.filter(p => p.personId !== personId)
-  const selected = others.some(p => p.personId === right)
+  const world = history.start.world
+  const self = world.persons.find(p => p.personId === personId)
+  const origins = new Map(world.groups.map(g => [g.groupId, g.regionId]))
+  const byPair = new Set((history.records.kind === 'COMMITTED' ? history.records.traces.filter(t =>
+    (t.ruleId === 'B-004' || t.ruleId === 'B-005') && t.actorRef.kind === 'PERSON_PAIR' && t.actorRef.ids.includes(personId)) : []).map(t => t.actorRef.kind === 'PERSON_PAIR' ? t.actorRef.ids.find(id => id !== personId) : undefined))
+  const matches = world.persons.filter(p => p.personId !== personId && (historical || p.alive))
+    .filter(p => (!region || origins.get(p.originGroupId) === region) && nameOf(p.personId).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+    .filter(p => !relatedOnly || byPair.has(p.personId) || p.personId === self?.fatherId || p.personId === self?.motherId ||
+      p.fatherId === personId || p.motherId === personId || world.legal.marriages.some(m => m.personIds.includes(personId) && m.personIds.includes(p.personId)))
+  const selected = world.persons.find(p => p.personId === right && p.personId !== personId)
   const judgments = selected ? pairJudgments(history, personId, right) : []
-  return <section aria-label="人物間の信頼と判断">
-    <label>この年の信頼を調べる相手 <select value={selected ? right : ''} onChange={e => setRight(e.target.value)}>
-      <option value="">選択してください</option>
-      {others.map(p => <option key={p.personId} value={p.personId}>{nameOf(p.personId)}{p.alive ? '' : '（年初に死亡済み）'}</option>)}
-    </select></label>
+  return <section aria-label="人物間の信頼と判断" className="desk-partners">
+    <h4>信頼の相手</h4>
     {selected && <>
+      <p>選択：{nameOf(right)}{!selected.alive && '（年初に死亡済み）'} <button type="button" onClick={() => setRight('')}>相手を解除</button></p>
       <RelationshipBasis history={history} left={personId} right={right} />
-      <h5>選んだ2人についての当年の実判断</h5>
-      {judgments.length === 0 ? <p>取得範囲に婚姻候補・交渉の判断記録はありません。</p> : <ul>{judgments.map(trace => <li key={trace.traceId}>
-        <button type="button" onClick={() => onTrace(trace)}>{reasonSentence(trace.reasonCodes)}（{trace.eventIds.length === 0 ? '関連Eventなし' : '関連Eventあり'}）</button>
+      {onIntervene && self?.alive && selected.alive && selected.interactionRole !== 'SUPPORTING' &&
+        <button type="button" onClick={() => onIntervene(right)}>この2人の信頼に介入</button>}
+      <h5>当年の婚姻候補・交渉の判断</h5>
+      {judgments.length === 0 ? <p>取得範囲に判断なし。</p> : <ul>{judgments.map(trace => <li key={trace.traceId}>
+        <button type="button" onClick={() => onTrace(trace)}>{reasonSentence(trace.reasonCodes)}（{trace.eventIds.length === 0 ? '出来事なし' : '出来事あり'}）</button>
         <RecordedTrust trace={trace} />
       </li>)}</ul>}
+      {history.records.kind === 'COMMITTED' && history.records.coverage.kind === 'TRANSFER_OMISSION' && <p>転送省略あり。</p>}
     </>}
+    <details open={partner === undefined ? undefined : true}>
+      <summary>{selected ? '別の相手を探す' : '相手を探す'}</summary>
+      <label>名前 <input type="search" value={query} onChange={e => { setQuery(e.target.value); setLimit(8) }} /></label>
+      <label>出身地域 <select value={region} onChange={e => { setRegion(e.target.value); setLimit(8) }}>
+        <option value="">すべて</option>{world.regions.map(r => <option key={r.regionId} value={r.regionId}>{r.name}</option>)}
+      </select></label>
+      <label><input type="checkbox" checked={relatedOnly} onChange={e => { setRelatedOnly(e.target.checked); setLimit(8) }} /> 親子・婚姻・当年の判断で関係する人物</label>
+      <label><input type="checkbox" checked={historical} onChange={e => {
+        setHistorical(e.target.checked); setLimit(8); if (!e.target.checked && selected && !selected.alive) setRight('')
+      }} /> 死亡済みの人物も参照</label>
+      <p role="status" data-testid="partner-count">{historical ? '年初の人物' : '年初の存命者'}：{matches.length}人{matches.length > limit && `（${limit}人を表示）`}</p>
+      <ul aria-label="信頼の相手候補">{matches.slice(0, limit).map(p => <li key={p.personId}>
+        <button type="button" onClick={() => setRight(p.personId)} aria-pressed={p.personId === right}>{nameOf(p.personId)}{p.alive ? '' : '（年初に死亡済み）'}</button>
+      </li>)}</ul>
+      {matches.length > limit && <button type="button" onClick={() => setLimit(n => n + 8)}>さらに表示</button>}
+    </details>
   </section>
 }
 

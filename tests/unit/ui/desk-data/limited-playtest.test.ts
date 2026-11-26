@@ -102,6 +102,19 @@ describe('限定試遊の履歴接合', () => {
     expect(historyFromPlayView({ ...view, a1: { ...a1, result: { ...a1.result, snapshots: [initialWorld, ...a1.result.snapshots.slice(0, -1)] } } })).toBeUndefined()
   })
 
+  it('分岐年初DTOはオブジェクトのキー順だけを無視し、実値と配列順の変更は拒む', () => {
+    const atFork = a1.result.snapshots[0]!
+    const withFork = (snapshot: typeof atFork) => ({ ...view, a1: {
+      ...a1, result: { ...a1.result, snapshots: [snapshot, ...a1.result.snapshots.slice(1)] },
+    } })
+    const first = atFork.persons[0]!
+    const others = atFork.persons.slice(1)
+    const reordered = Object.fromEntries(Object.entries(first).reverse()) as typeof first
+    expect(matchesPlayRequest(input, withFork({ ...atFork, persons: [reordered, ...others] }))).toBe(true)
+    expect(matchesPlayRequest(input, withFork({ ...atFork, persons: [{ ...first, alive: !first.alive }, ...others] }))).toBe(false)
+    expect(matchesPlayRequest(input, withFork({ ...atFork, persons: [...atFork.persons].reverse() }))).toBe(false)
+  })
+
   it('不正な限定 Worker 応答と送信例外を失敗として返し、次の要求で新規 Worker を使う', async () => {
     const workers: WorkerLike[] = []
     let terminated = 0

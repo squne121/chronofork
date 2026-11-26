@@ -23,8 +23,8 @@ function harness() {
   const progress = vi.fn()
   const success = vi.fn()
   const failure = vi.fn()
-  const load = (year: number, playback = false, expectedRef?: HistoryYearRef) => requests.request({
-    input: { seed: 7, mode, year }, expectedRef, playback, observe, progress, success, failure,
+  const load = (year: number, playback = false, expectedRef?: HistoryYearRef, document?: true) => requests.request({
+    input: { seed: 7, mode, year }, expectedRef, playback, document, observe, progress, success, failure,
   })
   const finish = async (n: number, fields: Partial<ObservationSlice> = {}) => {
     const call = calls[n]!
@@ -77,6 +77,19 @@ it('停止では再生中の応答を捨てるが Worker をキャンセルせ�
   expect(h.success).not.toHaveBeenCalled()
   await h.finish(1)
   expect(h.success).toHaveBeenCalledWith(expect.objectContaining({ year: 1275 }), 5, expect.any(Number))
+})
+
+it('別年の観測を優先すると、保留中の資料に再取得できる状態を通知する', async () => {
+  const h = harness()
+  h.load(1325, false, undefined, true)
+  h.load(1260)
+  expect(h.failure).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ code: 'DOCUMENT_SUPERSEDED' }))
+  expect(h.calls.map(c => c.input.year)).toEqual([1325])
+  await h.finish(0)
+  expect(h.calls[0]!.cancel).not.toHaveBeenCalled()
+  expect(h.success).not.toHaveBeenCalled()
+  await h.finish(1)
+  expect(h.success).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ year: 1260 }), 5, expect.any(Number))
 })
 
 it('構成が異なる応答や WorldState の年が異なる応答は採用しない', async () => {
