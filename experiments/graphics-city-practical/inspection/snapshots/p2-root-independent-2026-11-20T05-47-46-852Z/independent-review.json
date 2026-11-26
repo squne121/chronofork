@@ -1,0 +1,318 @@
+{
+  "scope": "Independent current P2 root replay versus archived baseline and after. Original after GLB was replaced during inspection; original before/after records do not alone prove their source asset provenance.",
+  "earlierInvalidCapture": "p2-independent-2026-11-20T05-46-51-742Z is INVALID as P2 evidence: serving /p2/ under parent root resolves /common/viewer.js from parent. Correct replay served P2 as Vite root.",
+  "conditions": {
+    "normal": {
+      "camerasAllEqual": true,
+      "canvasesAllEqual": true,
+      "pageErrors": [
+        [],
+        [],
+        []
+      ]
+    },
+    "close": {
+      "camerasAllEqual": true,
+      "canvasesAllEqual": true,
+      "pageErrors": [
+        [],
+        [],
+        []
+      ]
+    }
+  },
+  "uv": {
+    "sidewalk_segment": [
+      {
+        "uuid": "df40b7a3-803e-4f31-bb89-077e43a29c8b",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "de040e13",
+            "normal": "cb877d54",
+            "uv": "041b2031"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              10.899999141693115,
+              6.019999906420708,
+              2.299999952316284
+            ],
+            "max": [
+              14.699999332427979,
+              6.179999902844429,
+              2.799999952316284
+            ]
+          },
+          "boundsLimitation": null
+        }
+      },
+      {
+        "uuid": "cd3bc726-96f6-4f7a-8a06-8e6a4bf173bb",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "de040e13",
+            "normal": "cb877d54",
+            "uv": "3d97253e"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              10.899999141693115,
+              6.019999906420708,
+              2.299999952316284
+            ],
+            "max": [
+              14.699999332427979,
+              6.179999902844429,
+              2.799999952316284
+            ]
+          },
+          "boundsLimitation": null
+        }
+      },
+      {
+        "uuid": "b793b4c3-c4a4-4ae2-8eea-c1005e1dc8c1",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "de040e13",
+            "normal": "cb877d54",
+            "uv": "041b2031"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              10.899999141693115,
+              6.019999906420708,
+              2.299999952316284
+            ],
+            "max": [
+              14.699999332427979,
+              6.179999902844429,
+              2.799999952316284
+            ]
+          },
+          "boundsLimitation": null
+        }
+      }
+    ],
+    "sidewalk_segment001": [
+      {
+        "uuid": "f3254230-3008-4f22-a5db-8ff45f9494da",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "b35d22ab",
+            "normal": "cb877d54",
+            "uv": "2ab37a7b"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              14.548075900868877,
+              6.019999847661618,
+              2.398076041547002
+            ],
+            "max": [
+              15.601923717661395,
+              6.179999961603519,
+              3.4519238630855655
+            ]
+          },
+          "boundsLimitation": null
+        }
+      },
+      {
+        "uuid": "53175d22-4d16-4a09-aca4-273f2876680f",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "b35d22ab",
+            "normal": "cb877d54",
+            "uv": "6b26457a"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              14.548075900868877,
+              6.019999847661618,
+              2.398076041547002
+            ],
+            "max": [
+              15.601923717661395,
+              6.179999961603519,
+              3.4519238630855655
+            ]
+          },
+          "boundsLimitation": null
+        }
+      },
+      {
+        "uuid": "069ccbfd-a908-4b88-9c8c-f78dc74588d8",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "b35d22ab",
+            "normal": "cb877d54",
+            "uv": "2ab37a7b"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              14.548075900868877,
+              6.019999847661618,
+              2.398076041547002
+            ],
+            "max": [
+              15.601923717661395,
+              6.179999961603519,
+              3.4519238630855655
+            ]
+          },
+          "boundsLimitation": null
+        }
+      }
+    ],
+    "sidewalk_segment002": [
+      {
+        "uuid": "ef0922f9-cfc7-48ee-adb9-7add374d9ec7",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "154bab49",
+            "normal": "cb877d54",
+            "uv": "d454402e"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              15.199999809265137,
+              6.019999791009971,
+              3.3000000808695025
+            ],
+            "max": [
+              15.699999809265137,
+              6.180000018255166,
+              4.199999919130497
+            ]
+          },
+          "boundsLimitation": null
+        }
+      },
+      {
+        "uuid": "c995bb1a-280a-4cfe-8549-140147ee07ef",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "154bab49",
+            "normal": "cb877d54",
+            "uv": "c184d0e8"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              15.199999809265137,
+              6.019999791009971,
+              3.3000000808695025
+            ],
+            "max": [
+              15.699999809265137,
+              6.180000018255166,
+              4.199999919130497
+            ]
+          },
+          "boundsLimitation": null
+        }
+      },
+      {
+        "uuid": "b6abdb5b-1974-4f27-b701-75af69c6d098",
+        "geometry": {
+          "type": "BufferGeometry",
+          "parameters": null,
+          "vertexCount": 216,
+          "indexCount": 324,
+          "attributeFingerprints": {
+            "position": "154bab49",
+            "normal": "cb877d54",
+            "uv": "d454402e"
+          },
+          "indexFingerprint": "6459c1d2",
+          "worldBounds": {
+            "min": [
+              15.199999809265137,
+              6.019999791009971,
+              3.3000000808695025
+            ],
+            "max": [
+              15.699999809265137,
+              6.180000018255166,
+              4.199999919130497
+            ]
+          },
+          "boundsLimitation": null
+        }
+      }
+    ]
+  },
+  "bGeometry": {
+    "fortress-bastion-west": {
+      "geometryEqualIgnoringUuids": true,
+      "shapeUuids": [
+        "50b83e9b-c8cb-4110-a477-b22c3799ab20",
+        "04aa4934-d94e-46f9-aceb-cabf2fcddb58",
+        "c221d09f-775b-4214-bae4-1d927bb0e6e9"
+      ],
+      "objectUuids": [
+        "6cf148de-d715-4a24-a9e4-a2c8818ade99",
+        "f2184196-b029-4b7f-bf40-5d72a1f8ba3b",
+        "6ae4115b-f49a-45fe-a597-516d9a501fe8"
+      ]
+    },
+    "fortress-bastion-east": {
+      "geometryEqualIgnoringUuids": true,
+      "shapeUuids": [
+        "0d2b128a-e274-44ab-b24e-239a40b92b80",
+        "cf7143e9-43f2-487e-9759-9fada097f208",
+        "3162cf97-04da-4ce1-b961-ad2c77a5724e"
+      ],
+      "objectUuids": [
+        "c39c9cd4-49c2-458e-a8d3-4a5b4d7c67ef",
+        "2beca378-6d8f-4e40-bd81-7f2e54fcd634",
+        "e3279a4b-59ca-4977-890c-ec39f6e6d785"
+      ]
+    }
+  },
+  "limitations": [
+    "Matching same named hierarchy is ambiguous with duplicate unnamed siblings.",
+    "Noncryptographic attribute fingerprints can collide; material records omit texture and shader details.",
+    "Matching PNG bytes reproduces images on this browser, not independent proof of original file provenance.",
+    "Surface contact and human visual assessment were not tested."
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "sample1": "A",
+  "sample2": "B",
+  "limitation": "The presentation order is fixed, not randomized. The labels hide route names in images but do not provide rigorous blinding; familiarity with the outputs or order can reveal the routes. Keep this mapping separate from comparison images."
+}

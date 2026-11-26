@@ -1,0 +1,20 @@
+{
+  "scope": "Fictional, experimental inputs only; not a game specification or a real-world setting.",
+  "baseline": { "moment": "before", "buildingId": "building-west-01", "affiliation": "stone-circle", "marker": "none (P1 geometry)" },
+  "alternate": { "moment": "after", "buildingId": "building-west-01", "affiliation": "river-guild", "marker": "cyan plaque; see common/city.js" },
+  "interpretation": "The plaque is a small local addition indicating a change of affiliation between invented moments; no historical or geographical claims are implied. The baseline affiliation is an experimental annotation, not encoded in the P1 model.",
+  "baselineCommit": "0cbdb6a5413c8eb7a685a9b494b4faa56daade22",
+  "baselineCapture": "inspection/snapshots/p2-baseline-2026-11-20T05-42-49-709Z",
+  "firstAlternateCapture": "inspection/snapshots/p2-after-2026-11-20T05-43-36-080Z",
+  "alternateCapture": "inspection/snapshots/p2-fixed-2026-11-20T05-47-57-497Z",
+  "comparison": "inspection/snapshots/p2-fixed-2026-11-20T05-47-57-497Z/p0-comparison.json",
+  "uvRepair": "First P2 assets and old UV baseline are in uv-repair-before. To rebuild the augmented UV baseline, run python3 -I route-a/extend-uv.py ../route-a/city.glb uv-repair-before/city.glb. This checks position, normal and index bytes before adding the three P1 sidewalk UVs. Then run Blender as in the parent README; output stays in p2/route-a.",
+  "invalidCapture": "inspection/snapshots/p2-repaired-2026-11-20T05-47-34-399Z was captured on an already occupied port, not the intended server; retained but not used as evidence.",
+  "targetCloseup": {
+    "before": "inspection/snapshots/target-before-2026-11-20T05-50-32-203Z",
+    "after": "inspection/snapshots/target-verified-2026-11-20T05-51-50-407Z",
+    "method": "inspection/capture-target.mjs translates both cameras toward (-13, 1.5, -14), orthographic height 10, keeping original shared view direction. Serve P1 and P2 separately, then capture each URL. Both normal and close files use this same target camera."
+  },
+  "assetIntegrity": "route-a/manifest.json binds the GLB SHA-256 and input snapshot; generation updates the manifest after UV restoration. Browser rejects mismatched input or bytes. The manifest is not an authenticity guarantee.",
+  "buildOutput": "build/node_modules/.cache/ is a local output directory, not the linked external node_modules."
+}
