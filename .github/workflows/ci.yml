@@ -39,6 +39,7 @@ jobs:
           python3 -IB scripts/preview/test_reconcile.py
 
   unit:
+    name: unit (${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
