@@ -249,6 +249,8 @@ export function DeskDocuments({ history: suppliedHistory, slice, openRequest, hi
   }
   return <>{windows.map(w => {
     const view = documentPresentation(w.history)
+    const filterLabel = w.pinned && w.ref.origin.configuration.configIdentity !== undefined
+      ? 'この資料の出典の比較で絞り込む' : '年表で絞り込む'
     return <section key={w.id} role="dialog" aria-label={`${labels[w.target.kind]} ${w.target.id}`} className="desk-document" style={{ left: w.x, top: w.y, zIndex: w.z, maxHeight: `min(78vh, calc(100vh - ${w.y}px))` }} onPointerDown={() => front(w.id)} onFocus={() => front(w.id)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); if (menu?.windowId === w.id) setMenu(undefined); else close(w.id) } }}>
       <header><strong>{labels[w.target.kind]}：{view.name(w.target)}</strong><button type="button" aria-label="資料を移動" onKeyDown={e => keyMove(e, w)} onPointerDown={e => beginDrag(e, w)} onPointerMove={e => { if (drag.current?.id === w.id) move(w.id, e.clientX - drag.current.dx, e.clientY - drag.current.dy) }} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>移動</button><button type="button" aria-label="資料を閉じる" onClick={() => close(w.id)}>閉じる</button></header>
       <div className="desk-document-body">
@@ -258,14 +260,14 @@ export function DeskDocuments({ history: suppliedHistory, slice, openRequest, hi
         {!w.pinned && w.history?.start.kind === 'CONFIRMED' && onYear && history && !sameHistoryYearRef(w.ref, history.ref) &&
           <button type="button" onClick={() => onYear(w.ref, { windowId: w.id })}>この年を観測</button>}
         {w.history?.start.kind === 'CONFIRMED' && onFilter && <button type="button" onClick={() => filter(w, w.target)}>
-          {w.pinned && w.ref.origin.configuration.configIdentity !== undefined ? 'この資料の出典の比較で絞り込む' : '年表で絞り込む'}
+          {filterLabel}
         </button>}
         {interventionDisabled && w.target.kind === 'person' && w.slice && <p>観測の取得中、別の計算中、または seed が一致しない間は介入フォームへ移れません。</p>}
         {content(w, view)}
         {w.history && (w.history.start.kind !== 'CONFIRMED' || (w.history.records.kind !== 'COMMITTED' && w.history.records.kind !== 'EVALUATION_ONLY')) && <button type="button" onClick={() => onYear?.(w.ref, { windowId: w.id, sourceHistory: w.sourceHistory })}>この参照を取得</button>}
         {preview?.windowId === w.id && <p role="status">プレビュー: {view.name(preview.target)}（クリックで開く）</p>}
         {menu?.windowId === w.id && <div role="menu" aria-label="対象の文脈操作"><button type="button" role="menuitem" onClick={() => { open(w, menu.target); setMenu(undefined) }}>資料を開く</button>
-          {onFilter && <button type="button" role="menuitem" onClick={() => { filter(w, menu.target); setMenu(undefined) }}>年表で絞り込む</button>}
+          {onFilter && <button type="button" role="menuitem" onClick={() => { filter(w, menu.target); setMenu(undefined) }}>{filterLabel}</button>}
           {menu.target.kind === 'person' && <button type="button" role="menuitem" onClick={() => { open(w, { kind: 'family', id: menu.target.id }); setMenu(undefined) }}>家系を開く</button>}
           <button type="button" role="menuitem" onClick={() => setMenu(undefined)}>メニューを閉じる</button></div>}
       </div>

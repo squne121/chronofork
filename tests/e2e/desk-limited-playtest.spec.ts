@@ -231,6 +231,9 @@ for (const width of [1280, 960]) {
       await form.getByTestId('branch-trust-delta').fill('20')
       await form.getByTestId('branch-duration').fill('1')
       await form.getByTestId('branch-run').click()
+      for (const field of ['person-one', 'person-two', 'trust-delta', 'fork-year', 'duration']) {
+        await expect(form.getByTestId(`branch-${field}`)).toBeDisabled()
+      }
       await expect(compareButton).toBeVisible({ timeout: 45_000 })
       await checkView('ACHIEVED')
       await compareButton.click()
@@ -243,7 +246,11 @@ for (const width of [1280, 960]) {
       const marriage = dialogs.filter({ has: page.getByRole('heading', { name: /年内の出来事：.*婚姻/ }) })
       await expect(marriage.getByTestId('document-reference')).toHaveText('A1 / 1250年 / seed 20260303')
       await expect(marriage.getByRole('heading', { name: '実判断記録' })).toBeVisible()
-      await expect(marriage.getByRole('button', { name: 'この資料の出典の比較で絞り込む' })).toBeVisible()
+      const sourceFilter = 'この資料の出典の比較で絞り込む'
+      await expect(marriage.getByRole('button', { name: sourceFilter })).toBeVisible()
+      await marriage.getByTestId(`document-link-person-${first}`).click({ button: 'right' })
+      await expect(marriage.getByRole('menuitem', { name: sourceFilter })).toBeVisible()
+      await marriage.getByRole('menuitem', { name: 'メニューを閉じる' }).click()
       await close(marriage)
       const after = comparison.getByRole('region', { name: 'A1の記録' })
       await expect(after.getByTestId('relationship-basis')).toContainText('UNKNOWN')
