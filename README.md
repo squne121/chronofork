@@ -77,3 +77,5 @@ Free の上限は Worker あたり 100 Preview で、上限に達すると最も
 - `main` へは PR 経由のみ（Squash merge）。必須チェックは `quick-check`（型検査・ESLint・Vitest・ビルド・Playwright smoke）。
 - 長時間テストはローカル実行し、結果は `docs/planning/local-run-template.md` の形式で PR に記載します。
 - 階層 `CLAUDE.md`（ルート / `src/*` / `tests`）でエージェント向け指示を管理します。
+
+<!-- Issue #182: disposable preview UAT, revision 1; not for merge. -->
