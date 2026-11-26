@@ -1,8 +1,15 @@
 import { defineConfig, devices } from '@playwright/test'
 
-if (process.env.PAGES_SMOKE_REQUIRED === '1' && (!process.env.PAGES_SMOKE_URL?.trim() || !process.env.PAGES_EXPECTED_SHA?.trim())) {
+const pagesSmokeUrl = process.env.PAGES_SMOKE_URL
+if (process.env.PAGES_SMOKE_REQUIRED === '1' && (!pagesSmokeUrl?.trim() || !process.env.PAGES_EXPECTED_SHA?.trim())) {
   throw new Error('必須の配信用smokeにはPAGES_SMOKE_URLとPAGES_EXPECTED_SHAが必要です')
 }
+
+const localPagesPreview = !!process.env.PAGES_LOCAL_PREVIEW
+const previewHost = '127.0.0.1'
+const previewPort = 4173
+const pagesBasePath = '/chronofork/'
+const previewUrl = `http://${previewHost}:${previewPort}${localPagesPreview ? pagesBasePath : '/'}`
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -10,12 +17,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
-  use: { baseURL: 'http://localhost:4173', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
+  use: { baseURL: pagesSmokeUrl || previewUrl, trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: process.env.PAGES_SMOKE_URL && !process.env.PAGES_LOCAL_PREVIEW ? undefined : {
-    command: `npx vite preview --port 4173 --strictPort${process.env.PAGES_LOCAL_PREVIEW ? ' --base /chronofork/' : ''}`,
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI && !process.env.PAGES_LOCAL_PREVIEW,
+  webServer: pagesSmokeUrl && !localPagesPreview ? undefined : {
+    command: `npx vite preview --host ${previewHost} --port ${previewPort} --strictPort${localPagesPreview ? ` --base ${pagesBasePath}` : ''}`,
+    url: previewUrl,
+    reuseExistingServer: !process.env.CI && !localPagesPreview,
     timeout: 120_000,
   },
 })
