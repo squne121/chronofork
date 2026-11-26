@@ -65,6 +65,29 @@ describe('試遊証跡の作成', () => {
       .rejects.toMatchObject({ code: 'EVENT_UNAVAILABLE' })
   })
 
+  it('出生の記録で確認された親の関連と、既定一覧外の明示 Event を保存する', async () => {
+    const birth: EventLogEntry = { ...event, eventId: 'birth-fixture', eventType: 'PERSON_BIRTH', involvedRefs: [],
+      stateChanges: [{ path: '$.persons[child]', before: null, after: { personId: 'child', fatherId: firstPersonId } }] }
+    const extra = { ...event, eventId: 'extra-fixture', eventType: 'PERSON_SUPPORTING_RECORD' }
+    const result = { ...observation, events: [birth, extra], counts: [{ year, events: 2, traces: 1 }] }
+    const related = await exportPlaytestEvidence({ ...observed, outcome: done(result), selection: { personId: firstPersonId } })
+    expect(related.player.branches[0]?.events.refs.map(ref => ref.id)).toEqual([birth.eventId])
+    const explicit = await exportPlaytestEvidence({ ...observed, outcome: done(result), selection: { event: { branch: 'A0', id: extra.eventId } } })
+    expect(explicit.player.branches[0]?.events.refs).toContainEqual({ id: extra.eventId, type: extra.eventType, headline: null,
+      traceIds: [trace.traceId] })
+  })
+
+  it('介入前でも両枝に確定記録のある共有年を照合できる', async () => {
+    const laterInput = { ...input, year: year + 1 }
+    const laterModifier = playModifier(laterInput, [firstPersonId, secondPersonId])
+    const laterView = { ...view, input: laterInput, modifier: laterModifier,
+      a1: { ...a1, playLedger: [laterModifier], playModifierIds: [laterModifier.modifierId] } }
+    const selected = historyFromPlayView(laterView)!.at('A1', year)!.ref
+    const evidence = await exportPlaytestEvidence({ ...comparison, selected, input: laterInput, outcome: done(laterView) })
+    expect(evidence.year).toBe(year)
+    expect(evidence.intervention?.year).toBe(year + 1)
+  })
+
   it('観測年と介入年を区別し、年別・全期間の転送省略と評価専用年を区別する', async () => {
     const counts = { omittedEventsByType: {}, omittedTracesByRule: { 'B-009': 1 } }
     const omission = { ...counts, fullEventCount: { a0: 1, a1: 1 }, fullTraceCount: { a0: 2, a1: 2 } }
@@ -110,6 +133,7 @@ describe('保存 JSON の検証', () => {
   it('壊れた JSON・過大入力・schema・項目欠落・範囲・未対応構成を拒否する', async () => {
     const proof = await exportPlaytestEvidence(comparison)
     expect(() => parseEvidence('{')).toThrow('JSON')
+    expect(() => parseEvidence('{"\\u0079ear":1275,' + serializePlaytestEvidence(proof).slice(1))).toThrow('duplicate key')
     expect(() => parseEvidence('あ'.repeat(EVIDENCE_MAX_BYTES / 2))).toThrow('64 KiB')
     expect(() => parseEvidence(JSON.stringify({ ...proof, schemaVersion: 2 }))).toThrow('schemaVersion')
     for (const bad of [{ ...proof, build: undefined }, { ...proof, year: 1250.1 }, { ...proof, intervention: { ...proof.intervention, durationYears: 101 } },

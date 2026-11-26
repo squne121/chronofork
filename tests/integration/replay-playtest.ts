@@ -2,23 +2,24 @@
 import assert from 'node:assert/strict'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { readCheckoutBuild } from '../../../scripts/replay-playtest.ts'
-import { SingleA0Cache } from '../../../src/ui/a0-cache.ts'
-import { runPlayComparison, runPlayObservation } from '../../../src/ui/branch-play-source.ts'
-import { historyFromObservation, historyFromPlayView } from '../../../src/ui/desk/data/history.ts'
-import type { HistoryYear } from '../../../src/ui/desk/data/history.ts'
-import { isObservationFocusEvent } from '../../../src/ui/integrated-overview.ts'
-import { toDisplayView } from '../../../src/ui/play-view.ts'
-import { checkedModifier, exportPlaytestEvidence, limitedReplayInput, parseEvidence, serializePlaytestEvidence } from '../../../src/ui/playtest-evidence.ts'
-import type { Evidence } from '../../../src/ui/playtest-evidence.ts'
+import { readCheckoutBuild } from '../../scripts/replay-playtest.ts'
+import { SingleA0Cache } from '../../src/ui/a0-cache.ts'
+import { runPlayComparison, runPlayObservation } from '../../src/ui/branch-play-source.ts'
+import { historyFromObservation, historyFromPlayView } from '../../src/ui/desk/data/history.ts'
+import type { HistoryYear } from '../../src/ui/desk/data/history.ts'
+import { isObservationFocusEvent } from '../../src/ui/integrated-overview.ts'
+import { toDisplayView } from '../../src/ui/play-view.ts'
+import { checkedModifier, exportPlaytestEvidence, limitedReplayInput, parseEvidence, serializePlaytestEvidence } from '../../src/ui/playtest-evidence.ts'
+import type { Evidence } from '../../src/ui/playtest-evidence.ts'
 
 const [action, directory, mainSha] = process.argv.slice(2)
 assert(directory && (action === 'observation' || action === 'comparison' || action === 'negative'))
-const year = 1250, requestId = 1
+const requestId = 1
 const build = readCheckoutBuild()
 assert.equal(build.kind, 'COMMIT', 'clean checkout の実 HEAD が必要です')
-const captureInput = { ...limitedReplayInput, year }
-const comparisonInput = { ...captureInput, firstPersonId: 'person-exp-02', secondPersonId: 'person-exp-05', signedDelta: -20, durationYears: 5 }
+const captureInput = { ...limitedReplayInput, year: 1253 }
+const comparisonYear = 1251
+const comparisonInput = { ...limitedReplayInput, year: 1250, firstPersonId: 'person-exp-02', secondPersonId: 'person-exp-05', signedDelta: 20, durationYears: 1 }
 
 function refs(history: HistoryYear, branch: 'A0' | 'A1') {
   assert.equal(history.records.kind, 'COMMITTED')
@@ -44,7 +45,7 @@ if (action === 'observation') {
   cache.clear()
   assert(calculated.ok, calculated.ok ? undefined : calculated.code)
   const result = calculated.observation
-  const entry = historyFromObservation(result).at(year)
+  const entry = historyFromObservation(result).at(captureInput.year)
   const { selection } = refs(entry, 'A0')
   save('a0', await exportPlaytestEvidence({ kind: 'OBSERVATION', input: captureInput, build, requestId,
     selected: entry.ref, selection, outcome: { kind: 'DONE', requestId, result } }))
@@ -52,11 +53,14 @@ if (action === 'observation') {
   const calculated = runPlayComparison(comparisonInput)
   assert(calculated.ok, calculated.ok ? undefined : calculated.code)
   const result = toDisplayView(calculated.comparison)
-  const entry = historyFromPlayView(result)?.at('A1', year)
+  const entry = historyFromPlayView(result)?.at('A1', comparisonYear)
   assert(entry)
   const evidence = await exportPlaytestEvidence({ kind: 'COMPARISON', input: comparisonInput, build, requestId,
     selected: entry.ref, ...refs(entry, 'A1'), outcome: { kind: 'DONE', requestId, result } })
-  assert.equal(evidence.player.branches[1]?.modifierIds[0], calculated.comparison.branch.ledger[0]?.modifierId)
+  const [before, after] = evidence.player.branches
+  assert.equal(after?.modifierIds[0], calculated.comparison.branch.ledger[0]?.modifierId)
+  assert.equal(after?.coverage.kind, 'TRANSFER_OMISSION')
+  assert.notEqual(before?.events.sha256, after?.events.sha256)
   save('a0-a1', evidence)
 } else {
   assert(mainSha && /^[0-9a-f]{40}$/.test(mainSha) && mainSha !== build.sha, '別 checkout の既知の SHA が必要です')

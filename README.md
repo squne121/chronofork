@@ -99,7 +99,7 @@ const json = serializePlaytestEvidence(evidence)
 
 比較は `kind: 'COMPARISON'`、採用済み `PlayInput` と `PlayView` を渡します。要求世代と DTO は採用時に対で保持し、非同期 export 後も現在の選択か確認してから画面へ渡します。PLAYER は選択年の限定集計と公開 Event・Trace 参照のみ（完全構成は SHA-256 で照合）。`selection` で公開 Event や人物を絞れます。DEBUG の Trace は明示操作でのみ `debug` に指定します。コピー・ダウンロードと公開ブラウザ受入は Phase 3B の対象です。
 
-任意の100年実計算（通常 CI の対象外）：`node --max-old-space-size=6144 --experimental-strip-types tests/unit/ui/playtest-evidence.integration.ts observation <既存のlocal-runs内ディレクトリ>`（`comparison` も実行）。生成された `a0.json` と `a0-a1.json` を上記 CLI で別プロセスから照合できます。
+任意の100年実計算（通常 CI の対象外）：`node --max-old-space-size=6144 --experimental-strip-types tests/integration/replay-playtest.ts observation <既存のlocal-runs内ディレクトリ>`（`comparison` も実行）。生成された `a0.json` と `a0-a1.json` を上記 CLI で別プロセスから照合できます。
 
 ## 運用
 

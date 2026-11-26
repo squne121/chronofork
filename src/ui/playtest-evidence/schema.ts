@@ -48,6 +48,18 @@ export function parseEvidence(json: string): Evidence {
     throw new EvidenceError('INPUT_TOO_LARGE', '証跡のサイズ上限は64 KiBです')
   let value: unknown
   try { value = JSON.parse(json) } catch { throw new EvidenceError('INVALID_JSON', 'JSON を読み取れません') }
+  // 構文確認後にキーだけを走査し、JSON.parse が上書きした重複（エスケープ表記も含む）を拒否する。
+  const objects: Set<string>[] = []
+  for (const [token, key] of json.matchAll(/("(?:[^"\\]|\\.)*")\s*:|"(?:[^"\\]|\\.)*"|[{}]/gs)) {
+    if (token === '{') objects.push(new Set())
+    else if (token === '}') objects.pop()
+    else if (key !== undefined) {
+      const decoded = JSON.parse(key) as string
+      const keys = objects.at(-1)!
+      requireField(!keys.has(decoded), 'duplicate key')
+      keys.add(decoded)
+    }
+  }
   const version = value !== null && typeof value === 'object' && 'schemaVersion' in value ? value.schemaVersion : undefined
   if (version !== 1) throw new EvidenceError('UNSUPPORTED_SCHEMA', '対応する schemaVersion は 1 のみです')
   const root = record(value, 'schemaVersion build config seed kind year branch intervention transfer versions selection player debug', 'root')
@@ -63,8 +75,10 @@ export function parseEvidence(json: string): Evidence {
   if (config.mode !== 'MULTI_HOUSE_EXPERIMENTAL' || config.configuration !== 'LIMITED_PLAYTEST' || root.seed !== LIMITED_PLAYTEST_SEED)
     throw new EvidenceError('UNSUPPORTED_CONFIGURATION', '限定試遊の既定構成と seed のみ対応します')
   requireField(text(config.configId, 256) && text(config.configDigest, 128) && sha256(config.identitySha256), 'config')
-  const versions = record(root.versions, 'ruleset rng scenario legal', 'versions')
-  requireField(text(versions.ruleset, 256) && text(versions.rng, 256) && versions.scenario === null && versions.legal === null, 'versions')
+  const versions = record(root.versions, 'ruleset rng scenario legal baseScenario legalRules', 'versions')
+  const legalRules = record(versions.legalRules, 'ordinaryMarriage reviewedSuccession', 'versions.legalRules')
+  requireField(text(versions.ruleset, 256) && text(versions.rng, 256) && versions.scenario === null && versions.legal === null &&
+    text(versions.baseScenario, 256) && text(legalRules.ordinaryMarriage, 256) && text(legalRules.reviewedSuccession, 256), 'versions')
   requireField(integer(root.year, START_YEAR, GOAL_YEAR), 'year')
   requireField(oneOf(root.transfer, 'FULL', 'DISPLAY_YEAR', 'DISPLAY_RUN'), 'transfer')
 
@@ -75,7 +89,7 @@ export function parseEvidence(json: string): Evidence {
   } else {
     requireField(root.kind === 'COMPARISON' && oneOf(root.branch, 'A0', 'A1'), 'comparison')
     const input = record(root.intervention, 'year firstPersonId secondPersonId signedDelta durationYears modifierId ruleVersion', 'intervention')
-    requireField(integer(input.year, START_YEAR, Math.min(root.year, GOAL_YEAR - 1)) && integer(input.signedDelta, -200, 200)
+    requireField(integer(input.year, START_YEAR, GOAL_YEAR - 1) && integer(input.signedDelta, -200, 200)
       && input.signedDelta !== 0 && integer(input.durationYears, 1, GOAL_YEAR - input.year), 'intervention.numeric')
     requireField(personId(input.firstPersonId) && personId(input.secondPersonId) && input.firstPersonId !== input.secondPersonId
       && text(input.modifierId) && text(input.ruleVersion, 256), 'intervention.ids')
@@ -129,8 +143,9 @@ export function parseEvidence(json: string): Evidence {
     const refs = array(events.refs, REFERENCE_LIMIT + 1, 'events.refs')
     const eventIds = new Set<unknown>()
     for (const item of refs) {
-      const ref = record(item, 'id type traceIds', 'eventRef')
-      requireField(text(ref.id) && !eventIds.has(ref.id) && text(ref.type, 512), 'eventRef')
+      const ref = record(item, 'id type headline traceIds', 'eventRef')
+      requireField(text(ref.id) && !eventIds.has(ref.id) && text(ref.type, 512) &&
+        (ref.headline === null || text(ref.headline, 2048)), 'eventRef')
       eventIds.add(ref.id)
       ids(ref.traceIds, 128, 'eventRef.traceIds')
     }

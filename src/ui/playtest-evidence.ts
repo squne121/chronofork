@@ -1,3 +1,6 @@
+import { EXPERIMENTAL_VERSIONS } from '../scenario/experimental/world-1250.ts'
+import { ORDINARY_MARRIAGE_VERSION } from '../simulation/rules/a/aleg01-ordinary.ts'
+import { REVIEWED_LEGAL_VERSION } from '../simulation/rules/a/reviewed-succession.ts'
 import { GOAL_YEAR, START_YEAR } from '../simulation/contracts/index.ts'
 import type { Id, StatModifier, WorldState } from '../simulation/contracts/index.ts'
 import { normalizePersonPair, validateStatModifier } from '../simulation/intervention/index.ts'
@@ -9,7 +12,8 @@ import type { TimelineRun } from './timeline-source.ts'
 import { historyFromObservation, historyFromPlayView, matchesObservation, matchesPlayRequest, sameHistoryYearRef } from './desk/data/history.ts'
 import type { HistoryYear, HistoryYearRef } from './desk/data/history.ts'
 import { LIMITED_PLAYTEST_SEED, limitedPlayConfig } from './desk/data/limited-config.ts'
-import { isObservationFocusEvent } from './integrated-overview.ts'
+import { eventHeadline, isObservationFocusEvent, namesOfYear } from './integrated-overview.ts'
+import { collectAssociations } from './observation/associations.ts'
 import { parseEvidence, EVIDENCE_MAX_BYTES, EvidenceError, REFERENCE_LIMIT } from './playtest-evidence/schema.ts'
 import type { BranchEvidence, DebugSelection, Evidence, EvidenceBuild, EventEvidence, PublicSelection, RunSelection, Transfer } from './playtest-evidence/types.ts'
 
@@ -76,13 +80,23 @@ async function summarizeYear(entry: HistoryYear, run: TimelineRun | undefined, i
     throw new EvidenceError('YEAR_UNAVAILABLE', '選択年の確定済み状態・記録がありません')
   const branch = entry.ref.origin.branch
   if (branch !== 'A0' && branch !== 'A1') throw new EvidenceError('UNSUPPORTED_BRANCH', 'A2 以降には対応していません')
-  const visible: EventEvidence[] = records.kind === 'COMMITTED' ? records.events.filter(e => isObservationFocusEvent(e)
-    && (!selection?.personId || e.involvedRefs.some(ref => ref.kind === 'PERSON' ? ref.id === selection.personId
-      : ref.kind === 'PERSON_PAIR' && ref.ids.includes(selection.personId!))))
-    .map(e => ({ id: e.eventId, type: e.eventType, traceIds: [...e.sourceTraceIds].sort() })).sort(byId) : []
-  const chosen = selection?.event?.branch === branch ? visible.find(e => e.id === selection.event!.id) : undefined
-  if (selection?.event?.branch === branch && !chosen)
-    throw new EvidenceError('EVENT_UNAVAILABLE', '指定 Event は選択年の公開対象にありません（未取得・非対象を含む）')
+  const selectedEventId = selection?.event?.branch === branch ? selection.event.id : undefined
+  let visible: EventEvidence[] = []
+  if (records.kind === 'COMMITTED') {
+    const personId = selection?.personId
+    const related = personId === undefined ? undefined : new Set(collectAssociations({ year: entry.ref.year, events: records.events })
+      .confirmed.flatMap(a => a.target.kind === 'PERSON' && a.target.id === personId && a.source.type === 'EVENT' ? [a.source.eventId] : []))
+    const names = namesOfYear(start.world, records.events)
+    // 通常は観測の既定一覧、明示選択時は「全 Event」で閲覧できる参照も追加する。内部差分は出力しない。
+    visible = records.events.filter(e => e.eventId === selectedEventId ||
+      (isObservationFocusEvent(e) && (related === undefined || related.has(e.eventId))))
+      .map(e => ({ id: e.eventId, type: e.eventType,
+        headline: isObservationFocusEvent(e) ? eventHeadline(e, names, e.eventType) : null,
+        traceIds: [...e.sourceTraceIds].sort() })).sort(byId)
+  }
+  const chosen = selectedEventId === undefined ? undefined : visible.find(e => e.id === selectedEventId)
+  if (selectedEventId !== undefined && !chosen)
+    throw new EvidenceError('EVENT_UNAVAILABLE', '指定 Event を選択年に取得できません（転送省略の可能性を含む）')
   let selectedDebug: Evidence['debug'] = null
   if (debug?.branch === branch) {
     const hit = entry.trace(debug.traceId)
@@ -135,8 +149,6 @@ export async function exportPlaytestEvidence(source: EvidenceSource): Promise<Ev
     view = source.outcome.result
     if (!view || source.input.second !== undefined || view.second !== undefined || !matchesPlayRequest(source.input, view))
       throw new EvidenceError('COMPARISON_MISMATCH', '現在の実行要求と採用済み A0/A1 比較が一致しません')
-    // 両枝の年初を比較できるのは実際の fork 年以降。A0 単独観測とは区別する。
-    if (selected.year < view.input.year) throw new EvidenceError('YEAR_UNAVAILABLE', '介入より前の比較年には対応していません')
     const history = historyFromPlayView(view)
     const before = history?.at('A0', selected.year), after = history?.at('A1', selected.year)
     if (!before || !after) throw new EvidenceError('YEAR_UNAVAILABLE', '両枝の履歴が取得できません')
@@ -161,7 +173,9 @@ export async function exportPlaytestEvidence(source: EvidenceSource): Promise<Ev
     schemaVersion: 1, build: source.build, config: await limitedEvidenceConfiguration(), seed: source.input.seed,
     kind: source.kind, year: selected.year, branch, intervention: applied, transfer,
     versions: { ruleset: view?.a0.inputs.rulesetVersion ?? EXPERIMENTAL_TUNING.rulesetVersion,
-      rng: view?.a0.inputs.rngVersion ?? rngVersion, scenario: null, legal: null },
+      rng: view?.a0.inputs.rngVersion ?? rngVersion, scenario: null, legal: null,
+      baseScenario: EXPERIMENTAL_VERSIONS.scenarioVersion,
+      legalRules: { ordinaryMarriage: ORDINARY_MARRIAGE_VERSION, reviewedSuccession: REVIEWED_LEGAL_VERSION } },
     selection: { personId: selection?.personId ?? null, event: selection?.event ?? null },
     player: { channel: 'PLAYER', status: 'COMPLETED', officialGoal: 'NOT_ESTABLISHED', branches: after ? [before.player, after.player] : [before.player] },
     debug: before.debug ?? after?.debug ?? null,

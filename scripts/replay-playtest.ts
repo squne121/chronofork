@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { closeSync, constants, fstatSync, openSync, readSync, realpathSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { SingleA0Cache } from '../src/ui/a0-cache.ts'
@@ -12,11 +11,17 @@ import { checkedModifier, evidenceBuild, EVIDENCE_MAX_BYTES, EvidenceError, expo
 import type { Evidence, EvidenceBuild } from '../src/ui/playtest-evidence.ts'
 
 const checkout = fileURLToPath(new URL('..', import.meta.url))
-const git = (...args: string[]) => execFileSync('git', args, { cwd: checkout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+const git = (...args: string[]) => execFileSync('git', ['-c', 'core.fsmonitor=false', ...args], {
+  cwd: checkout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_NO_REPLACE_OBJECTS: '1', GIT_OPTIONAL_LOCKS: '0' },
+}).trim()
 
 export function readCheckoutBuild(): EvidenceBuild {
   try {
-    return evidenceBuild(git('rev-parse', '--verify', 'HEAD'), git('status', '--porcelain', '--untracked-files=normal') !== '')
+    const sha = git('rev-parse', '--verify', 'HEAD')
+    // assume-unchanged / skip-worktree のパスは status に現れない。正確な checkout として採用しない。
+    const hidden = git('ls-files', '-v', '-z').split('\0').some(path => /^[a-zS] /.test(path))
+    return evidenceBuild(sha, hidden || git('status', '--porcelain', '--untracked-files=normal', '--ignore-submodules=none') !== '')
   } catch { return evidenceBuild(undefined) }
 }
 
@@ -120,4 +125,4 @@ async function main(args: string[]) {
   }
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) await main(process.argv.slice(2))
+if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) await main(process.argv.slice(2))

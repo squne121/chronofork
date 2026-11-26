@@ -4,7 +4,7 @@ import type { BranchChoice, ObservationInput, ObservationSlice, PlayInput, PlayV
 export type EvidenceBuild = Readonly<{ kind: 'COMMIT'; sha: string }> |
   Readonly<{ kind: 'LOCAL'; reason: 'LOCAL' | 'UNKNOWN' | 'DIRTY' }>
 export type Transfer = 'FULL' | 'DISPLAY_YEAR' | 'DISPLAY_RUN'
-export type EventEvidence = Readonly<{ id: Id; type: string; traceIds: readonly Id[] }>
+export type EventEvidence = Readonly<{ id: Id; type: string; headline: string | null; traceIds: readonly Id[] }>
 export type PublicSelection = Readonly<{ personId?: Id; event?: Readonly<{ branch: BranchChoice; id: Id }> }>
 export type DebugSelection = Readonly<{ branch: BranchChoice; traceId: Id }>
 export type BranchEvidence = Readonly<{
@@ -31,7 +31,9 @@ export type Evidence = Readonly<{
   intervention: null | Readonly<{ year: number; firstPersonId: Id; secondPersonId: Id; signedDelta: number;
     durationYears: number; modifierId: Id; ruleVersion: string }>
   transfer: Transfer
-  versions: Readonly<{ ruleset: string; rng: string; scenario: null; legal: null }>
+  /** 限定構成全体の独立した scenario / legal 版はない。土台と実際の法制ルール版を別記する。 */
+  versions: Readonly<{ ruleset: string; rng: string; scenario: null; legal: null; baseScenario: string;
+    legalRules: Readonly<{ ordinaryMarriage: string; reviewedSuccession: string }> }>
   selection: Readonly<{ personId: Id | null; event: NonNullable<PublicSelection['event']> | null }>
   player: Readonly<{ channel: 'PLAYER'; status: 'COMPLETED'; officialGoal: 'NOT_ESTABLISHED'; branches: readonly BranchEvidence[] }>
   debug: null | Readonly<DebugSelection & { channel: 'DEBUG'; ruleId: string; ruleVersion: string;
