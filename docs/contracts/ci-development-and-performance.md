@@ -9,6 +9,12 @@ Issue #185 で採用されたCI高速化と引継ぎの技術方針。ゲーム�
 - 各ジョブに必要なcheckout・依存・cacheを用意し、read-only権限とconcurrencyを維持する。検査、assertion、実計算や既存skip条件を速度のために削らない。全Vitest対象が各run全体で欠落・重複なく実行されたことを実行結果から確認する。ファイル一覧コマンドだけをshard割当の証拠にしない。
 - ローカルの `npm run check` は基準の全テストを実行するが、CIの集約結果の代用ではない。ブラウザ、Worker、preview安全性fixtureもそれぞれ検証し、意図的な失敗が集約の失敗になることを確認する。
 
+## Phase 2の依存準備
+
+- PR CIのPlaywright準備は、OS依存とbrowser binaryを別stepで実行する。どちらもChromium用の公式CLIを使い、OSのフォント・ライブラリやcold cache時のbrowser取得を省略しない。分離は遅延・失敗箇所の可視化であり、それ自体を高速化とみなさない。
+- 依存の正本は引き続きnpm lockfileとし、auditを含む `npm ci` を使う。`--prefer-offline` はCI比較で短時間だった一方、auditの報告内容に差が観測され、同等性・最新性を確認できなかったため採用しない。原因は未確定。pnpm・Bunへの移行も、audit・lifecycle・解決内容の同等性と運用負担の検証が不足しているため行わない。実測と未検証項目はIssue #189とPR #191を参照する。
+- Playwright公式Dockerイメージやrunner OS固定は、取得・運用・既存検証との互換性を含む有効性を確認できておらず、採用しない。OS依存準備が失敗した場合はbrowser準備・後続テストを成功扱いしない。
+
 ## PR previewの信頼境界
 
 previewは必須チェックと別の公開判断。対象runの全必須検証が成功し、実Workerで検証した成果物だけを公開候補とする。package/uploadの失敗やartifact欠落は公開不可だが、従来どおり必須検証の失敗とは区別する。workflow変更PR自身を拒否する既存の安全策を迂回しない。
