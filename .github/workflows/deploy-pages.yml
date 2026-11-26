@@ -46,7 +46,7 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           if [ "$current" = "$SHA" ] && [ "$latest_attempt" = "$ATTEMPT" ] && [ "$quick" = 1 ]; then echo 'eligible=true' >> "$GITHUB_OUTPUT"; fi
       - if: steps.check.outputs.eligible == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.check.outputs.sha }}
       - if: steps.check.outputs.eligible == 'true'
@@ -122,7 +122,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.build.outputs.sha }}
       - uses: actions/setup-node@v4
