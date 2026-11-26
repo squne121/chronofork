@@ -1,0 +1,156 @@
+name: pr-preview-reconcile
+
+on:
+  workflow_call:
+    inputs:
+      pr:
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  PREVIEW_PR: ${{ inputs.pr }}
+
+jobs:
+  prepare:
+    if: github.repository_id == '1439901120' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: read
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      operation: ${{ steps.plan.outputs.operation }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -IB scripts/preview/run_preview.py plan
+
+  publish:
+    needs: prepare
+    if: >-
+      github.repository_id == '1439901120' && github.ref == 'refs/heads/main' && vars.PR_PREVIEW_ENABLED == '1' &&
+      (needs.prepare.outputs.operation == 'deploy' || needs.prepare.outputs.operation == 'delete')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: chronofork-pr-preview
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      issues: read
+    outputs:
+      status: ${{ steps.publish.outputs.status || steps.configuration.outputs.status }}
+      build: ${{ steps.publish.outputs.build }}
+      alias: ${{ steps.publish.outputs.alias }}
+      unique: ${{ steps.publish.outputs.unique }}
+    steps:
+      - id: configuration
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PREVIEW_TOKEN }}
+        run: |
+          if [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_WORKERS_SUBDOMAIN" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+            printf 'status=configured\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'status=disabled\n' >> "$GITHUB_OUTPUT"
+            printf '::notice::Preview の Environment が未設定のため、公開・削除を実行しません。\n'
+          fi
+      - if: steps.configuration.outputs.status == 'configured'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - if: steps.configuration.outputs.status == 'configured'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - if: steps.configuration.outputs.status == 'configured'
+        run: npm ci --prefix scripts/preview --ignore-scripts --no-audit --no-fund
+      - if: steps.configuration.outputs.status == 'configured' && needs.prepare.outputs.operation == 'deploy'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN: ${{ needs.prepare.outputs.plan }}
+        run: python3 -IB scripts/preview/run_preview.py stage
+      - id: publish
+        if: steps.configuration.outputs.status == 'configured'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN: ${{ needs.prepare.outputs.plan }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PREVIEW_TOKEN }}
+        run: python3 -IB scripts/preview/run_preview.py publish
+
+  smoke:
+    needs: publish
+    if: needs.publish.outputs.status == 'deployed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify fixed and deployment-specific URLs
+        env:
+          PAGES_SMOKE_REQUIRED: '1'
+          PREVIEW_SMOKE_ORIGIN_ONLY: '1'
+          PAGES_EXPECTED_SHA: ${{ needs.publish.outputs.build }}
+          PREVIEW_ALIAS: ${{ needs.publish.outputs.alias }}
+          PREVIEW_UNIQUE: ${{ needs.publish.outputs.unique }}
+        shell: bash
+        run: |
+          result=0
+          PAGES_SMOKE_URL="$PREVIEW_ALIAS" npx playwright test tests/e2e/pages-deploy.spec.ts --output=test-results/fixed || result=1
+          PAGES_SMOKE_URL="$PREVIEW_UNIQUE" npx playwright test tests/e2e/pages-deploy.spec.ts --output=test-results/deployment || result=1
+          exit "$result"
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-preview-smoke-${{ inputs.pr }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  notify:
+    needs: [prepare, publish, smoke]
+    if: ${{ always() && !cancelled() && github.repository_id == '1439901120' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN: ${{ needs.prepare.outputs.plan }}
+          PREVIEW_ENABLED: ${{ vars.PR_PREVIEW_ENABLED }}
+          PUBLISH_STATUS: ${{ needs.publish.outputs.status }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+          PREVIEW_ALIAS: ${{ needs.publish.outputs.alias }}
+          PREVIEW_UNIQUE: ${{ needs.publish.outputs.unique }}
+        run: python3 -IB scripts/preview/run_preview.py notify

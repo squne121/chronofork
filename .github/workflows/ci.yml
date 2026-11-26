@@ -41,7 +41,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test
       - name: Check PR preview safety fixtures
-        run: python3 -IB scripts/preview/test_preview.py
+        run: |
+          python3 -IB scripts/preview/test_preview.py
+          python3 -IB scripts/preview/test_reconcile.py
       - name: Build for GitHub Pages
         if: github.event_name == 'pull_request'
         env:

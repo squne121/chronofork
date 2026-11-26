@@ -63,12 +63,14 @@ exit
 
 公開・削除・通知・公開後 smoke の workflow がレビューされ、main に統合されるまでは、Cloudflare や GitHub に配信用の設定・secret を登録しないでください。以下はその後の管理者受入手順です。
 
-1. Cloudflare の Workers Free を確認し、専用の既存 Worker を 1 件、静的 asset 専用で用意します。サーバー側コード・bindings・custom domain・cron は設定しません。Workers の [Previews](https://developers.cloudflare.com/workers/previews/) を使い、通常の version preview や Cloudflare Pages は使いません。`workers.dev` のプレビュー URL は既定で公開されます。
+1. Cloudflare の Workers Free を確認し、専用の既存 Worker `chronofork-pr-previews` を静的 asset 専用で 1 件用意します。`workers.dev` の Preview URL を有効にし、production では何も配信しません。サーバー側コード・bindings・Preview base config・custom domain・cron は設定しません。Workers の [Previews](https://developers.cloudflare.com/workers/previews/) を使い、通常の version preview や Cloudflare Pages は使いません。`workers.dev` の Preview URL は既定で公開されます。
 2. Cloudflare の **Manage Account → Account API tokens** で [個別 Worker 限定の account-owned API token](https://developers.cloudflare.com/workers/authorization/workers/) を作成します。まず対象 Worker だけの **Editor** を候補とし、Preview の作成・更新・削除が可能か実アカウントで確認します。拒否された場合は停止し、無断で対象・ロール・課金を拡大しません。固定版 Wrangler には親 Worker 不在時の作成経路があるため、Worker を作成できない token と既存 Worker の事前確認を必須にします。
-3. GitHub **Settings → Environments** で試遊専用 Environment を作り、deployment branches を **Selected branches and tags** の `main` ブランチだけに限定します。token は公開・削除 job だけが参照する Environment secret に登録し、repository-wide secret にしません。公開 URL の smoke job は token を参照しません。実装済みの workflow と Environment 名・設定キーが一致することを確認してから有効化します。
+3. GitHub **Settings → Environments** で `chronofork-pr-preview` を作り、deployment branches を **Selected branches and tags** の `main` ブランチだけに限定します。Environment の Variables に `CLOUDFLARE_ACCOUNT_ID`（32 桁の account ID）と `CLOUDFLARE_WORKERS_SUBDOMAIN`（`<subdomain>.workers.dev` の `<subdomain>` 部分）、Environment の Secrets に `CLOUDFLARE_PREVIEW_TOKEN` を登録します。repository-wide secret には置きません。公開 URL を検証する smoke job に token は渡りません。最後にリポジトリの Actions Variable `PR_PREVIEW_ENABLED` を `1` にして有効化します。未設定または無効時は公開・削除せず、管理コメントに未設定と表示します。
 4. 本体 PR の作成・更新・閉鎖、承認 Bot Fork と別 PR の並列・異なる host、並びに失敗 CI・未承認 Fork・古い HEAD・閉鎖/再開・不正 artifact・未設定の否定ケースを段階受入します。固定 URL と deployment 固有 URL、表示 SHA、Web Worker の観測・介入・比較、閉鎖後の削除、main の GitHub Pages に影響がないことを確認します。fixture と実サービスの結果は別に記録し、実機受入完了まで Issue を閉じません。
 
-Free の上限は Worker あたり 100 Preview で、上限に達すると最も長く再配信されていない Preview が削除されます。GitHub のキュー・API 障害や Cloudflare の伝播・障害では、コメントと URL が直ちに追随する保証はありません。古いコメントや配信の成功だけを試遊の成功として扱わないでください。
+Preview 名は `pr-<番号>` です。同じ PR の公開・削除・smoke・通知は同じ排他で実行し、PR ごとの管理コメントを更新します。`verified` 相当の PASS は、固定 URL と deployment 固有 URL の両方で smoke が成功し、通知直前も同じ HEAD・CI attempt・成果物を確認できた場合に限ります。CI が新しい main との merge ref に追随していない場合、または再開前（同一秒を含む）の CI しかない場合は、新しい CI が必要です。旧 Preview の URL に以前の build が残ることはあるため、画面 SHA と最新の管理コメントを確認してください。
+
+Free の上限は Worker あたり 100 Preview で、上限に達すると最も長く再配信されていない Preview が削除されます。GitHub の同一 PR の待機上限も 100 件です。GitHub API・キューや Cloudflare の伝播・障害では、コメントと URL が直ちに追随する保証はありません。GitHub の状態照合と Cloudflare の更新は原子的ではなく、更新中に PR が進んだ場合は成功を通知せず、後続イベントの照合に委ねます。失敗した公開は現行 HEAD の `ci` 全体を再実行し、`quick-check` と新しい artifact の成功を確認してください。再開直後に新しい run がない場合は、その PR を更新して新しい CI を起動します。閉鎖時の cleanup に失敗した場合は該当する `pr-preview` の閉鎖イベントを再実行し、対象 `pr-N` だけの削除結果を確認してください。定期実行はありません。
 
 ## 運用
 

@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test'
 
+const previewSmoke = process.env.PREVIEW_SMOKE_ORIGIN_ONLY === '1'
+if (previewSmoke) test.use({ serviceWorkers: 'block' })
+
 test('配信成果物で実Workerの観測・介入・比較を行う', async ({ page }) => {
   const url = process.env.PAGES_SMOKE_URL
   const sha = process.env.PAGES_EXPECTED_SHA
@@ -7,6 +10,16 @@ test('配信成果物で実Workerの観測・介入・比較を行う', async ({
   test.setTimeout(600_000)
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
+  if (previewSmoke) {
+    const origin = new URL(url!).origin
+    await page.context().route(/^https?:\/\//, route =>
+      new URL(route.request().url()).origin === origin ? route.continue() : route.abort('blockedbyclient'),
+    )
+    page.context().on('request', request => {
+      const target = new URL(request.url())
+      if (/^https?:$/.test(target.protocol) && target.origin !== origin) errors.push('試遊先以外のオリジンへのリクエスト')
+    })
+  }
   page.on('requestfailed', request => errors.push(`${request.url()}: ${request.failure()?.errorText}`))
   page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`) })
   const workers: string[] = []
