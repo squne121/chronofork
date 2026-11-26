@@ -10,6 +10,7 @@ import { reasonSentence } from '../../observation/reason-labels.ts'
 import { documentKinds as labels, documentPresentation, targetFromRef } from './presentation.ts'
 import { historyFromObservation, sameHistoryYearRef } from '../data/history.ts'
 import type { HistoryYear, HistoryYearRef } from '../data/history.ts'
+import { PersonRelationship, RecordedTrust, RelationshipBasis } from './RelationshipEvidence.tsx'
 import './documents.css'
 
 export type DocumentTarget = Selection | { [K in 'country' | 'family' | 'event' | 'trace']: Readonly<{ kind: K; id: Id }> }['country' | 'family' | 'event' | 'trace']
@@ -129,8 +130,17 @@ export function DeskDocuments({ history: suppliedHistory, slice, openRequest, hi
       const found = history.trace(target.id)
       if (found.kind !== 'RECORDED') return <p>{statusText[found.kind] ?? found.kind}</p>
       const t = found.record
+      const limited = history.ref.origin.configuration.configIdentity !== undefined
       return <><p>記録された判断：{view.traceStatus(t)}。{reasonSentence(t.reasonCodes)}</p>
         <p>判断の対象：{actorLinks(t.actorRef)}</p>
+        {limited && t.ruleId === 'A-LEG-01' && t.reasonCodes.includes('SUPPORTING_REGISTRATION_BUDGET_EXCEEDED') &&
+          <p>試遊の技術上の登録・追跡枠による保留であり、法的・政治的な拒否ではありません。</p>}
+        {limited && t.actorRef.kind === 'PERSON_PAIR' && <>
+          <RelationshipBasis history={history} left={t.actorRef.ids[0]} right={t.actorRef.ids[1]} />
+          <RecordedTrust trace={t} />
+        </>}
+        {history.records.kind === 'COMMITTED' && history.records.coverage.kind === 'TRANSFER_OMISSION' &&
+          <p>転送省略あり。関連記録をすべて取得したとは限りません。</p>}
         <h4>関連Event</h4>{t.eventIds.length ? <ul>{t.eventIds.map(id => <li key={id}>{namedLink({ kind: 'event', id })}</li>)}</ul> : <p>Event参照なし</p>}
         {raw(`技術詳細（実判断: ${t.ruleId} / ${t.status}）`, t)}</>
     }
@@ -140,7 +150,8 @@ export function DeskDocuments({ history: suppliedHistory, slice, openRequest, hi
     const relatedRecords = history.records.kind === 'COMMITTED' ? history.records : undefined
     const { events = [], traces = [] } = view.related(target) ?? {}
     const observed = w.slice ?? (w.pinned && w.history === suppliedHistory ? matchingSlice : undefined)
-    const personNames = observed && (target.kind === 'person' || target.kind === 'family')
+    const personNames = observed && (target.kind === 'person' || target.kind === 'family' ||
+      (target.kind === 'title' && history.ref.origin.configuration.configIdentity !== undefined))
       ? personDisplayNames([...world.persons, ...observed.personRecords]) : view.names.person
     const personHistory = observed && target.kind === 'person' && <PersonHistory
       records={observed.personRecords} personId={target.id} currentYear={w.ref.year} nameOf={personNames}
@@ -170,6 +181,8 @@ export function DeskDocuments({ history: suppliedHistory, slice, openRequest, hi
             {link(w, { kind: 'family', id: target.id }, '家系を開く')}
             {!w.pinned && observed && onIntervene && person.alive && person.interactionRole !== 'SUPPORTING' && w.ref.year < 1350 &&
               <button type="button" disabled={interventionDisabled} onClick={() => onIntervene(w.ref.year, person.personId, undefined, w.ref)}>この人物と年から介入を検討する</button>}
+            {history.ref.origin.configuration.configIdentity !== undefined && <PersonRelationship history={history} personId={target.id}
+              nameOf={id => view.name({ kind: 'person', id })} onTrace={t => open(w, { kind: 'trace', id: t.traceId })} />}
             {personHistory}
             {raw('技術詳細：人物の年初状態', person)}</>
         }
@@ -198,8 +211,30 @@ export function DeskDocuments({ history: suppliedHistory, slice, openRequest, hi
       }
       case 'title': {
         const title = index.title(target.id)
+        const limited = history.ref.origin.configuration.configIdentity !== undefined
+        const succession = limited ? relatedRecords?.traces.filter(t => t.ruleId === 'A-SUC-04' &&
+          t.candidates.some(c => c.inputs?.titleId === target.id)) : undefined
+        const titleHistory = limited ? observed?.titleHistories.find(h => h.titleId === target.id) : undefined
+        const loss = limited ? observed?.titleLossRecords.find(l => l.titleId === target.id) : undefined
         if (title) facts = <><p>年初の保持者：{title.holder.status === 'HELD' ? namedLink({ kind: 'person', id: title.holder.personId }) : '未確定'}</p>
-          {raw('技術詳細：称号の年初状態', title)}</>
+          {raw('技術詳細：称号の年初状態', title)}
+          {!!succession?.length && <div><h4>{w.ref.year}年の継承判断</h4><ul>{succession.map(t => <li key={t.traceId}>
+            {link(w, { kind: 'trace', id: t.traceId }, `${view.traceStatus(t)}：${reasonSentence(t.reasonCodes)}`)}
+            {t.eventIds.length === 0 && '（関連Eventなし）'}</li>)}</ul></div>}
+          {(loss || !!titleHistory?.transfers.length) && <section aria-label="1350年初までの原史の称号履歴">
+            <h4>1350年初までの原史の称号履歴</h4>
+            {loss && <>
+              <p>1350年初には保持者を確認できません。最後に保持が確認された人物：<button type="button" onClick={() => open(w, { kind: 'person', id: loss.lastHolderId }, loss.heldFromYear)}>
+                {personNames(loss.lastHolderId) ?? '名前未確認の保持者'}（{loss.heldFromYear}年初）</button>。</p>
+              {w.ref.year !== loss.lostFromYear && <button type="button" onClick={() => open(w, target, loss.lostFromYear)}>
+                保持者が未確定になった{loss.lostFromYear}年初の称号と判断を見る
+              </button>}
+            </>}
+            {!!titleHistory?.transfers.length && <details><summary>歴代の称号移転（{titleHistory.transfers.length}件）</summary>
+              <ul>{titleHistory.transfers.map(e => <li key={e.eventId}><button type="button" onClick={() => open(w, { kind: 'event', id: e.eventId }, e.year)}>
+                {e.year}年の移転と判断を開く</button></li>)}</ul>
+            </details>}
+          </section>}</>
         break
       }
     }

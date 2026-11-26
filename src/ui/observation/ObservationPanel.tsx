@@ -8,7 +8,7 @@ import { associationsFor, collectAssociations } from './associations.ts'
 import { FamilyTree } from './FamilyTree.tsx'
 import { PersonHistory } from './PersonHistory.tsx'
 import { personDisplayNames } from './person-display.ts'
-import { reasonSentence, reasonView } from './reason-labels.ts'
+import { goalFailureText as reason, reasonSentence, reasonView } from './reason-labels.ts'
 import { Inspector } from '../Inspector.tsx'
 import { RegionMap } from '../RegionMap.tsx'
 import { indexWorld } from '../inspection-source.ts'
@@ -16,7 +16,6 @@ import type { EntityKind, InspectionSource, Selection } from '../inspection-sour
 import { eventHeadline, namesOfYear, EVENT_CATEGORIES, inCategory, isObservationFocusEvent } from '../integrated-overview.ts'
 import { describeEvent, shortPersonName, unresolvedLabel } from '../event-summary.ts'
 import type { EventLogEntry, DecisionTrace, Id } from '../../simulation/contracts/index.ts'
-import type { GoalFailureCode } from '../../simulation/goal.ts'
 import type { HistoryYear } from '../desk/data/history.ts'
 import { documentRecordFilter } from '../desk/documents/record-filter.ts'
 import type { DocumentFilter } from '../desk/documents/record-filter.ts'
@@ -37,6 +36,7 @@ type Props = Readonly<{
   calc?:CalcInfo
   onReset:()=>void
   desk?:boolean
+  fixedSeed?:boolean
   pendingYear?:number
   blocked?:boolean
   draining?:boolean
@@ -62,18 +62,6 @@ const EVENT_LABELS:Readonly<Record<string,string>>={
 }
 const labelOf=(type:string)=>EVENT_LABELS[type]??type
 const SHOW=35
-const GOAL_REASON:Readonly<Record<GoalFailureCode,string>>={
-  NOT_TERRITORIAL:'土地の称号ではない',TITLE_INVALID:'称号が無効',TITLE_NOT_HEREDITARY:'世襲できない称号',
-  TITLE_NOT_RECOGNIZED:'称号の承認が不足',REQUIRES_RECOGNITION:'現在の主権による承認が必要',
-  HOLDER_UNDETERMINED:'保持者が未確定',HOLDER_NOT_FOUND:'保持者の人物記録がない',
-  HOLDER_DEAD:'保持者が死亡している',DYNASTY_UNDETERMINED:'法的王朝所属が未確定',
-  DYNASTY_MISMATCH:'保持者の法的王朝が対象と異なる',REGION_NOT_FOUND:'対象の地域記録がない',
-  NO_CONTROL:'直接支配または有効な統治委任がない',
-}
-/** 通常表示は日本語の理由だけ。理由コードは reasonCodes として技術詳細に残す。 */
-const reason=(codes:readonly string[])=>codes.length
-  ?codes.map(code=>code in GOAL_REASON?GOAL_REASON[code as GoalFailureCode]:'未分類の不足条件').join('、')
-  :'理由の記録なし'
 const reasonCodes=(codes:readonly string[])=>codes.length?codes.join(', '):'記録なし'
 const goalStatusText=(status:string)=>status==='ACHIEVED'?'条件を満たしている':
   status==='NOT_ACHIEVED'?'条件を満たしていない':status==='INVALID_INPUT'?'検証不能な入力':'評価対象外'
@@ -232,6 +220,10 @@ export function ObservationPanel(p:Props){
   const goal=v?.technicalGoal
   const assessments=(goal?.status==='NOT_ACHIEVED'||goal?.status==='ACHIEVED')?goal.assessments:[]
   const territorialAssessments=assessments.filter(a=>v?.world.titles.find(t=>t.titleId===a.titleId)?.kind==='TERRITORIAL')
+  const central = p.fixedSeed ? territorialAssessments.find(a => a.titleId === 'title-exp-central') : undefined
+  const centralTitle = central && v?.world.titles.find(t => t.titleId === central.titleId)
+  const budgetDeferrals = p.fixedSeed ? traces.filter(t => t.ruleId === 'A-LEG-01' && t.status === 'DEFER' &&
+    t.reasonCodes.includes('SUPPORTING_REGISTRATION_BUDGET_EXCEEDED')) : undefined
   const yearChange=(y:number)=>{
     pause()
     setScrubYear(null)
@@ -317,6 +309,12 @@ export function ObservationPanel(p:Props){
         </p>}
         <p>正式勝敗：未成立。参考判定：{goal?goalStatusText(goal.status):'記録なし'}
           （介入前A0・1350年初の実状態。正式なゲームの勝敗ではありません）</p>
+        {central && centralTitle && <div data-testid="limited-central-assessment">
+          <p><strong>{titleLabel(centralTitle, v.world)}：</strong>{central.qualifies ? '条件を満たしている' : reason(central.failures)}。</p>
+          <p className="note">称号の保持条件を評価しています。未達だけで王朝の絶滅を示すものではありません。</p>
+          {v.year !== 1350 && <button type="button" disabled={blocked} onClick={() => yearChange(1350)}>判定時点の1350年初へ</button>}{' '}
+          <button type="button" onClick={() => selectTitleAt(central.titleId, v.year)}>中央領地の称号資料を開く（{v.year}年初）</button>
+        </div>}
         {assessments.length>0&&<details data-testid="obs-goal-reasons">
           <summary>各称号の不足理由（王位と領主権を区別・{assessments.length}件）</summary>
           <ul>{assessments.map(a=><li key={a.titleId}>
@@ -498,6 +496,13 @@ export function ObservationPanel(p:Props){
             <details><summary>検証用：Eventの出典・実状態差分（{chosenEvent.eventType}）</summary>
               <pre>{JSON.stringify(chosenEvent,null,2)}</pre></details>
           </div>}
+          {!!budgetDeferrals?.length && <section data-testid="limited-registration-deferrals">
+            <h4>試遊の登録枠による保留（{budgetDeferrals.length}件）</h4>
+            <p className="note">補助人物を登録・追跡する技術上の年間枠による保留です。法的な禁止や政治的な拒否ではありません。</p>
+            <ul>{budgetDeferrals.map(t => <li key={t.traceId}><button type="button" onClick={() => chooseTrace(t.traceId)}>
+              {traceActor(t)}：保留の根拠を開く（関連Event {t.eventIds.length}件）
+            </button></li>)}</ul>
+          </section>}
           <details className="obs-technical" data-testid="obs-technical" open={traceOpen}
             onToggle={e=>setTraceOpen(e.currentTarget.open)}>
           <summary>技術的な詳細：DecisionTrace（実際の採否・判断根拠）</summary>
@@ -648,15 +653,15 @@ export function ObservationPanel(p:Props){
       <div className="obs-seed-tools">
         <label htmlFor="obs-seed-input">{p.mode==='MULTI_HOUSE_EXPERIMENTAL'?'原史A0のseed':'統合A0のseed'}
           <input id="obs-seed-input" data-testid="obs-seed-input" type="text" inputMode="numeric"
-            value={p.seedText} disabled={p.loading} aria-invalid={!seedValid}
+            value={p.seedText} disabled={p.loading} readOnly={p.fixedSeed} aria-invalid={!seedValid}
             onChange={e=>p.onSeedText(e.target.value)}/>
         </label>
         <button type="button" className="cta" data-testid="obs-start"
           onClick={()=>{setEventType('ALL');p.onLoad(v?.year??1250)}} disabled={p.loading||blocked||!seedValid}>
           {!v?(p.mode==='MULTI_HOUSE_EXPERIMENTAL'?'原史A0を計算して観測':'統合A0を計算して観測'):seedMatches?'このseedの原史A0を再表示':'このseedで原史A0を計算'}
         </button>
-        {v&&!confirmReset&&<button type="button" data-testid="obs-reset" disabled={p.loading} onClick={()=>setConfirmReset(true)}>開発用：旧試験画面へ切り替え</button>}
-        {v&&confirmReset&&<span role="alert" data-testid="obs-reset-warning">
+        {!p.fixedSeed&&v&&!confirmReset&&<button type="button" data-testid="obs-reset" disabled={p.loading} onClick={()=>setConfirmReset(true)}>開発用：旧試験画面へ切り替え</button>}
+        {!p.fixedSeed&&v&&confirmReset&&<span role="alert" data-testid="obs-reset-warning">
           現在の原史A0の観測結果は破棄されます。
           <button type="button" data-testid="obs-reset-confirm" disabled={p.loading} onClick={()=>{setConfirmReset(false);p.onReset()}}>破棄して切り替える</button>
           <button type="button" data-testid="obs-reset-cancel" onClick={()=>setConfirmReset(false)}>キャンセル</button>
@@ -683,9 +688,10 @@ export function ObservationPanel(p:Props){
           {contextLine}
           <DeskLayout
             chronicle={<>
+              {p.fixedSeed && <details><summary>シナリオ目標と1350年の参考判定</summary>{goalPanel}</details>}
               {chronicle}
               {yearIndex}
-              <details><summary>シナリオ目標と1350年の参考判定</summary>{goalPanel}</details>
+              {!p.fixedSeed && <details><summary>シナリオ目標と1350年の参考判定</summary>{goalPanel}</details>}
             </>}
             world={<div data-testid="obs-world-explorer" data-year={yearStart?.year}>
               {worldPanel}

@@ -9,6 +9,7 @@ import { childIdsOfPair, unresolvedLabel } from './event-summary.ts'
 import type { BranchChoice, ObservationMode, PlayInput, PlayMode, PlayView } from './branch-play-source.ts'
 import { candidateLabel, candidateSetMatches, candidatesAtYear, extractCandidates } from './play-candidates.ts'
 import type { PlayCandidateSet } from './play-candidates.ts'
+import type { PlayConfiguration } from './desk/data/limited-config.ts'
 import { IntegratedOverview } from './IntegratedOverview.tsx'
 import { FollowupInterventionPanel } from './FollowupInterventionPanel.tsx'
 import type { PlayProgress, ProgressState } from './play-progress.ts'
@@ -33,6 +34,7 @@ function ProgressLine({label,p,ended,reused}:{label:string;p?:PlayProgress;ended
 
 type Props=Readonly<{
   desk?: boolean
+  configuration?: PlayConfiguration
   onDeskCompare?: (pair: 'A0_A1' | 'A1_A2') => void
   seedText:string
   year:number
@@ -117,7 +119,7 @@ export function InterventionComparePanel(p:Props){
     ? observed.secondPersonId??(observed.personId===INTEGRATED_PLAY_DEFAULTS.pair[1]?INTEGRATED_PLAY_DEFAULTS.pair[0]:INTEGRATED_PLAY_DEFAULTS.pair[1])
     : PLAY_DEMO_PAIR[1])
   const [deltaText,setDeltaText]=useState(p.desk?'':String(observed&&!multiHouse?INTEGRATED_PLAY_DEFAULTS.signedDelta:PLAY_DEMO_DELTA))
-  const [durationText,setDurationText]=useState(String(multiHouse?1:observed
+  const [durationText,setDurationText]=useState(p.configuration ? '' : String(multiHouse?1:observed
     ? Math.min(INTEGRATED_PLAY_DEFAULTS.durationYears,1350-observed.year):PLAY_DEMO_DURATION))
   const seed=Number(p.seedText.trim())
   const year=Number(yearText),delta=Number(deltaText),duration=Number(durationText)
@@ -127,15 +129,15 @@ export function InterventionComparePanel(p:Props){
     /^\d+$/.test(durationText)&&Number.isSafeInteger(duration)&&duration>=1&&year+duration<=1350 &&
     firstId!==secondId
   // 候補: 現在のseed・方式に一致するA0（明示取得、または表示中の比較のA0）だけを使う。介入年の年初に存在するKEY人物のみ。
-  const comparisonSet=useMemo(()=>p.comparison?extractCandidates(p.comparison.input.seed,p.comparison.mode,p.comparison.a0.result.snapshots):undefined,
-    [p.comparison])
+  const comparisonSet=useMemo(()=>p.comparison&&!p.configuration?extractCandidates(p.comparison.input.seed,p.comparison.mode,p.comparison.a0.result.snapshots):undefined,
+    [p.comparison,p.configuration])
   const secondSet=useMemo(()=>p.comparison?.second?extractCandidates(p.comparison.second.input.seed,p.comparison.second.mode,p.comparison.second.a0.result.snapshots):undefined,[p.comparison])
   const resultName=(id:string,set:PlayCandidateSet|undefined)=>{
     const c=set?.candidates.find(x=>x.id===id)
     return c?candidateLabel(c):unresolvedLabel('person',id)
   }
-  const activeSet=candidateSetMatches(p.candidateSet,seed,mode)?p.candidateSet
-    :candidateSetMatches(comparisonSet,seed,mode)?comparisonSet:undefined
+  const activeSet=candidateSetMatches(p.candidateSet,seed,mode,p.configuration)?p.candidateSet
+    :candidateSetMatches(comparisonSet,seed,mode,p.configuration)?comparisonSet:undefined
   const yearOk=/^\d+$/.test(yearText)&&Number.isSafeInteger(year)&&year>=1250&&year<1350
   const options:readonly PersonOption[]=activeSet&&yearOk
     ?candidatesAtYear(activeSet,year).map(c=>({id:c.id,label:candidateLabel(c)})):multiHouse?[]:persons
@@ -263,7 +265,7 @@ export function InterventionComparePanel(p:Props){
     <form className="compare-form" onSubmit={e=>{
       e.preventDefault()
       if(canRun&&!p.running&&!p.fetchingCandidates&&!p.observationLoading)p.onRun({seed,year,firstPersonId:firstId,secondPersonId:secondId,
-        signedDelta:delta,durationYears:duration,mode})
+        signedDelta:delta,durationYears:duration,mode,...(p.configuration ? { configuration: p.configuration } : {})})
     }}>
       <div className="candidate-source" data-testid="candidate-source">
         {!multiHouse&&<button type="button" data-testid="candidates-fetch" disabled={!/^\d+$/.test(p.seedText.trim())||!Number.isSafeInteger(seed)||!!p.running||!!p.fetchingCandidates||!!p.observationLoading}
@@ -321,7 +323,7 @@ export function InterventionComparePanel(p:Props){
     {p.error&&<p role="alert" className="halt" data-testid="branch-error">{errorHeading(p.error.code)}: {p.error.code} / {p.error.message}</p>}
     {!p.comparison&&<p className="note" data-testid="branch-empty">まだ比較結果はありません。{p.desk ? '条件を指定して再計算すると比較資料を開けます。' : '上の「介入して再計算」を押すと、ここにA0/A1の違いが表示されます。'}</p>}
     {p.desk && p.comparison && <p><button type="button" disabled={!!p.running} onClick={() => p.onDeskCompare?.('A0_A1')}>同じ年の歴史を比較</button></p>}
-    {p.comparison&&isObservationMode(p.comparison.mode)&&mode===p.comparison.mode&&
+    {!p.configuration&&p.comparison&&isObservationMode(p.comparison.mode)&&mode===p.comparison.mode&&
       Number(p.seedText.trim())===p.comparison.input.seed&&
       <FollowupInterventionPanel
         key={JSON.stringify([p.comparison.input.seed,p.comparison.input.year,p.comparison.input.firstPersonId,

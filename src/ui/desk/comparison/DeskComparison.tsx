@@ -4,7 +4,8 @@ import type { PlayView } from '../../branch-play-source.ts'
 import { historyFromPlayView } from '../data/history.ts'
 import type { HistoryYear } from '../data/history.ts'
 import { documentPresentation } from '../documents/presentation.ts'
-import { reasonSentence } from '../../observation/reason-labels.ts'
+import { pairJudgments, RecordedTrust, RelationshipBasis } from '../documents/RelationshipEvidence.tsx'
+import { goalFailureText, reasonSentence } from '../../observation/reason-labels.ts'
 import { trialGoalStatus } from './goal-view.ts'
 
 type TargetKind = 'person' | 'group' | 'region' | 'title' | 'country' | 'house'
@@ -118,8 +119,9 @@ function TraceLink({ history, trace, onEvidence }: Readonly<{
     onClick={() => onEvidence({ history, kind: 'trace', id: trace.traceId })}>{view.traceStatus(trace)}：{reasonSentence(trace.reasonCodes)}</button>
 }
 
-function Branch({ history, target, focus, onEvidence }: Readonly<{
-  history: HistoryYear; target?: ComparisonTarget; focus?: ComparedRecord; onEvidence: (request: EvidenceRequest) => void
+function Branch({ history, target, focus, interventionPair, onEvidence }: Readonly<{
+  history: HistoryYear; target?: ComparisonTarget; focus?: ComparedRecord; interventionPair?: readonly [string, string]
+  onEvidence: (request: EvidenceRequest) => void
 }>) {
   const records = history.records
   const onBranch = focus?.branch === history.ref.origin.branch
@@ -127,6 +129,7 @@ function Branch({ history, target, focus, onEvidence }: Readonly<{
     ? onBranch && focus.kind === 'event' && e.eventId === focus.id : !target || e.involvedRefs.some(r => matches(r, target))) : []
   const traces = records.kind === 'COMMITTED' ? records.traces.filter(t => focus
     ? onBranch && focus.kind === 'trace' && t.traceId === focus.id : !target || matches(t.actorRef, target)) : []
+  const judgments = interventionPair && !focus ? pairJudgments(history, ...interventionPair) : []
   const state = target && targetState(history, target)
   const presence = target?.kind === 'person' ? yearStatus[history.person(target.id).kind]
     : state ? '年初に存在' : history.start.kind === 'CONFIRMED' ? '年初に存在しない' : yearStatus[history.start.kind]
@@ -134,6 +137,12 @@ function Branch({ history, target, focus, onEvidence }: Readonly<{
     <h4>{history.ref.origin.branch}・{history.ref.year}年</h4>
     <p>年初: {yearStatus[history.start.kind]}{target && `／${targetName(history, target)}：${presence}`}</p>
     {target && state && <details><summary>対象の年初状態（実値）</summary><pre>{JSON.stringify(state, null, 2)}</pre></details>}
+    {interventionPair && !focus && <div>
+      <RelationshipBasis history={history} left={interventionPair[0]} right={interventionPair[1]} />
+      {!!judgments.length && <><h5>介入対象の2人についての当年の実判断</h5><ul>{judgments.map(trace => <li key={trace.traceId}>
+        <TraceLink history={history} trace={trace} onEvidence={onEvidence} /><RecordedTrust trace={trace} />
+      </li>)}</ul></>}
+    </div>}
     <p>年内記録: {yearStatus[records.kind]}</p>
     {records.kind === 'COMMITTED' && <>
       {records.coverage.kind === 'TRANSFER_OMISSION'
@@ -208,6 +217,8 @@ export function DeskComparison({ view, pair, year, target, focus, context, onRet
 }>) {
   const comparison = useMemo(() => comparisonAt(view, pair, year), [view, pair, year])
   const comparedView = pair === 'A1_A2' ? view.second : view
+  const limited = comparedView?.input.configuration === 'LIMITED_PLAYTEST'
+  const interventionPair = limited ? [comparedView.input.firstPersonId, comparedView.input.secondPersonId] as const : undefined
   return <section aria-label="歴史の比較">
     <h3>同じ年の歴史を比較</h3>
     <button type="button" onClick={() => onReturn(context)}>元の調査へ戻る</button>
@@ -216,11 +227,19 @@ export function DeskComparison({ view, pair, year, target, focus, context, onRet
       {comparedView && <p>介入：{[comparedView.input.firstPersonId, comparedView.input.secondPersonId].map(id =>
         documentPresentation(comparison.before).name({ kind: 'person', id })).join(' と ')}の信頼を {comparedView.input.signedDelta > 0 ? '+' : ''}{comparedView.input.signedDelta}、{comparedView.input.durationYears}年間補正。</p>}
       {comparedView && <p>1350年の技術判定（正式勝敗ではありません）：{comparison.before.ref.origin.branch} {trialGoalStatus(comparedView.a0.result.technicalGoal)} ／ {comparison.after.ref.origin.branch} {trialGoalStatus(comparedView.a1.result.technicalGoal)}</p>}
+      {limited && <ul aria-label="1350年の中央領地の条件">{[comparedView.a0, comparedView.a1].map((run, i) => {
+        const goal = run.result.technicalGoal
+        const central = goal?.status === 'ACHIEVED' || goal?.status === 'NOT_ACHIEVED'
+          ? goal.assessments.find(a => a.titleId === 'title-exp-central') : undefined
+        const branch = (i === 0 ? comparison.before : comparison.after).ref.origin.branch
+        return <li key={branch}>{branch} 中央領地：{!central ? '判定記録なし' : !central.qualifies ? goalFailureText(central.failures)
+          : central.basis?.kind === 'CONTROL_MANDATE' ? '有効な統治委任により条件を満たしている' : '条件を満たしている'}</li>
+      })}</ul>}
       <p>{pair === 'A0_A1' && `介入年 ${view.input.year}年／`}観測年 {year}年。年初の状態と年内の記録は別です。記録差は因果を証明しません。</p>
       {target && <TargetStateComparison before={comparison.before} after={comparison.after} target={target} />}
       <Differences comparison={comparison} target={target} focus={focus} onEvidence={onEvidence}/>
-      <Branch history={comparison.before} target={target} focus={focus} onEvidence={onEvidence}/>
-      <Branch history={comparison.after} target={target} focus={focus} onEvidence={onEvidence}/>
+      <Branch history={comparison.before} target={target} focus={focus} interventionPair={interventionPair} onEvidence={onEvidence}/>
+      <Branch history={comparison.after} target={target} focus={focus} interventionPair={interventionPair} onEvidence={onEvidence}/>
     </>}
   </section>
 }

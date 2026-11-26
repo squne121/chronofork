@@ -5,6 +5,7 @@ import type { ObservationMode, ObservationSlice } from './branch-play-source.ts'
 import { DeskDocuments } from './desk/documents/index.tsx'
 import type { DeskDocumentsProps, DocumentOpenRequest } from './desk/documents/index.tsx'
 import { historyFromObservation, matchesPlayRequest, sameHistoryYearRef } from './desk/data/history.ts'
+import { createLimitedPlaytestSession, limitedObservationInput } from './desk/data/limited-playtest.ts'
 import type { HistoryYear, HistoryYearRef } from './desk/data/history.ts'
 import type { OpenDeskDocument } from './desk/layout/document-link.ts'
 import type { DocumentFilter } from './desk/documents/record-filter.ts'
@@ -48,7 +49,7 @@ import type { TimelineRun } from './timeline-source.ts'
 
 /** A2のWorker結果を表示中のA0/A1へ接続してよいのは、全て同じ第1介入に基づくときだけ。 */
 function sameFirstIntervention(a:PlayInput,b:PlayInput):boolean{
-  return a.seed===b.seed&&(a.mode??'FIXED_APPROVAL')===(b.mode??'FIXED_APPROVAL')&&
+  return a.seed===b.seed&&a.configuration===b.configuration&&(a.mode??'FIXED_APPROVAL')===(b.mode??'FIXED_APPROVAL')&&
     a.year===b.year&&a.firstPersonId===b.firstPersonId&&a.secondPersonId===b.secondPersonId&&
     a.signedDelta===b.signedDelta&&a.durationYears===b.durationYears
 }
@@ -70,15 +71,29 @@ function isLegacyEntry():boolean{
   return typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('entry')==='legacy'
 }
 
-/** run は試験用の注入口。未指定なら通常入口では旧試験計算を行わず、?entry=legacy または旧試験を開いたときに計算する。 */
-export default function App({ run: injected, playRunner = workerPlayRunner, candidatesRunner = workerCandidatesRunner }:
-  Readonly<{ run?: TimelineRun; playRunner?: PlayRunner; candidatesRunner?: CandidatesRunner }>) {
-  const [runState, setRun] = useState<TimelineRun>(() => injected ?? (isLegacyEntry() ? runExperimentalTimeline(DEFAULT_SEED) : pendingExperimentalRun(DEFAULT_SEED)))
+type AppProps = Readonly<{ run?: TimelineRun; playRunner?: PlayRunner; candidatesRunner?: CandidatesRunner }>
+type LimitedSession = ReturnType<typeof createLimitedPlaytestSession>
+
+export default function App(props: AppProps) {
+  const [limited, setLimited] = useState<{ session: LimitedSession; generation: number }>()
+  const generation = useRef(0)
+  const start = () => setLimited({ session: createLimitedPlaytestSession(), generation: ++generation.current })
+  // 入口をまたぐと Worker だけでなく候補・資料・比較・要求世代も持ち越さない。
+  return limited
+    ? <Workspace key={limited.generation} limited={limited.session} onLimitedStart={start} onLimitedExit={() => setLimited(undefined)} />
+    : <Workspace key="normal" {...props} onLimitedStart={start} />
+}
+
+/** run は試験用の注入口。通常入口では明示操作なしに旧試験を計算しない。 */
+function Workspace({ run: injected, playRunner = workerPlayRunner, candidatesRunner = workerCandidatesRunner,
+  limited, onLimitedStart, onLimitedExit }: AppProps & { limited?: LimitedSession; onLimitedStart: () => void; onLimitedExit?: () => void }) {
+  const configuration = limited ? 'LIMITED_PLAYTEST' : undefined
+  const [runState, setRun] = useState<TimelineRun>(() => injected ?? (!limited && isLegacyEntry() ? runExperimentalTimeline(DEFAULT_SEED) : pendingExperimentalRun(limited?.seed ?? DEFAULT_SEED)))
   const [seedText, setSeedText] = useState(String(runState.inputs.seed))
-  const [observationMode]=useState<ObservationMode>(()=>typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('run')==='legacy-integrated'
+  const [observationMode]=useState<ObservationMode>(()=>!limited&&typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('run')==='legacy-integrated'
     ?'INTEGRATED_EXPERIMENTAL':DEFAULT_OBSERVATION_MODE)
-  const [observationSeedText,setObservationSeedText]=useState(String(observationMode==='INTEGRATED_EXPERIMENTAL'
-    ?INTEGRATED_PLAY_DEFAULTS.seed:DEFAULT_OBSERVATION_SEED))
+  const [observationSeedText,setObservationSeedText]=useState(String(limited?.seed ?? (observationMode==='INTEGRATED_EXPERIMENTAL'
+    ?INTEGRATED_PLAY_DEFAULTS.seed:DEFAULT_OBSERVATION_SEED)))
   const [comparison, setComparison] = useState<PlayView | undefined>(undefined)
   const [running, setRunning] = useState<{ startedAt: number } | undefined>(undefined)
   const [elapsedSec, setElapsedSec] = useState(0)
@@ -92,13 +107,13 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const handleRef = useRef<PlayRunHandle | undefined>(undefined)
   const [a0Reused, setA0Reused] = useState(false)
   // 初回は実A0の観測を主入口にする。旧試験UIは明示的な「開発用」入口でのみ開く。
-  const [workspaceOpen,setWorkspaceOpen]=useState(isLegacyEntry)
+  const [workspaceOpen,setWorkspaceOpen]=useState(() => !limited && isLegacyEntry())
   type ObservedYear = { slice: ObservationSlice; history: HistoryYear; calc: CalcInfo }
   const [observed, setObservation] = useState<ObservedYear>()
   const observation = observed?.slice
   const observationYear = observed?.history
   const observationSources = useRef(new WeakMap<HistoryYear, ObservedYear>())
-  const desk = !injected && !isLegacyEntry() && observationMode === DEFAULT_OBSERVATION_MODE
+  const desk = !!limited || (!injected && !isLegacyEntry() && observationMode === DEFAULT_OBSERVATION_MODE)
   const [deskPlaying, setDeskPlaying] = useState(false)
   const [documentRequest, setDocumentRequest] = useState<DocumentOpenRequest>()
   const documentSerial = useRef(0)
@@ -214,10 +229,11 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     tokenRef.current++
     handleRef.current?.cancel()
     observationRequests.cancel()
-    playRunner.reset?.() // 保持中のA0とWorkerを破棄する
+    if (limited) limited.reset()
+    else playRunner.reset?.() // 保持中のA0とWorkerを破棄する
     candTokenRef.current++
     candHandleRef.current?.cancel()
-  }, [playRunner, observationRequests])
+  }, [limited, playRunner, observationRequests])
   const cancelObservation=()=>{
     observationRequests.cancel()
     setObsDraining(false)
@@ -240,7 +256,8 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       setObsError({code:'RUN_IN_PROGRESS',message:'進行中の計算が終了してから観測してください'})
       return
     }
-    if(!playRunner.observe){
+    const observe: PlayRunner['observe'] = limited ? (input, progress) => limited.observe(input.year, progress) : playRunner.observe
+    if(!observe){
       setObsError({code:'WORKER_UNAVAILABLE',message:'この実行経路には原史の非同期観測がありません'})
       return
     }
@@ -250,12 +267,14 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       return
     }
     const seed=Number(seedStr)
-    const digest=playConfigDigest(observationMode)
-    if((observation&&(observation.seed!==seed||observation.mode!==observationMode||observation.configDigest!==digest))||
-      (comparison&&(comparison.input.seed!==seed||comparison.mode!==observationMode||comparison.a0.inputs.configDigest!==digest))){
+    const digest=playConfigDigest(observationMode, configuration)
+    const identity = limited?.configuration.configIdentity
+    if((observation&&(observation.seed!==seed||observation.mode!==observationMode||observation.configDigest!==digest||observation.configIdentity!==identity))||
+      (comparison&&(comparison.input.seed!==seed||comparison.mode!==observationMode||comparison.a0.inputs.configDigest!==digest||comparison.a0.inputs.configIdentity!==identity))){
       // 原史を切り替えるときは旧枝の計算結果だけでなく、選択中の地図・年表・詳細も破棄する。
       cancelObservation()
-      playRunner.reset?.()
+      if (limited) limited.reset()
+      else playRunner.reset?.()
       setObservation(undefined)
       resetDocuments()
       setObsCalc(undefined)
@@ -281,7 +300,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
     setObsProgress(undefined)
     setObsError(undefined)
     observationRequests.request({
-      input: { seed, mode: observationMode, year }, expectedRef, playback, observe: playRunner.observe,
+      input: limited ? limitedObservationInput(year) : { seed, mode: observationMode, year }, expectedRef, playback, observe,
       progress: setObsProgress,
       success: (view, computeMs, wallMs) => {
         setObsPendingYear(undefined)
@@ -418,11 +437,12 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       source: context.evidence && context.target?.kind === 'person' ? context.target : undefined,
     })
   }
+  const activeDeskResult = deskResult?.serial === deskDraft?.serial ? deskResult : undefined
   const openDeskComparison = (pair: DeskPair) => {
-    if (!deskResult || !inCurrentA0(deskResult.context.history.ref) || handleRef.current || (pair === 'A1_A2' && !deskResult.view.second)) return
+    if (!activeDeskResult || !inCurrentA0(activeDeskResult.context.history.ref) || handleRef.current || (pair === 'A1_A2' && !activeDeskResult.view.second)) return
     setWorkspaceOpen(false)
     setDeskWindowFront(true)
-    setDeskWindow({ ...deskResult, pair, year: deskResult.context.history.ref.year, target: deskResult.context.target })
+    setDeskWindow({ ...activeDeskResult, pair, year: activeDeskResult.context.history.ref.year, target: activeDeskResult.context.target })
   }
   const stopCandidates = () => {
     candTokenRef.current++
@@ -432,8 +452,8 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   }
   // 重いA0計算はWorkerで行い、人物の選択・年の入力のたびには再計算しない（この明示操作でだけ取得する）。
   const fetchCandidates = (seed: number, mode: PlayMode) => {
-    if (candHandleRef.current || handleRef.current || observationRequests.busy) return
-    if(candidateSetMatches(observation?.candidates,seed,mode)){
+    if (limited || candHandleRef.current || handleRef.current || observationRequests.busy) return
+    if(candidateSetMatches(observation?.candidates,seed,mode,configuration)){
       setCandidateSet(observation?.candidates)
       setCandidateError(undefined)
       return // 同じA0を別Workerで再計算しない
@@ -521,11 +541,12 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   },[resultReveal])
   const runComparison = (input:PlayInput, draft?: { context: InvestigationContext; serial: number }) => {
     const context = draft?.context
+    if (input.configuration !== configuration || (limited && (!context || input.second || input.seed !== limited.seed))) return
     if (context && (!inCurrentA0(context.history.ref) || input.mode !== observationMode || input.seed !== context.history.ref.origin.seed)) return
-    const parent = context ? deskResult?.view : comparison
+    const parent = context ? activeDeskResult?.view : comparison
     setNotice(undefined)
     if (candHandleRef.current || observationRequests.busy) {setPlayError({code:'RUN_IN_PROGRESS',message:'原史の観測・候補取得が終了してから介入してください'});return}
-    if(input.mode==='MULTI_HOUSE_EXPERIMENTAL'&&!candidateSetMatches(observation?.candidates,input.seed,input.mode)){
+    if(input.mode==='MULTI_HOUSE_EXPERIMENTAL'&&!candidateSetMatches(observation?.candidates,input.seed,input.mode,configuration)){
       setPlayError({code:'OBSERVATION_REQUIRED',message:'介入するseedの原史を先に観測してください'})
       return
     }
@@ -542,8 +563,11 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       setRunning({ startedAt: started })
       let handle: PlayRunHandle
       try {
-        handle = playRunner(input, (p) => { if (token === tokenRef.current) setProgress((s) => reduceProgress(s, p)) },
-          { onA0Reused: () => { if (token === tokenRef.current) setA0Reused(true) } })
+        const onProgress: NonNullable<Parameters<PlayRunner>[1]> = p => {
+          if (token === tokenRef.current) setProgress(s => reduceProgress(s, p))
+        }
+        const hooks = { onA0Reused: () => { if (token === tokenRef.current) setA0Reused(true) } }
+        handle = limited ? limited.compare(input.year, input, onProgress, hooks) : playRunner(input, onProgress, hooks)
       } catch (error) {
         setRunning(undefined)
         setProgressEnd('FAILED')
@@ -575,7 +599,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
           return
         }
         if((context && !matchesPlayRequest(input, view)) || view.mode!==mode||!sameFirstIntervention(view.input,input)||
-          view.a0.inputs.configDigest!==playConfigDigest(mode)||view.a1.inputs.configDigest!==view.a0.inputs.configDigest||
+          view.a0.inputs.configDigest!==playConfigDigest(mode, configuration)||view.a1.inputs.configDigest!==view.a0.inputs.configDigest||
           (view.second&&view.second.a1.inputs.configDigest!==view.a0.inputs.configDigest)){
           setProgressEnd('FAILED')
           setPlayError({code:'COMPARISON_IDENTITY_MISMATCH',message:'要求した介入と結果の実行構成が一致しません'})
@@ -660,7 +684,6 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
   const branchLabel = comparison
     ?activeBranch==='A0'?'A0（介入なしの歴史）':activeBranch==='A1'?'A1（第1介入の歴史）':'A2（第2介入までの歴史）'
     :observation?(observation.mode==='MULTI_HOUSE_EXPERIMENTAL'?'A0（複数家門の原史を観測）':'A0（統合試験の原史を観測）'):'原史（旧・C004試験計算）'
-  const activeDeskResult = deskResult?.serial === deskDraft?.serial ? deskResult : undefined
   const deskSeedMatches = deskDraft && inCurrentA0(deskDraft.context.history.ref)
   const interventionProps = {
     seedText, year, comparison, error: playError, running: running ? { elapsedSec } : undefined,
@@ -674,9 +697,15 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
       <header className={desk ? "topbar desk-status" : "topbar"}>
         {!desk && <h1>Project Chronofork</h1>}
         <div className="badge badge-warn" role="status" data-testid="experimental-banner">
-          試験計算（仮データ・一部のみ実装）
-          <details className="dev-details"><summary>技術情報</summary>EXPERIMENTAL / CALIBRATION_ONLY</details>
+          {limited ? '限定試遊（試験計算・原史 A0 と改変史 A1）' : '試験計算（仮データ・一部のみ実装）'}
+          <details className="dev-details"><summary>技術情報</summary>EXPERIMENTAL / CALIBRATION_ONLY
+            {limited && <p data-testid="limited-configuration">{limited.configuration.configId} / {limited.configuration.configDigest} / seed {limited.seed} / drift 0</p>}
+          </details>
         </div>
+        {limited ? <div aria-label="限定試遊の操作">
+          <button type="button" onClick={onLimitedExit}>限定試遊を退出して通常入口へ</button>{' '}
+          <button type="button" onClick={onLimitedStart}>限定試遊を最初からやり直す</button>
+        </div> : desk && <button type="button" onClick={onLimitedStart}>限定試遊を開始</button>}
         <dl className="status-list">
           {(!observation||!!comparison)&&<div>
             <dt>観測中の年</dt>
@@ -693,20 +722,21 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
         </dl>
         {desk && deskSeedMatches && <div aria-label="編纂机の介入と比較">
           <button type="button" onClick={() => { setWorkspaceOpen(false); setDeskWindowFront(true); setDeskWindow('intervention') }}>介入の資料を開く</button>{' '}
-          {deskResult && <button type="button" disabled={!!running} onClick={() => openDeskComparison('A0_A1')}>A0とA1の比較を開く</button>}{' '}
-          {deskResult?.view.second && <button type="button" disabled={!!running} onClick={() => openDeskComparison('A1_A2')}>A1とA2の比較を開く</button>}
+          {activeDeskResult && <button type="button" disabled={!!running} onClick={() => openDeskComparison('A0_A1')}>A0とA1の比較を開く</button>}{' '}
+          {activeDeskResult?.view.second && <button type="button" disabled={!!running} onClick={() => openDeskComparison('A1_A2')}>A1とA2の比較を開く</button>}
         </div>}
         <details className="trial-help" data-testid="trial-guide-details">
           <summary>試験構成と現在できること</summary>
           <p className="lead" data-testid="trial-guide">
-            この試験版でできること: 人物間信頼へ介入してA1を作り、同年の別ペアへ追加介入してA2まで再計算できます。A0/A1/A2の実Eventと判断根拠を観測します。正式な歴史・勝敗はまだ評価できません。
+            {limited ? '1250〜1350年の固定構成です。原史 A0 を調査し、人物間の信頼へ介入して改変史 A1 と比較できます。正式な勝敗は評価しません。'
+              : 'この試験版でできること: 人物間信頼へ介入してA1を作り、同年の別ペアへ追加介入してA2まで再計算できます。A0/A1/A2の実Eventと判断根拠を観測します。正式な歴史・勝敗はまだ評価できません。'}
           </p>
         </details>
       </header>
 
       <main className="layout">
         <div className="obs-main">
-          <ObservationPanel desk={desk}
+          <ObservationPanel desk={desk} fixedSeed={!!limited}
             {...(desk ? { historyYear: observationYear, onOpenDocument: openDocument,
               documentNavigation, documentFilter, onClearDocumentFilter: () => setDocumentFilter(undefined),
               playing: deskPlaying, onPlayingChange: setDeskPlaying } : {})}
@@ -715,7 +745,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
             seedText={observationSeedText} onSeedText={changeSelectedSeed} onReset={rerun}
             onLoad={loadObservation} onCancel={()=>{cancelObservation();setObsError({code:'CANCELLED',message:'計算を中断しました'})}} onIntervene={observationToIntervene}/>
         </div>
-        <details className="obs-main obs-workspace" data-testid="legacy-workspace" open={workspaceOpen}
+        {!limited && <details className="obs-main obs-workspace" data-testid="legacy-workspace" open={workspaceOpen}
           onToggle={e=>{ setWorkspaceOpen(e.currentTarget.open); if (e.currentTarget.open && desk) setDeskWindow(undefined) }}>
           <summary data-testid="legacy-toggle">
             {comparison?'介入結果とA0/A1/A2の比較を確認する':!desk&&observation?'調べた人物から介入・比較する':'開発用：旧試験と直接介入の操作を開く'}
@@ -805,7 +835,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
         </div>
         </>}
           </div>
-        </details>
+        </details>}
       </main>
       {desk && <div onPointerDownCapture={() => setDeskWindowFront(false)} onFocusCapture={() => setDeskWindowFront(false)}><DeskDocuments key={documentSession} history={observationYear} slice={observation}
         openRequest={documentRequest} interventionDisabled={!observationYear || !inCurrentA0(observationYear.ref) || obsLoading || !!running || fetchingCandidates}
@@ -818,7 +848,7 @@ export default function App({ run: injected, playRunner = workerPlayRunner, cand
         front={deskWindowFront} onFront={() => setDeskWindowFront(true)}
         comparison={typeof deskWindow === 'object' ? deskWindow : undefined} onCompare={setDeskWindow}
         onClose={() => setDeskWindow(undefined)} onReturn={returnToInvestigation} onEvidence={openComparisonEvidence}>
-        <InterventionComparePanel {...interventionProps} key={deskDraft.serial} desk observationMode={observationMode}
+        <InterventionComparePanel {...interventionProps} key={deskDraft.serial} desk observationMode={observationMode} configuration={configuration}
           year={deskDraft.context.history.ref.year} comparison={activeDeskResult?.view}
           observationTarget={{ year: deskDraft.year, personId: deskDraft.personId, secondPersonId: deskDraft.partner,
             seed: deskDraft.context.history.ref.origin.seed, token: deskDraft.serial }}
