@@ -5,7 +5,7 @@ Issue #185 で採用されたCI高速化と引継ぎの技術方針。ゲーム�
 ## Phase 1の構成と必須チェック
 
 - 静的検査（decision register、型、lint、build等）、Vitest、通常E2E、配信用buildと実Worker検証を独立して並列化し、`quick-check` が必要な結果を集約する。Vitestは3分割を想定するが、2/3/4分割の実行時間、runner待ち、ピークメモリと各shardの偏りの比較結果をPRに残す。想定と実装・実測を区別する。
-- `quick-check` は従来と同じ必須検証の成功を意味し、依存先のfailure、cancelled、想定外のskipped、未実行を成功にしない。イベントごとに正当に適用されない処理は明示的に区別する。main push、PR、fork、Dependabotの従来条件を維持し、branch保護の変更に頼らない。
+- `quick-check` は従来と同じ必須検証の成功を意味し、static・unit・e2e の failure、cancelled、skipped、未実行を成功にしない。worker は PR で success 必須、main push ではジョブ自体を実行せず skipped のみ許容する。他イベント・ref や予期しない結果は失敗とする。fork、Dependabotの従来条件を維持し、branch保護の変更に頼らない。集約 shell の反例は `python3 -IB scripts/test_quick_check.py` で検証する。
 - 各ジョブに必要なcheckout・依存・cacheを用意し、read-only権限とconcurrencyを維持する。検査、assertion、実計算や既存skip条件を速度のために削らない。全Vitest対象が各run全体で欠落・重複なく実行されたことを実行結果から確認する。ファイル一覧コマンドだけをshard割当の証拠にしない。
 - ローカルの `npm run check` は基準の全テストを実行するが、CIの集約結果の代用ではない。ブラウザ、Worker、preview安全性fixtureもそれぞれ検証し、意図的な失敗が集約の失敗になることを確認する。
 

@@ -30,6 +30,11 @@ def extract_shell():
     if len(jobs) != 1:
         raise ValueError("expected exactly one quick-check job")
     job = jobs[0]
+    if not re.search(r"(?m)^    if: always\(\)\s*$", job):
+        raise ValueError("quick-check must run even when a dependency is skipped or fails")
+    workers = re.findall(r"(?ms)^  worker:\s*\n(.*?)(?=^  [\w-]+:\s*(?:\n|$)|\Z)", text)
+    if len(workers) != 1 or not re.search(r"(?m)^    if: github\.event_name == 'pull_request'\s*$", workers[0]):
+        raise ValueError("worker must be limited to pull requests")
     if not re.search(r"(?m)^    needs: \[static, unit, e2e, worker\]\s*$", job):
         raise ValueError("unexpected quick-check dependencies")
     steps = re.findall(
@@ -86,6 +91,11 @@ class QuickCheckTest(unittest.TestCase):
         for status in ("success", "failure", "cancelled", ""):
             with self.subTest(dependency="WORKER", status=status):
                 self.check_case(False, **(base | {"WORKER": status}))
+
+    def test_multiple_failures(self):
+        self.check_case(False, STATIC="failure", UNIT="failure", E2E="failure", WORKER="failure")
+        self.check_case(False, STATIC="failure", UNIT="failure", E2E="failure",
+                        WORKER="skipped", EVENT="push", REF="refs/heads/main")
 
     def test_other_events_and_refs(self):
         for event, ref in (("push", "refs/heads/feature"), ("push", "refs/tags/main"),

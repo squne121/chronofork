@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,8 +57,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Vitest shard ${{ matrix.shard }}/2
-        run: npm test -- --shard=${{ matrix.shard }}/2
+      - name: Vitest shard ${{ matrix.shard }}/4
+        run: npm test -- --shard=${{ matrix.shard }}/4
+      - name: Deliberate matrix failure for aggregation verification
+        if: matrix.shard == 1
+        run: exit 1
 
   e2e:
     runs-on: ubuntu-latest
