@@ -78,6 +78,29 @@ Preview 名は `pr-<番号>` です。同じ PR の公開・削除・smoke・通
 
 Free の上限は Worker あたり 100 Preview で、上限に達すると最も長く再配信されていない Preview が削除されます。GitHub の同一 PR の待機上限も 100 件です。GitHub API・キューや Cloudflare の伝播・障害では、コメントと URL が直ちに追随する保証はありません。GitHub の状態照合と Cloudflare の更新は原子的ではなく、更新中に PR が進んだ場合は成功を通知せず、後続イベントの照合に委ねます。失敗した公開は現行 HEAD の `ci` 全体を再実行し、`quick-check` と新しい artifact の成功を確認してください。再開直後に新しい run がない場合は、その PR を更新して新しい CI を起動します。閉鎖時の cleanup に失敗した場合は該当する `pr-preview` の閉鎖イベントを再実行し、対象 `pr-N` だけの削除結果を確認してください。定期実行はありません。
 
+## 試遊証跡の再実行（Phase 3A、experimental）
+
+限定試遊の A0 観測・A0/A1 比較用です。JSON（最大64 KiB）は `local-runs/` かリポジトリ外に保存し、**画面に表示された実 build SHA**（PR の head SHA とは限りません）の clean checkout で実行します。自動取得・checkout はしません。対象コミットが手元にない、`local` / SHA 不明、dirty checkout の場合は検証できません。
+
+```sh
+node --max-old-space-size=6144 --experimental-strip-types scripts/replay-playtest.ts local-runs/evidence.json
+```
+
+Phase 3B の接続例（`playtest-evidence.ts`）：
+
+```ts
+const evidence = await exportPlaytestEvidence({
+  kind: 'OBSERVATION', input: acceptedObservationInput, selected: selectedHistoryYearRef,
+  build: evidenceBuild(import.meta.env.VITE_BUILD_SHA), requestId: currentRequestId,
+  outcome: { kind: 'DONE', requestId: adoptedRequestId, result: observationSlice },
+})
+const json = serializePlaytestEvidence(evidence)
+```
+
+比較は `kind: 'COMPARISON'`、採用済み `PlayInput` と `PlayView` を渡します。要求世代と DTO は採用時に対で保持し、非同期 export 後も現在の選択か確認してから画面へ渡します。PLAYER は選択年の限定集計と公開 Event・Trace 参照のみ（完全構成は SHA-256 で照合）。`selection` で公開 Event や人物を絞れます。DEBUG の Trace は明示操作でのみ `debug` に指定します。コピー・ダウンロードと公開ブラウザ受入は Phase 3B の対象です。
+
+任意の100年実計算（通常 CI の対象外）：`node --max-old-space-size=6144 --experimental-strip-types tests/unit/ui/playtest-evidence.integration.ts observation <既存のlocal-runs内ディレクトリ>`（`comparison` も実行）。生成された `a0.json` と `a0-a1.json` を上記 CLI で別プロセスから照合できます。
+
 ## 運用
 
 - `main` へは PR 経由のみ（Squash merge）。必須チェックは `quick-check`（型検査・ESLint・Vitest・ビルド・Playwright smoke）。
