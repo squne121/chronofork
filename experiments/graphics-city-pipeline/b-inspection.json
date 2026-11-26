@@ -1,0 +1,606 @@
+{
+  "count": 30,
+  "expected": 30,
+  "rows": [
+    {
+      "id": "west-1",
+      "kind": "block",
+      "position": [
+        -11.8,
+        0,
+        -4.1
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-2",
+      "kind": "taper",
+      "position": [
+        -8.2,
+        0,
+        -4.1
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-3",
+      "kind": "block",
+      "position": [
+        -11.8,
+        0,
+        -2.05
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-4",
+      "kind": "taper",
+      "position": [
+        -8.2,
+        0,
+        -2.05
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-5",
+      "kind": "block",
+      "position": [
+        -11.8,
+        0,
+        0
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-6",
+      "kind": "taper",
+      "position": [
+        -8.2,
+        0,
+        0
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-7",
+      "kind": "block",
+      "position": [
+        -11.8,
+        0,
+        2.05
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-8",
+      "kind": "taper",
+      "position": [
+        -8.2,
+        0,
+        2.05
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-9",
+      "kind": "block",
+      "position": [
+        -11.8,
+        0,
+        4.1
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "west-10",
+      "kind": "taper",
+      "position": [
+        -8.2,
+        0,
+        4.1
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "b65749"
+        }
+      ]
+    },
+    {
+      "id": "center-1",
+      "kind": "taper",
+      "position": [
+        -1.8,
+        2,
+        -4.1
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-2",
+      "kind": "block",
+      "position": [
+        1.8,
+        2,
+        -4.1
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-3",
+      "kind": "taper",
+      "position": [
+        -1.8,
+        2,
+        -2.05
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-4",
+      "kind": "block",
+      "position": [
+        1.8,
+        2,
+        -2.05
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-5",
+      "kind": "taper",
+      "position": [
+        -1.8,
+        2,
+        0
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-6",
+      "kind": "block",
+      "position": [
+        1.8,
+        2,
+        0
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-7",
+      "kind": "taper",
+      "position": [
+        -1.8,
+        2,
+        2.05
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-8",
+      "kind": "block",
+      "position": [
+        1.8,
+        2,
+        2.05
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-9",
+      "kind": "taper",
+      "position": [
+        -1.8,
+        2,
+        4.1
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "center-10",
+      "kind": "block",
+      "position": [
+        1.8,
+        2,
+        4.1
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "4e7b9b"
+        }
+      ]
+    },
+    {
+      "id": "east-1",
+      "kind": "block",
+      "position": [
+        8.2,
+        4,
+        -4.1
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-2",
+      "kind": "taper",
+      "position": [
+        11.8,
+        4,
+        -4.1
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-3",
+      "kind": "block",
+      "position": [
+        8.2,
+        4,
+        -2.05
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-4",
+      "kind": "taper",
+      "position": [
+        11.8,
+        4,
+        -2.05
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-5",
+      "kind": "block",
+      "position": [
+        8.2,
+        4,
+        0
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-6",
+      "kind": "taper",
+      "position": [
+        11.8,
+        4,
+        0
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-7",
+      "kind": "block",
+      "position": [
+        8.2,
+        4,
+        2.05
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-8",
+      "kind": "taper",
+      "position": [
+        11.8,
+        4,
+        2.05
+      ],
+      "scale": [
+        1.25,
+        2.05,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-9",
+      "kind": "block",
+      "position": [
+        8.2,
+        4,
+        4.1
+      ],
+      "scale": [
+        1.25,
+        2.6,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 24,
+          "material": "c0964b"
+        }
+      ]
+    },
+    {
+      "id": "east-10",
+      "kind": "taper",
+      "position": [
+        11.8,
+        4,
+        4.1
+      ],
+      "scale": [
+        1.25,
+        1.5,
+        1.2
+      ],
+      "mesh": [
+        {
+          "vertices": 48,
+          "material": "c0964b"
+        }
+      ]
+    }
+  ]
+}

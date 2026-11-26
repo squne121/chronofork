@@ -1,0 +1,204 @@
+{
+  "started": "2026-11-20T02:19:50.079Z",
+  "sourceResults": "c3-results.json",
+  "temporaryCopy": "/tmp/city-c3-Vf6szQ",
+  "failures": [],
+  "pending": [
+    "Full-width deck-to-terrain contact is not established by top edge coordinates; endpoints are centerline positions, and tilted end planes are not flush to vertical terrain faces."
+  ],
+  "checks": {
+    "failures": [],
+    "pending": [
+      "Full-width deck-to-terrain contact is not established by top edge coordinates; endpoints are centerline positions, and tilted end planes are not flush to vertical terrain faces."
+    ],
+    "probes": 240,
+    "lights": {
+      "a": [
+        {
+          "type": "HemisphereLight",
+          "color": [
+            1,
+            1,
+            1
+          ],
+          "groundColor": [
+            0.14126329113044458,
+            0.16202937562896222,
+            0.11953842797895521
+          ],
+          "intensity": 2,
+          "position": [
+            0,
+            1,
+            0
+          ],
+          "visible": true
+        },
+        {
+          "type": "DirectionalLight",
+          "color": [
+            1,
+            1,
+            1
+          ],
+          "intensity": 2,
+          "position": [
+            -10,
+            20,
+            12
+          ],
+          "visible": true
+        }
+      ],
+      "b": [
+        {
+          "type": "HemisphereLight",
+          "color": [
+            1,
+            1,
+            1
+          ],
+          "groundColor": [
+            0.14126329113044458,
+            0.16202937562896222,
+            0.11953842797895521
+          ],
+          "intensity": 2,
+          "position": [
+            0,
+            1,
+            0
+          ],
+          "visible": true
+        },
+        {
+          "type": "DirectionalLight",
+          "color": [
+            1,
+            1,
+            1
+          ],
+          "intensity": 2,
+          "position": [
+            -10,
+            20,
+            12
+          ],
+          "visible": true
+        }
+      ]
+    },
+    "bridge": {
+      "a": {
+        "topFrom": [
+          [
+            4.472944468820849,
+            2.3044786249782003,
+            -0.5182820625326996
+          ],
+          [
+            3.381534156157351,
+            1.9479894904131227,
+            0.44698423561968426
+          ]
+        ],
+        "topTo": [
+          [
+            6.472944468820849,
+            4.3044786249782,
+            2.4817179374673004
+          ],
+          [
+            5.38153415615735,
+            3.9479894904131227,
+            3.4469842356196843
+          ]
+        ],
+        "width": 1.4999999999999998,
+        "terrainPlanes": {
+          "center": {
+            "x": 4,
+            "y": 2,
+            "zRange": [
+              -6,
+              6
+            ]
+          },
+          "east": {
+            "x": 6,
+            "y": 4,
+            "zRange": [
+              -3,
+              9
+            ]
+          }
+        }
+      },
+      "b": {
+        "topFrom": [
+          [
+            4.472944468820849,
+            2.3044786249782003,
+            -0.5182820625326996
+          ],
+          [
+            3.381534156157351,
+            1.9479894904131227,
+            0.44698423561968426
+          ]
+        ],
+        "topTo": [
+          [
+            6.472944468820849,
+            4.3044786249782,
+            2.4817179374673004
+          ],
+          [
+            5.38153415615735,
+            3.9479894904131227,
+            3.4469842356196843
+          ]
+        ],
+        "width": 1.4999999999999998,
+        "terrainPlanes": {
+          "center": {
+            "x": 4,
+            "y": 2,
+            "zRange": [
+              -6,
+              6
+            ]
+          },
+          "east": {
+            "x": 6,
+            "y": 4,
+            "zRange": [
+              -3,
+              9
+            ]
+          }
+        }
+      }
+    },
+    "target": "west-1",
+    "materials": {
+      "a": [
+        {
+          "color": "ee3377",
+          "visible": true,
+          "type": "MeshStandardMaterial",
+          "roughness": 1
+        }
+      ],
+      "b": [
+        {
+          "color": "ee3377",
+          "visible": true,
+          "type": "MeshStandardMaterial",
+          "roughness": 1
+        }
+      ]
+    }
+  },
+  "finished": "2026-11-20T02:19:52.216Z"
+}

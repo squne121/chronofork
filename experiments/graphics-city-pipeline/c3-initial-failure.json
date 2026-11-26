@@ -1,0 +1,101 @@
+{
+  "started": "2026-11-20T02:13:43.765Z",
+  "temporaryCopy": "/tmp/city-c3-tlyyS3",
+  "processes": [
+    {
+      "route": "a",
+      "iteration": "first",
+      "began": "2026-11-20T02:13:43.777Z",
+      "elapsedMs": 494.74493300000006,
+      "status": 0,
+      "stdout": "INFO Draco is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_draco_bridge.so\nINFO MeshOptimizer is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_meshopt_bridge.so\n11:13:44 | INFO: Starting glTF 2.0 export\n11:13:44 | INFO: Extracting primitive: block\n11:13:44 | INFO: Primitives created: 1\n11:13:44 | INFO: Finished glTF 2.0 export in 0.004267692565917969 s\n\n11:13:44 | INFO: Starting glTF 2.0 export\n11:13:44 | INFO: Extracting primitive: taper\n11:13:44 | INFO: Primitives created: 1\n11:13:44 | INFO: Finished glTF 2.0 export in 0.0011792182922363281 s\n\n11:13:44 | INFO: Starting glTF 2.0 export\n11:13:44 | INFO: Extracting primitive: tiered\n11:13:44 | INFO: Primitives created: 1\n11:13:44 | INFO: Finished glTF 2.0 export in 0.0014030933380126953 s\n\nInfo: Saved as \"parts.blend\"\nBlender 5.2.4 LTS (hash cd5dc428cce1 built 2026-11-10 01:31:47)\n\nBlender quit\n",
+      "stderr": ""
+    },
+    {
+      "route": "b",
+      "iteration": "first",
+      "began": "2026-11-20T02:13:44.272Z",
+      "elapsedMs": 1501.8949029999999,
+      "status": 0,
+      "stdout": "\n> build\n> tsc --noEmit && vite build --outDir node_modules/.cache/city-dist\n\nvite v7.3.1 building client environment for production...\ntransforming...\n✓ 12 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.cache/city-dist/index.html                   0.53 kB │ gzip:   0.41 kB\nnode_modules/.cache/city-dist/assets/index-Beu1K-pb.css    0.43 kB │ gzip:   0.30 kB\nnode_modules/.cache/city-dist/assets/index-dEFfJ1n3.js   612.93 kB │ gzip: 158.39 kB\n✓ built in 778ms\n",
+      "stderr": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+    },
+    {
+      "route": "b",
+      "iteration": "repeat-1",
+      "began": "2026-11-20T02:13:45.774Z",
+      "elapsedMs": 1449.97235,
+      "status": 0,
+      "stdout": "\n> build\n> tsc --noEmit && vite build --outDir node_modules/.cache/city-dist\n\nvite v7.3.1 building client environment for production...\ntransforming...\n✓ 12 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.cache/city-dist/index.html                   0.53 kB │ gzip:   0.41 kB\nnode_modules/.cache/city-dist/assets/index-Beu1K-pb.css    0.43 kB │ gzip:   0.30 kB\nnode_modules/.cache/city-dist/assets/index-dEFfJ1n3.js   612.93 kB │ gzip: 158.39 kB\n✓ built in 773ms\n",
+      "stderr": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+    },
+    {
+      "route": "a",
+      "iteration": "repeat-1",
+      "began": "2026-11-20T02:13:47.224Z",
+      "elapsedMs": 425.9684079999997,
+      "status": 0,
+      "stdout": "INFO Draco is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_draco_bridge.so\nINFO MeshOptimizer is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_meshopt_bridge.so\n11:13:47 | INFO: Starting glTF 2.0 export\n11:13:47 | INFO: Extracting primitive: block\n11:13:47 | INFO: Primitives created: 1\n11:13:47 | INFO: Finished glTF 2.0 export in 0.004003763198852539 s\n\n11:13:47 | INFO: Starting glTF 2.0 export\n11:13:47 | INFO: Extracting primitive: taper\n11:13:47 | INFO: Primitives created: 1\n11:13:47 | INFO: Finished glTF 2.0 export in 0.0010538101196289062 s\n\n11:13:47 | INFO: Starting glTF 2.0 export\n11:13:47 | INFO: Extracting primitive: tiered\n11:13:47 | INFO: Primitives created: 1\n11:13:47 | INFO: Finished glTF 2.0 export in 0.0010428428649902344 s\n\nInfo: Saved as \"parts.blend\"\nBlender 5.2.4 LTS (hash cd5dc428cce1 built 2026-11-10 01:31:47)\n\nBlender quit\n",
+      "stderr": ""
+    },
+    {
+      "route": "a",
+      "iteration": "repeat-2",
+      "began": "2026-11-20T02:13:47.650Z",
+      "elapsedMs": 453.3441349999998,
+      "status": 0,
+      "stdout": "INFO Draco is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_draco_bridge.so\nINFO MeshOptimizer is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_meshopt_bridge.so\n11:13:48 | INFO: Starting glTF 2.0 export\n11:13:48 | INFO: Extracting primitive: block\n11:13:48 | INFO: Primitives created: 1\n11:13:48 | INFO: Finished glTF 2.0 export in 0.0043354034423828125 s\n\n11:13:48 | INFO: Starting glTF 2.0 export\n11:13:48 | INFO: Extracting primitive: taper\n11:13:48 | INFO: Primitives created: 1\n11:13:48 | INFO: Finished glTF 2.0 export in 0.0011582374572753906 s\n\n11:13:48 | INFO: Starting glTF 2.0 export\n11:13:48 | INFO: Extracting primitive: tiered\n11:13:48 | INFO: Primitives created: 1\n11:13:48 | INFO: Finished glTF 2.0 export in 0.0011229515075683594 s\n\nInfo: Saved as \"parts.blend\"\nBlender 5.2.4 LTS (hash cd5dc428cce1 built 2026-11-10 01:31:47)\n\nBlender quit\n",
+      "stderr": ""
+    },
+    {
+      "route": "b",
+      "iteration": "repeat-2",
+      "began": "2026-11-20T02:13:48.103Z",
+      "elapsedMs": 1532.0745899999993,
+      "status": 0,
+      "stdout": "\n> build\n> tsc --noEmit && vite build --outDir node_modules/.cache/city-dist\n\nvite v7.3.1 building client environment for production...\ntransforming...\n✓ 12 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.cache/city-dist/index.html                   0.53 kB │ gzip:   0.41 kB\nnode_modules/.cache/city-dist/assets/index-Beu1K-pb.css    0.43 kB │ gzip:   0.30 kB\nnode_modules/.cache/city-dist/assets/index-dEFfJ1n3.js   612.93 kB │ gzip: 158.39 kB\n✓ built in 825ms\n",
+      "stderr": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+    },
+    {
+      "route": "b",
+      "iteration": "repeat-3",
+      "began": "2026-11-20T02:13:49.635Z",
+      "elapsedMs": 1516.0078169999997,
+      "status": 0,
+      "stdout": "\n> build\n> tsc --noEmit && vite build --outDir node_modules/.cache/city-dist\n\nvite v7.3.1 building client environment for production...\ntransforming...\n✓ 12 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.cache/city-dist/index.html                   0.53 kB │ gzip:   0.41 kB\nnode_modules/.cache/city-dist/assets/index-Beu1K-pb.css    0.43 kB │ gzip:   0.30 kB\nnode_modules/.cache/city-dist/assets/index-dEFfJ1n3.js   612.93 kB │ gzip: 158.39 kB\n✓ built in 797ms\n",
+      "stderr": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+    },
+    {
+      "route": "a",
+      "iteration": "repeat-3",
+      "began": "2026-11-20T02:13:51.151Z",
+      "elapsedMs": 453.4113419999994,
+      "status": 0,
+      "stdout": "INFO Draco is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_draco_bridge.so\nINFO MeshOptimizer is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_meshopt_bridge.so\n11:13:51 | INFO: Starting glTF 2.0 export\n11:13:51 | INFO: Extracting primitive: block\n11:13:51 | INFO: Primitives created: 1\n11:13:51 | INFO: Finished glTF 2.0 export in 0.0042188167572021484 s\n\n11:13:51 | INFO: Starting glTF 2.0 export\n11:13:51 | INFO: Extracting primitive: taper\n11:13:51 | INFO: Primitives created: 1\n11:13:51 | INFO: Finished glTF 2.0 export in 0.0010230541229248047 s\n\n11:13:51 | INFO: Starting glTF 2.0 export\n11:13:51 | INFO: Extracting primitive: tiered\n11:13:51 | INFO: Primitives created: 1\n11:13:51 | INFO: Finished glTF 2.0 export in 0.001352548599243164 s\n\nInfo: Saved as \"parts.blend\"\nBlender 5.2.4 LTS (hash cd5dc428cce1 built 2026-11-10 01:31:47)\n\nBlender quit\n",
+      "stderr": ""
+    }
+  ],
+  "failures": [
+    "Error: ENOENT: no such file or directory, scandir '/tmp/city-c3-tlyyS3/dist/assets'\n    at async readdir (node:internal/fs/promises:953:18)\n    at async file:///home/squne/projects/chronofork-wt-city-c3/experiments/graphics-city-pipeline/inspect-c3.mjs:29:56"
+  ],
+  "pending": [],
+  "originalBefore": {
+    "block.glb": "a0c143a6d89388a4b257cfdb8f4d39cc5a9530797deb0ee135642721bf887df7",
+    "taper.glb": "7671d77822dc839b567d8fdcfd2cce0eb94382a8eef0f0c675bec75acbfff701",
+    "tiered.glb": "daf3a711e4f38f210a1fcdac4ad41bfdf5b2f3e8c99c86b24a0c460214f69e9e",
+    "parts.blend": "5ed8439c0392cda68062c5d8a05f5e9061f399036d36a20d738c4d9418608b87"
+  },
+  "originalAfter": {
+    "block.glb": "a0c143a6d89388a4b257cfdb8f4d39cc5a9530797deb0ee135642721bf887df7",
+    "taper.glb": "7671d77822dc839b567d8fdcfd2cce0eb94382a8eef0f0c675bec75acbfff701",
+    "tiered.glb": "daf3a711e4f38f210a1fcdac4ad41bfdf5b2f3e8c99c86b24a0c460214f69e9e",
+    "parts.blend": "5ed8439c0392cda68062c5d8a05f5e9061f399036d36a20d738c4d9418608b87"
+  },
+  "regenerated": {
+    "block.glb": "a0c143a6d89388a4b257cfdb8f4d39cc5a9530797deb0ee135642721bf887df7",
+    "taper.glb": "7671d77822dc839b567d8fdcfd2cce0eb94382a8eef0f0c675bec75acbfff701",
+    "tiered.glb": "daf3a711e4f38f210a1fcdac4ad41bfdf5b2f3e8c99c86b24a0c460214f69e9e",
+    "parts.blend": "59ca012db08f3dae4d026efdb932d55fb7ba1141c99c18e4bfa7abed35e4f8db"
+  },
+  "finished": "2026-11-20T02:13:51.606Z"
+}

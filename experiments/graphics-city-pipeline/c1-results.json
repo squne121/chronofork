@@ -1,0 +1,138 @@
+{
+  "started": "2026-11-20T01:42:41.815Z",
+  "camera": {
+    "position": [
+      28,
+      32,
+      36
+    ],
+    "target": [
+      0,
+      1,
+      0
+    ],
+    "zoom": 1
+  },
+  "scenarios": [
+    {
+      "scenario": "color",
+      "target": "center (10 buildings)",
+      "errors": [],
+      "timings": [
+        {
+          "run": "warm-remeasurement-1",
+          "order": "A,B",
+          "commonSetCityMs": 14.099999904632568,
+          "renderTimesMs": {
+            "a": 6.0000001192092896,
+            "b": 6.699999928474426
+          },
+          "renderCounts": {
+            "a": 31,
+            "b": 31
+          }
+        },
+        {
+          "run": "warm-remeasurement-2",
+          "order": "B,A",
+          "commonSetCityMs": 10.399999976158142,
+          "renderTimesMs": {
+            "a": 4.599999904632568,
+            "b": 5.0000001192092896
+          },
+          "renderCounts": {
+            "a": 31,
+            "b": 31
+          }
+        },
+        {
+          "run": "warm-remeasurement-3",
+          "order": "A,B",
+          "commonSetCityMs": 7.399999976158142,
+          "renderTimesMs": {
+            "a": 4,
+            "b": 1.7999999523162842
+          },
+          "renderCounts": {
+            "a": 31,
+            "b": 31
+          }
+        },
+        {
+          "run": "warm-remeasurement-4",
+          "order": "B,A",
+          "commonSetCityMs": 4.399999976158142,
+          "renderTimesMs": {
+            "a": 2.200000047683716,
+            "b": 2.100000023841858
+          },
+          "renderCounts": {
+            "a": 31,
+            "b": 31
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "dimensions",
+      "target": "center (10 buildings)",
+      "errors": [],
+      "timings": [
+        {
+          "run": "warm-remeasurement-1",
+          "order": "A,B",
+          "commonSetCityMs": 10.199999928474426,
+          "renderTimesMs": {
+            "a": 6,
+            "b": 3.6999999284744263
+          },
+          "renderCounts": {
+            "a": 31,
+            "b": 31
+          }
+        },
+        {
+          "run": "warm-remeasurement-2",
+          "order": "B,A",
+          "commonSetCityMs": 8.600000023841858,
+          "renderTimesMs": {
+            "a": 3.1000001430511475,
+            "b": 4.900000095367432
+          },
+          "renderCounts": {
+            "a": 31,
+            "b": 31
+          }
+        },
+        {
+          "run": "warm-remeasurement-3",
+          "order": "A,B",
+          "commonSetCityMs": 7.099999904632568,
+          "renderTimesMs": {
+            "a": 3.899999976158142,
+            "b": 2.5
+          },
+          "renderCounts": {
+            "a": 31,
+            "b": 31
+          }
+        },
+        {
+          "run": "warm-remeasurement-4",
+          "order": "B,A",
+          "commonSetCityMs": 9.399999976158142,
+          "renderTimesMs": {
+            "a": 5.799999952316284,
+            "b": 2.899999976158142
+          },
+          "renderCounts": {
+            "a": 31,
+            "b": 31
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "finished": "2026-11-20T01:42:47.035Z"
+}

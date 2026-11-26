@@ -1,0 +1,1710 @@
+{
+  "started": "2026-11-20T02:16:53.590Z",
+  "temporaryCopy": "/tmp/city-c3-Vf6szQ",
+  "processes": [
+    {
+      "route": "a",
+      "iteration": "first",
+      "began": "2026-11-20T02:16:54.419Z",
+      "elapsedMs": 464.11992499999997,
+      "status": 0,
+      "stdout": "INFO Draco is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_draco_bridge.so\nINFO MeshOptimizer is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_meshopt_bridge.so\n11:16:54 | INFO: Starting glTF 2.0 export\n11:16:54 | INFO: Extracting primitive: block\n11:16:54 | INFO: Primitives created: 1\n11:16:54 | INFO: Finished glTF 2.0 export in 0.004312038421630859 s\n\n11:16:54 | INFO: Starting glTF 2.0 export\n11:16:54 | INFO: Extracting primitive: taper\n11:16:54 | INFO: Primitives created: 1\n11:16:54 | INFO: Finished glTF 2.0 export in 0.0010912418365478516 s\n\n11:16:54 | INFO: Starting glTF 2.0 export\n11:16:54 | INFO: Extracting primitive: tiered\n11:16:54 | INFO: Primitives created: 1\n11:16:54 | INFO: Finished glTF 2.0 export in 0.0012218952178955078 s\n\nInfo: Saved as \"parts.blend\"\nBlender 5.2.4 LTS (hash cd5dc428cce1 built 2026-11-10 01:31:47)\n\nBlender quit\n",
+      "stderr": ""
+    },
+    {
+      "route": "b",
+      "iteration": "first",
+      "began": "2026-11-20T02:16:54.883Z",
+      "elapsedMs": 1497.4057429999998,
+      "status": 0,
+      "stdout": "\n> build\n> tsc --noEmit && vite build --outDir node_modules/.cache/city-dist\n\nvite v7.3.1 building client environment for production...\ntransforming...\n✓ 12 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.cache/city-dist/index.html                   0.53 kB │ gzip:   0.41 kB\nnode_modules/.cache/city-dist/assets/index-Beu1K-pb.css    0.43 kB │ gzip:   0.30 kB\nnode_modules/.cache/city-dist/assets/index-dEFfJ1n3.js   612.93 kB │ gzip: 158.39 kB\n✓ built in 796ms\n",
+      "stderr": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+    },
+    {
+      "route": "b",
+      "iteration": "repeat-1",
+      "began": "2026-11-20T02:16:56.381Z",
+      "elapsedMs": 1504.886442,
+      "status": 0,
+      "stdout": "\n> build\n> tsc --noEmit && vite build --outDir node_modules/.cache/city-dist\n\nvite v7.3.1 building client environment for production...\ntransforming...\n✓ 12 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.cache/city-dist/index.html                   0.53 kB │ gzip:   0.41 kB\nnode_modules/.cache/city-dist/assets/index-Beu1K-pb.css    0.43 kB │ gzip:   0.30 kB\nnode_modules/.cache/city-dist/assets/index-dEFfJ1n3.js   612.93 kB │ gzip: 158.39 kB\n✓ built in 812ms\n",
+      "stderr": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+    },
+    {
+      "route": "a",
+      "iteration": "repeat-1",
+      "began": "2026-11-20T02:16:57.886Z",
+      "elapsedMs": 453.2884100000001,
+      "status": 0,
+      "stdout": "INFO Draco is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_draco_bridge.so\nINFO MeshOptimizer is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_meshopt_bridge.so\n11:16:58 | INFO: Starting glTF 2.0 export\n11:16:58 | INFO: Extracting primitive: block\n11:16:58 | INFO: Primitives created: 1\n11:16:58 | INFO: Finished glTF 2.0 export in 0.0047342777252197266 s\n\n11:16:58 | INFO: Starting glTF 2.0 export\n11:16:58 | INFO: Extracting primitive: taper\n11:16:58 | INFO: Primitives created: 1\n11:16:58 | INFO: Finished glTF 2.0 export in 0.0008955001831054688 s\n\n11:16:58 | INFO: Starting glTF 2.0 export\n11:16:58 | INFO: Extracting primitive: tiered\n11:16:58 | INFO: Primitives created: 1\n11:16:58 | INFO: Finished glTF 2.0 export in 0.0072667598724365234 s\n\nInfo: Saved as \"parts.blend\"\nBlender 5.2.4 LTS (hash cd5dc428cce1 built 2026-11-10 01:31:47)\n\nBlender quit\n",
+      "stderr": ""
+    },
+    {
+      "route": "a",
+      "iteration": "repeat-2",
+      "began": "2026-11-20T02:16:58.339Z",
+      "elapsedMs": 445.4206690000001,
+      "status": 0,
+      "stdout": "INFO Draco is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_draco_bridge.so\nINFO MeshOptimizer is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_meshopt_bridge.so\n11:16:58 | INFO: Starting glTF 2.0 export\n11:16:58 | INFO: Extracting primitive: block\n11:16:58 | INFO: Primitives created: 1\n11:16:58 | INFO: Finished glTF 2.0 export in 0.004203319549560547 s\n\n11:16:58 | INFO: Starting glTF 2.0 export\n11:16:58 | INFO: Extracting primitive: taper\n11:16:58 | INFO: Primitives created: 1\n11:16:58 | INFO: Finished glTF 2.0 export in 0.001026153564453125 s\n\n11:16:58 | INFO: Starting glTF 2.0 export\n11:16:58 | INFO: Extracting primitive: tiered\n11:16:58 | INFO: Primitives created: 1\n11:16:58 | INFO: Finished glTF 2.0 export in 0.0011813640594482422 s\n\nInfo: Saved as \"parts.blend\"\nBlender 5.2.4 LTS (hash cd5dc428cce1 built 2026-11-10 01:31:47)\n\nBlender quit\n",
+      "stderr": ""
+    },
+    {
+      "route": "b",
+      "iteration": "repeat-2",
+      "began": "2026-11-20T02:16:58.784Z",
+      "elapsedMs": 1640.3964569999998,
+      "status": 0,
+      "stdout": "\n> build\n> tsc --noEmit && vite build --outDir node_modules/.cache/city-dist\n\nvite v7.3.1 building client environment for production...\ntransforming...\n✓ 12 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.cache/city-dist/index.html                   0.53 kB │ gzip:   0.41 kB\nnode_modules/.cache/city-dist/assets/index-Beu1K-pb.css    0.43 kB │ gzip:   0.30 kB\nnode_modules/.cache/city-dist/assets/index-dEFfJ1n3.js   612.93 kB │ gzip: 158.39 kB\n✓ built in 943ms\n",
+      "stderr": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+    },
+    {
+      "route": "b",
+      "iteration": "repeat-3",
+      "began": "2026-11-20T02:17:00.425Z",
+      "elapsedMs": 1587.1121089999997,
+      "status": 0,
+      "stdout": "\n> build\n> tsc --noEmit && vite build --outDir node_modules/.cache/city-dist\n\nvite v7.3.1 building client environment for production...\ntransforming...\n✓ 12 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.cache/city-dist/index.html                   0.53 kB │ gzip:   0.41 kB\nnode_modules/.cache/city-dist/assets/index-Beu1K-pb.css    0.43 kB │ gzip:   0.30 kB\nnode_modules/.cache/city-dist/assets/index-dEFfJ1n3.js   612.93 kB │ gzip: 158.39 kB\n✓ built in 797ms\n",
+      "stderr": "\n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n"
+    },
+    {
+      "route": "a",
+      "iteration": "repeat-3",
+      "began": "2026-11-20T02:17:02.012Z",
+      "elapsedMs": 489.7911670000012,
+      "status": 0,
+      "stdout": "INFO Draco is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_draco_bridge.so\nINFO MeshOptimizer is available, use library at /home/squne/.local/opt/chronofork-blender-5.2.4.uUPgtwDV/blender-5.2.4-linux-x64/lib/libbf_intern_meshopt_bridge.so\n11:17:02 | INFO: Starting glTF 2.0 export\n11:17:02 | INFO: Extracting primitive: block\n11:17:02 | INFO: Primitives created: 1\n11:17:02 | INFO: Finished glTF 2.0 export in 0.005498647689819336 s\n\n11:17:02 | INFO: Starting glTF 2.0 export\n11:17:02 | INFO: Extracting primitive: taper\n11:17:02 | INFO: Primitives created: 1\n11:17:02 | INFO: Finished glTF 2.0 export in 0.0009875297546386719 s\n\n11:17:02 | INFO: Starting glTF 2.0 export\n11:17:02 | INFO: Extracting primitive: tiered\n11:17:02 | INFO: Primitives created: 1\n11:17:02 | INFO: Finished glTF 2.0 export in 0.009709596633911133 s\n\nInfo: Saved as \"parts.blend\"\nBlender 5.2.4 LTS (hash cd5dc428cce1 built 2026-11-10 01:31:47)\n\nBlender quit\n",
+      "stderr": ""
+    }
+  ],
+  "failures": [],
+  "pending": [],
+  "originalBefore": {
+    "block.glb": "a0c143a6d89388a4b257cfdb8f4d39cc5a9530797deb0ee135642721bf887df7",
+    "taper.glb": "7671d77822dc839b567d8fdcfd2cce0eb94382a8eef0f0c675bec75acbfff701",
+    "tiered.glb": "daf3a711e4f38f210a1fcdac4ad41bfdf5b2f3e8c99c86b24a0c460214f69e9e",
+    "parts.blend": "5ed8439c0392cda68062c5d8a05f5e9061f399036d36a20d738c4d9418608b87"
+  },
+  "originalAfter": {
+    "block.glb": "a0c143a6d89388a4b257cfdb8f4d39cc5a9530797deb0ee135642721bf887df7",
+    "taper.glb": "7671d77822dc839b567d8fdcfd2cce0eb94382a8eef0f0c675bec75acbfff701",
+    "tiered.glb": "daf3a711e4f38f210a1fcdac4ad41bfdf5b2f3e8c99c86b24a0c460214f69e9e",
+    "parts.blend": "5ed8439c0392cda68062c5d8a05f5e9061f399036d36a20d738c4d9418608b87"
+  },
+  "regenerated": {
+    "block.glb": "a0c143a6d89388a4b257cfdb8f4d39cc5a9530797deb0ee135642721bf887df7",
+    "taper.glb": "7671d77822dc839b567d8fdcfd2cce0eb94382a8eef0f0c675bec75acbfff701",
+    "tiered.glb": "daf3a711e4f38f210a1fcdac4ad41bfdf5b2f3e8c99c86b24a0c460214f69e9e",
+    "parts.blend": "a15478ffe3e28580532cbc1eb3812be50213addbe16fe58338e624a446e66118"
+  },
+  "bDist": {
+    "index-Beu1K-pb.css": "0d67ed2a38c2ac04c03876c599d33bde8d73a05fcdfb05c0901837bc6f3cca2c",
+    "index-dEFfJ1n3.js": "cac797f19d10577faf507ea023be8f83a919ea89e1217a012e46bebb1f727829"
+  },
+  "result": {
+    "input": {
+      "districts": [
+        {
+          "id": "west",
+          "x": -10,
+          "y": 0,
+          "z": -2,
+          "width": 8,
+          "depth": 12
+        },
+        {
+          "id": "center",
+          "x": 0,
+          "y": 2,
+          "z": 0,
+          "width": 8,
+          "depth": 12
+        },
+        {
+          "id": "east",
+          "x": 10,
+          "y": 4,
+          "z": 3,
+          "width": 8,
+          "depth": 12
+        }
+      ],
+      "buildings": [
+        {
+          "id": "west-1",
+          "district": "west",
+          "kind": "block",
+          "x": -11.200000000000001,
+          "y": 0,
+          "z": -6.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-2",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": -6.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-3",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": -4.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-4",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": -4.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-5",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": -2,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-6",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": -2,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-7",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": 0.04999999999999982,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-8",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": 0.04999999999999982,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-9",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": 2.0999999999999996,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-10",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": 2.0999999999999996,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "center-1",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.2000000000000002,
+          "y": 2,
+          "z": -4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-2",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": -4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-3",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": -2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-4",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": -2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-5",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": 0,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-6",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": 0,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-7",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": 2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-8",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": 2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-9",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": 4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-10",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": 4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "east-1",
+          "district": "east",
+          "kind": "block",
+          "x": 8.799999999999999,
+          "y": 4,
+          "z": -1.0999999999999996,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-2",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": -1.0999999999999996,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-3",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": 0.9500000000000002,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-4",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": 0.9500000000000002,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-5",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": 3,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-6",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": 3,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-7",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": 5.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-8",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": 5.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-9",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": 7.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-10",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": 7.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#c0964b"
+        }
+      ],
+      "bridge": {
+        "from": [
+          4,
+          2,
+          0
+        ],
+        "to": [
+          6,
+          4,
+          3
+        ],
+        "width": 1.5
+      }
+    },
+    "original": {
+      "districts": [
+        {
+          "id": "west",
+          "x": -10,
+          "y": 0,
+          "z": 0,
+          "width": 8,
+          "depth": 12
+        },
+        {
+          "id": "center",
+          "x": 0,
+          "y": 2,
+          "z": 0,
+          "width": 8,
+          "depth": 12
+        },
+        {
+          "id": "east",
+          "x": 10,
+          "y": 4,
+          "z": 0,
+          "width": 8,
+          "depth": 12
+        }
+      ],
+      "buildings": [
+        {
+          "id": "west-1",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": -4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-2",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": -4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-3",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": -2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-4",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": -2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-5",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": 0,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-6",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": 0,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-7",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": 2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-8",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": 2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-9",
+          "district": "west",
+          "kind": "block",
+          "x": -11.8,
+          "y": 0,
+          "z": 4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "west-10",
+          "district": "west",
+          "kind": "taper",
+          "x": -8.2,
+          "y": 0,
+          "z": 4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#b65749"
+        },
+        {
+          "id": "center-1",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": -4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-2",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": -4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-3",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": -2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-4",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": -2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-5",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": 0,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-6",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": 0,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-7",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": 2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-8",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": 2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-9",
+          "district": "center",
+          "kind": "taper",
+          "x": -1.8,
+          "y": 2,
+          "z": 4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "center-10",
+          "district": "center",
+          "kind": "block",
+          "x": 1.8,
+          "y": 2,
+          "z": 4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#4e7b9b"
+        },
+        {
+          "id": "east-1",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": -4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-2",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": -4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-3",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": -2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-4",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": -2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-5",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": 0,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-6",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": 0,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-7",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": 2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-8",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": 2.05,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.05,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-9",
+          "district": "east",
+          "kind": "block",
+          "x": 8.2,
+          "y": 4,
+          "z": 4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 2.6,
+          "affiliation": "#c0964b"
+        },
+        {
+          "id": "east-10",
+          "district": "east",
+          "kind": "taper",
+          "x": 11.8,
+          "y": 4,
+          "z": 4.1,
+          "width": 1.25,
+          "depth": 1.2,
+          "height": 1.5,
+          "affiliation": "#c0964b"
+        }
+      ],
+      "bridge": {
+        "from": [
+          4,
+          2,
+          0
+        ],
+        "to": [
+          6,
+          4,
+          0
+        ],
+        "width": 1.5
+      }
+    },
+    "target": "west-1",
+    "measurements": {
+      "a": {
+        "boxes": {
+          "west-1": [
+            [
+              -11.825000000000001,
+              0,
+              -6.699999999999999
+            ],
+            [
+              -10.575000000000001,
+              1.5,
+              -5.5
+            ]
+          ],
+          "west-2": [
+            [
+              -8.825,
+              0,
+              -6.699999999999999
+            ],
+            [
+              -7.574999999999999,
+              2.05,
+              -5.5
+            ]
+          ],
+          "west-3": [
+            [
+              -12.425,
+              0,
+              -4.6499999999999995
+            ],
+            [
+              -11.175,
+              2.6,
+              -3.4499999999999997
+            ]
+          ],
+          "west-4": [
+            [
+              -8.825,
+              0,
+              -4.6499999999999995
+            ],
+            [
+              -7.574999999999999,
+              1.5,
+              -3.4499999999999997
+            ]
+          ],
+          "west-5": [
+            [
+              -12.425,
+              0,
+              -2.6
+            ],
+            [
+              -11.175,
+              2.05,
+              -1.4
+            ]
+          ],
+          "west-6": [
+            [
+              -8.825,
+              0,
+              -2.6
+            ],
+            [
+              -7.574999999999999,
+              2.6,
+              -1.4
+            ]
+          ],
+          "west-7": [
+            [
+              -12.425,
+              0,
+              -0.5500000000000002
+            ],
+            [
+              -11.175,
+              1.5,
+              0.6499999999999998
+            ]
+          ],
+          "west-8": [
+            [
+              -8.825,
+              0,
+              -0.5500000000000002
+            ],
+            [
+              -7.574999999999999,
+              2.05,
+              0.6499999999999998
+            ]
+          ],
+          "west-9": [
+            [
+              -12.425,
+              0,
+              1.4999999999999996
+            ],
+            [
+              -11.175,
+              2.6,
+              2.6999999999999997
+            ]
+          ],
+          "west-10": [
+            [
+              -8.825,
+              0,
+              1.4999999999999996
+            ],
+            [
+              -7.574999999999999,
+              1.5,
+              2.6999999999999997
+            ]
+          ],
+          "center-1": [
+            [
+              -1.8250000000000002,
+              2,
+              -4.699999999999999
+            ],
+            [
+              -0.5750000000000002,
+              3.5,
+              -3.4999999999999996
+            ]
+          ],
+          "center-2": [
+            [
+              1.175,
+              2,
+              -4.699999999999999
+            ],
+            [
+              2.425,
+              4.05,
+              -3.4999999999999996
+            ]
+          ],
+          "center-3": [
+            [
+              -2.425,
+              2,
+              -2.65
+            ],
+            [
+              -1.175,
+              4.6,
+              -1.4499999999999997
+            ]
+          ],
+          "center-4": [
+            [
+              1.175,
+              2,
+              -2.65
+            ],
+            [
+              2.425,
+              3.5,
+              -1.4499999999999997
+            ]
+          ],
+          "center-5": [
+            [
+              -2.425,
+              2,
+              -0.6
+            ],
+            [
+              -1.175,
+              4.05,
+              0.6
+            ]
+          ],
+          "center-6": [
+            [
+              1.175,
+              2,
+              -0.6
+            ],
+            [
+              2.425,
+              4.6,
+              0.6
+            ]
+          ],
+          "center-7": [
+            [
+              -2.425,
+              2,
+              1.4499999999999997
+            ],
+            [
+              -1.175,
+              3.5,
+              2.65
+            ]
+          ],
+          "center-8": [
+            [
+              1.175,
+              2,
+              1.4499999999999997
+            ],
+            [
+              2.425,
+              4.05,
+              2.65
+            ]
+          ],
+          "center-9": [
+            [
+              -2.425,
+              2,
+              3.4999999999999996
+            ],
+            [
+              -1.175,
+              4.6,
+              4.699999999999999
+            ]
+          ],
+          "center-10": [
+            [
+              1.175,
+              2,
+              3.4999999999999996
+            ],
+            [
+              2.425,
+              3.5,
+              4.699999999999999
+            ]
+          ],
+          "east-1": [
+            [
+              8.174999999999999,
+              4,
+              -1.6999999999999997
+            ],
+            [
+              9.424999999999999,
+              5.5,
+              -0.49999999999999967
+            ]
+          ],
+          "east-2": [
+            [
+              11.175,
+              4,
+              -1.6999999999999997
+            ],
+            [
+              12.425,
+              6.05,
+              -0.49999999999999967
+            ]
+          ],
+          "east-3": [
+            [
+              7.574999999999999,
+              4,
+              0.3500000000000002
+            ],
+            [
+              8.825,
+              6.6,
+              1.5500000000000003
+            ]
+          ],
+          "east-4": [
+            [
+              11.175,
+              4,
+              0.3500000000000002
+            ],
+            [
+              12.425,
+              5.5,
+              1.5500000000000003
+            ]
+          ],
+          "east-5": [
+            [
+              7.574999999999999,
+              4,
+              2.4
+            ],
+            [
+              8.825,
+              6.05,
+              3.6
+            ]
+          ],
+          "east-6": [
+            [
+              11.175,
+              4,
+              2.4
+            ],
+            [
+              12.425,
+              6.6,
+              3.6
+            ]
+          ],
+          "east-7": [
+            [
+              7.574999999999999,
+              4,
+              4.45
+            ],
+            [
+              8.825,
+              5.5,
+              5.6499999999999995
+            ]
+          ],
+          "east-8": [
+            [
+              11.175,
+              4,
+              4.45
+            ],
+            [
+              12.425,
+              6.05,
+              5.6499999999999995
+            ]
+          ],
+          "east-9": [
+            [
+              7.574999999999999,
+              4,
+              6.5
+            ],
+            [
+              8.825,
+              6.6,
+              7.699999999999999
+            ]
+          ],
+          "east-10": [
+            [
+              11.175,
+              4,
+              6.5
+            ],
+            [
+              12.425,
+              5.5,
+              7.699999999999999
+            ]
+          ]
+        },
+        "ends": [
+          [
+            4,
+            2,
+            0
+          ],
+          [
+            6,
+            4,
+            3
+          ]
+        ],
+        "camera": {
+          "position": [
+            28.000000000000007,
+            32,
+            36.00000000000001
+          ],
+          "target": [
+            0,
+            1,
+            0
+          ],
+          "zoom": 1
+        }
+      },
+      "b": {
+        "boxes": {
+          "west-1": [
+            [
+              -11.825000000000001,
+              0,
+              -6.699999999999999
+            ],
+            [
+              -10.575000000000001,
+              1.5,
+              -5.5
+            ]
+          ],
+          "west-2": [
+            [
+              -8.825,
+              0,
+              -6.699999999999999
+            ],
+            [
+              -7.574999999999999,
+              2.05,
+              -5.5
+            ]
+          ],
+          "west-3": [
+            [
+              -12.425,
+              0,
+              -4.6499999999999995
+            ],
+            [
+              -11.175,
+              2.6,
+              -3.4499999999999997
+            ]
+          ],
+          "west-4": [
+            [
+              -8.825,
+              0,
+              -4.6499999999999995
+            ],
+            [
+              -7.574999999999999,
+              1.5,
+              -3.4499999999999997
+            ]
+          ],
+          "west-5": [
+            [
+              -12.425,
+              0,
+              -2.6
+            ],
+            [
+              -11.175,
+              2.05,
+              -1.4
+            ]
+          ],
+          "west-6": [
+            [
+              -8.825,
+              0,
+              -2.6
+            ],
+            [
+              -7.574999999999999,
+              2.6,
+              -1.4
+            ]
+          ],
+          "west-7": [
+            [
+              -12.425,
+              0,
+              -0.5500000000000002
+            ],
+            [
+              -11.175,
+              1.5,
+              0.6499999999999998
+            ]
+          ],
+          "west-8": [
+            [
+              -8.825,
+              0,
+              -0.5500000000000002
+            ],
+            [
+              -7.574999999999999,
+              2.05,
+              0.6499999999999998
+            ]
+          ],
+          "west-9": [
+            [
+              -12.425,
+              0,
+              1.4999999999999996
+            ],
+            [
+              -11.175,
+              2.6,
+              2.6999999999999997
+            ]
+          ],
+          "west-10": [
+            [
+              -8.825,
+              0,
+              1.4999999999999996
+            ],
+            [
+              -7.574999999999999,
+              1.5,
+              2.6999999999999997
+            ]
+          ],
+          "center-1": [
+            [
+              -1.8250000000000002,
+              2,
+              -4.699999999999999
+            ],
+            [
+              -0.5750000000000002,
+              3.5,
+              -3.4999999999999996
+            ]
+          ],
+          "center-2": [
+            [
+              1.175,
+              2,
+              -4.699999999999999
+            ],
+            [
+              2.425,
+              4.05,
+              -3.4999999999999996
+            ]
+          ],
+          "center-3": [
+            [
+              -2.425,
+              2,
+              -2.65
+            ],
+            [
+              -1.175,
+              4.6,
+              -1.4499999999999997
+            ]
+          ],
+          "center-4": [
+            [
+              1.175,
+              2,
+              -2.65
+            ],
+            [
+              2.425,
+              3.5,
+              -1.4499999999999997
+            ]
+          ],
+          "center-5": [
+            [
+              -2.425,
+              2,
+              -0.6
+            ],
+            [
+              -1.175,
+              4.05,
+              0.6
+            ]
+          ],
+          "center-6": [
+            [
+              1.175,
+              2,
+              -0.6
+            ],
+            [
+              2.425,
+              4.6,
+              0.6
+            ]
+          ],
+          "center-7": [
+            [
+              -2.425,
+              2,
+              1.4499999999999997
+            ],
+            [
+              -1.175,
+              3.5,
+              2.65
+            ]
+          ],
+          "center-8": [
+            [
+              1.175,
+              2,
+              1.4499999999999997
+            ],
+            [
+              2.425,
+              4.05,
+              2.65
+            ]
+          ],
+          "center-9": [
+            [
+              -2.425,
+              2,
+              3.4999999999999996
+            ],
+            [
+              -1.175,
+              4.6,
+              4.699999999999999
+            ]
+          ],
+          "center-10": [
+            [
+              1.175,
+              2,
+              3.4999999999999996
+            ],
+            [
+              2.425,
+              3.5,
+              4.699999999999999
+            ]
+          ],
+          "east-1": [
+            [
+              8.174999999999999,
+              4,
+              -1.6999999999999997
+            ],
+            [
+              9.424999999999999,
+              5.5,
+              -0.49999999999999967
+            ]
+          ],
+          "east-2": [
+            [
+              11.175,
+              4,
+              -1.6999999999999997
+            ],
+            [
+              12.425,
+              6.05,
+              -0.49999999999999967
+            ]
+          ],
+          "east-3": [
+            [
+              7.574999999999999,
+              4,
+              0.3500000000000002
+            ],
+            [
+              8.825,
+              6.6,
+              1.5500000000000003
+            ]
+          ],
+          "east-4": [
+            [
+              11.175,
+              4,
+              0.3500000000000002
+            ],
+            [
+              12.425,
+              5.5,
+              1.5500000000000003
+            ]
+          ],
+          "east-5": [
+            [
+              7.574999999999999,
+              4,
+              2.4
+            ],
+            [
+              8.825,
+              6.05,
+              3.6
+            ]
+          ],
+          "east-6": [
+            [
+              11.175,
+              4,
+              2.4
+            ],
+            [
+              12.425,
+              6.6,
+              3.6
+            ]
+          ],
+          "east-7": [
+            [
+              7.574999999999999,
+              4,
+              4.45
+            ],
+            [
+              8.825,
+              5.5,
+              5.6499999999999995
+            ]
+          ],
+          "east-8": [
+            [
+              11.175,
+              4,
+              4.45
+            ],
+            [
+              12.425,
+              6.05,
+              5.6499999999999995
+            ]
+          ],
+          "east-9": [
+            [
+              7.574999999999999,
+              4,
+              6.5
+            ],
+            [
+              8.825,
+              6.6,
+              7.699999999999999
+            ]
+          ],
+          "east-10": [
+            [
+              11.175,
+              4,
+              6.5
+            ],
+            [
+              12.425,
+              5.5,
+              7.699999999999999
+            ]
+          ]
+        },
+        "ends": [
+          [
+            4,
+            2,
+            0
+          ],
+          [
+            6,
+            4,
+            3
+          ]
+        ],
+        "camera": {
+          "position": [
+            28.000000000000007,
+            32,
+            36.00000000000001
+          ],
+          "target": [
+            0,
+            1,
+            0
+          ],
+          "zoom": 1
+        }
+      }
+    },
+    "failures": [],
+    "setCityMs": 9.5,
+    "changed": {
+      "target": {
+        "id": "west-1",
+        "district": "west",
+        "kind": "block",
+        "x": -11.200000000000001,
+        "y": 0,
+        "z": -6.1,
+        "width": 1.25,
+        "depth": 1.2,
+        "height": 2.7,
+        "affiliation": "#ee3377"
+      },
+      "failures": [],
+      "updateMs": 0.5999999046325684
+    }
+  },
+  "finished": "2026-11-20T02:17:04.758Z"
+}

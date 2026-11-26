@@ -1,0 +1,32 @@
+{
+  "started": "2026-11-20T01:48:01.277Z",
+  "finished": "2026-11-20T01:48:05.791Z",
+  "runs": [
+    {
+      "input": "5af8b6d45974d1ebfc45da153f9a09d662d84b9f3b1745daa5093c1a62d44eec",
+      "a": "b3f6299f8d5e1e629a59554a45b51d3119f5f3eea38c302cfd7d68e2d58f97e6",
+      "b": "b5146a5c298fb37c4a8580193b770e3cb15e556055606562aa9b60f633f8d69c",
+      "counts": {
+        "a": 68,
+        "b": 38
+      }
+    },
+    {
+      "input": "5af8b6d45974d1ebfc45da153f9a09d662d84b9f3b1745daa5093c1a62d44eec",
+      "a": "b3f6299f8d5e1e629a59554a45b51d3119f5f3eea38c302cfd7d68e2d58f97e6",
+      "b": "b5146a5c298fb37c4a8580193b770e3cb15e556055606562aa9b60f633f8d69c",
+      "counts": {
+        "a": 68,
+        "b": 38
+      }
+    },
+    {
+      "errors": [],
+      "sceneCounts": {
+        "a": 68,
+        "b": 38
+      }
+    }
+  ],
+  "errors": []
+}
