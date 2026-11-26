@@ -5,6 +5,7 @@ import type { EventLogEntry, DecisionTrace } from '../../../../src/simulation/co
 import { PLAY_DEFAULT_MODE, playConfigId, playModifierId } from '../../../../src/ui/branch-play-source.ts'
 import type { PlayView } from '../../../../src/ui/branch-play-source.ts'
 import { pendingExperimentalRun } from '../../../../src/ui/timeline-source.ts'
+import { comparisonHistoryAt, investigationForIntervention, investigationFromLink } from '../../../../src/ui/desk/comparison/investigation.ts'
 import { comparisonAt, DeskComparison } from '../../../../src/ui/desk/comparison/DeskComparison.tsx'
 
 // 計算を実行しないDTO fixture。実履歴・ゲーム結果ではない。
@@ -32,10 +33,10 @@ it('実参照境界の比較を使い枝ごとのEventとEventのない判断を
   render(<DeskComparison view={view} pair="A0_A1" year={1250} target={context.target} context={context} onReturn={onReturn} onEvidence={onEvidence}/>)
   const before = within(screen.getByRole('region', { name: 'A0の記録' }))
   const after = within(screen.getByRole('region', { name: 'A1の記録' }))
-  expect(before.queryByRole('button', { name: /event-1/ })).toBeNull()
-  fireEvent.click(after.getByRole('button', { name: /event-1/ }))
+  expect(before.queryByTestId('comparison-event-event-1')).toBeNull()
+  fireEvent.click(after.getByTestId('comparison-event-event-1'))
   expect(onEvidence.mock.calls[0]![0]).toMatchObject({ history: { ref: { year: 1250, origin: { branch: 'A1' } } }, kind: 'event', id: 'event-1' })
-  fireEvent.click(after.getByRole('button', { name: /trace-1/ }))
+  fireEvent.click(after.getByTestId('comparison-trace-trace-1'))
   expect(onEvidence.mock.calls[1]![0]).toMatchObject({ kind: 'trace', id: 'trace-1' })
   fireEvent.click(screen.getByRole('button', { name: '元の調査へ戻る' }))
   expect(onReturn).toHaveBeenCalledWith(context)
@@ -56,12 +57,17 @@ it('A1→A2の元比較の省略範囲を根拠へ渡し、未記録を他枝か
   render(<DeskComparison view={view} pair="A1_A2" year={1250} context={{ history: comparison.before }} onReturn={() => {}} onEvidence={onEvidence}/>)
   const before = within(screen.getByRole('region', { name: 'A1の記録' }))
   const after = within(screen.getByRole('region', { name: 'A2の記録' }))
-  fireEvent.click(before.getByRole('button', { name: /event-1/ }))
+  fireEvent.click(before.getByTestId('comparison-event-event-1'))
   const request = onEvidence.mock.calls[0]![0]
   expect(request.history.ref.origin.branch).toBe('A1')
   expect(request.history.records.coverage.kind).toBe('TRANSFER_OMISSION')
+  const fromSecond = comparisonHistoryAt({ view, pair: 'A1_A2' }, request.history.ref)
+  const fromFirst = comparisonHistoryAt({ view, pair: 'A0_A1' }, request.history.ref)
+  expect(fromSecond?.records).toMatchObject({ coverage: { kind: 'TRANSFER_OMISSION' } })
+  expect(fromFirst?.records).toMatchObject({ coverage: { kind: 'COMPLETE' } })
+  expect(comparisonHistoryAt({ view, pair: 'A1_A2' }, comparisonAt(view, 'A0_A1', 1250)!.before.ref)).toBeUndefined()
   expect(request.history.event('missing', 'FIXTURE').kind).toBe('POSSIBLY_OMITTED')
-  expect(after.queryByRole('button', { name: /event-1/ })).toBeNull()
+  expect(after.queryByTestId('comparison-event-event-1')).toBeNull()
   expect(comparison.after.event('event-1', 'FIXTURE').kind).toBe('POSSIBLY_OMITTED')
 })
 
@@ -90,7 +96,7 @@ it('対象外の差を含めず、対象の年初実値と介入年・観測年�
   expect(screen.getByText(/対象年初状態: 実値に差あり/)).toBeTruthy()
   expect(screen.getByText(/介入年 1250年／観測年 1250年/)).toBeTruthy()
   expect(within(screen.getByRole('region', { name: '記録差分' })).getByText(/Event 0件／判断Trace 0件/)).toBeTruthy()
-  expect(screen.getByText(/状態差fixture/)).toBeTruthy()
+  expect(screen.getByRole('region', { name: 'A1の記録' }).textContent).toContain('状態差fixture')
 })
 
 it('対応不明の判断は両枝を並べ、恣意的に対応させない', () => {
@@ -103,8 +109,8 @@ it('対応不明の判断は両枝を並べ、恣意的に対応させない', (
   render(<DeskComparison view={view} pair="A0_A1" year={1250} context={{ history: comparison.before }} onReturn={() => {}} onEvidence={() => {}}/>)
   const changes = within(screen.getByRole('region', { name: '記録差分' }))
   expect(changes.getByText(/AMBIGUOUS（対応不明）/)).toBeTruthy()
-  expect(changes.getByText('A0: DEFER・before-1')).toBeTruthy()
-  expect(changes.getByText('A1: DEFER・after-2')).toBeTruthy()
+  expect(changes.getByTestId('comparison-trace-before-1')).toBeTruthy()
+  expect(changes.getByTestId('comparison-trace-after-2')).toBeTruthy()
 })
 
 it('片枝のEvent欠落で見かけの判断差が生じる場合も対応・内容差を暫定と明示する', () => {
@@ -145,5 +151,43 @@ it('停止・省略・存在不明を空の確定履歴としない', () => {
   const halted: PlayView = { ...original, a0: { ...original.a0, result: { ...original.a0.result, status: 'HALTED', snapshots: [original.a0.initialWorld], halt: { year: 1250 } as NonNullable<PlayView['a0']['result']['halt']> } } }
   render(<DeskComparison view={halted} pair="A0_A1" year={1250} context={{ history: comparison.before }} onReturn={() => {}} onEvidence={() => {}}/>)
   expect(screen.getByText(/差分は表示できません/)).toBeTruthy()
-  expect(screen.getByText('年内記録: HALTED')).toBeTruthy()
+  expect(screen.getByText('年内記録: 計算停止（HALTED）')).toBeTruthy()
+})
+
+it('調査リンクは元の HistoryYear を保持し、同じIDでも異なる枝の根拠を補わない', () => {
+  const { before, after } = comparisonAt(fixture(), 'A0_A1', 1250)!
+  const request = { ref: after.ref, source: { kind: 'person', id: 'a' }, target: { kind: 'trace', id: 'trace-1' } } as const
+  expect(investigationFromLink(after, request)?.history).toBe(after)
+  expect(investigationFromLink(before, request)).toBeUndefined()
+  expect(investigationFromLink(before, { ...request, ref: before.ref })).toBeUndefined()
+})
+
+it('同じ人物・年でも、選んだペアと異なる根拠や曖昧な根拠は復帰に使わない', () => {
+  const original = fixture()
+  const trace = original.a1.result.decisionTraces[0]!
+  const traces = [
+    { ...trace, traceId: 'ab', actorRef: { kind: 'PERSON_PAIR', ids: ['a', 'b'] } } satisfies DecisionTrace,
+    { ...trace, traceId: 'ac', actorRef: { kind: 'PERSON_PAIR', ids: ['a', 'c'] } } satisfies DecisionTrace,
+  ]
+  const view = { ...original, a1: { ...original.a1, result: { ...original.a1.result, decisionTraces: traces } } }
+  const history = comparisonAt(view, 'A0_A1', 1250)!.after
+  const contexts = traces.map(t => ({ history, target: { kind: 'person', id: 'a' }, evidence: { kind: 'trace', id: t.traceId } }) as const)
+  expect(investigationForIntervention(history, contexts, 'a', 'b').evidence?.id).toBe('ab')
+  expect(investigationForIntervention(history, contexts, 'a', 'c').evidence?.id).toBe('ac')
+  expect(investigationForIntervention(history, contexts, 'a', 'd').evidence).toBeUndefined()
+  expect(investigationForIntervention(history, contexts, 'a').evidence).toBeUndefined()
+})
+
+it('同じ保持者の表示名だけが変わっても称号の年初状態に差を作らない', () => {
+  const original = fixture()
+  const title = original.a0.initialWorld.titles.find(t => t.holder.status === 'HELD')!
+  if (title.holder.status !== 'HELD') throw new Error('fixture の保持者が未確定')
+  const holderId = title.holder.personId
+  const changedWorld = { ...original.a1.initialWorld, persons: original.a1.initialWorld.persons
+    .map(p => p.personId === holderId ? { ...p, name: '表示名のみ変更' } : p) }
+  const view = { ...original, a1: { ...original.a1, result: { ...original.a1.result,
+    snapshots: [changedWorld, ...original.a1.result.snapshots.slice(1)] } } }
+  const history = comparisonAt(view, 'A0_A1', 1250)!.before
+  render(<DeskComparison view={view} pair="A0_A1" year={1250} target={{ kind: 'title', id: title.titleId }} context={{ history }} onReturn={() => {}} onEvidence={() => {}}/>)
+  expect(screen.getByText(/対象年初状態: 実値に差なし/)).toBeTruthy()
 })

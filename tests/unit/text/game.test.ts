@@ -45,6 +45,13 @@ describe('プレイヤー用テキストI/Oと明示的デバッグの境界（�
     expect(JSON.stringify(r.data)).not.toContain('technicalGoal')
   })
 
+  it.each([1250,1350])('未計算のA0を境界年 %i から観測できる',year=>{
+    const s=new TextGameSession(1,'FIXED_APPROVAL')
+    const r=s.observe(year)
+    expect(r).toMatchObject({ok:true,channel:'PLAYER',data:{branch:'A0',year}})
+    expect(r).toEqual(playerObservation(a0,year,'A0'))
+  })
+
   it('A1作成後の観測はA1の実Eventを返し、A0とA1が混ざらない',()=>{
     const s=new TextGameSession(1,'FIXED_APPROVAL')
     expect(s.intervene(INTERVENTION)).toMatchObject({ok:true,channel:'PLAYER',action:'intervene'})

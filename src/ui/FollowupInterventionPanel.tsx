@@ -11,6 +11,7 @@ type Props=Readonly<{
   busy:boolean
   onRun:(input:PlayInput)=>void
   onViewA2:()=>void
+  onDeskCompare?:()=>void
 }>
 
 const trialGoal=(view:PlayView['a0']):string=>{
@@ -18,12 +19,12 @@ const trialGoal=(view:PlayView['a0']):string=>{
   return status==='ACHIEVED'?'ACHIEVED（技術検証）':status==='NOT_ACHIEVED'?'NOT_ACHIEVED（技術検証）':status??'NOT_EVALUATED'
 }
 
-export function FollowupInterventionPanel({comparison,year,activeBranch,busy,onRun,onViewA2}:Props){
+export function FollowupInterventionPanel({comparison,year,activeBranch,busy,onRun,onViewA2,onDeskCompare}:Props){
   const initial=comparison.input
   const [firstId,setFirstId]=useState('')
   const [secondId,setSecondId]=useState('')
-  const [deltaText,setDeltaText]=useState('-200')
-  const [durationText,setDurationText]=useState('60')
+  const [deltaText,setDeltaText]=useState(onDeskCompare ? '' : '-200')
+  const [durationText,setDurationText]=useState(onDeskCompare ? '1' : '60')
   // A1の実年初snapshotから対象を選ぶ。A0の未来・A2でだけ生まれた人物は混ぜない。
   const candidates=useMemo(()=>candidatesAtYear(
     extractCandidates(initial.seed,comparison.mode,comparison.a1.result.snapshots),initial.year
@@ -37,7 +38,7 @@ export function FollowupInterventionPanel({comparison,year,activeBranch,busy,onR
     /^-?\d+$/.test(deltaText)&&Number.isSafeInteger(delta)&&delta!==0&&Math.abs(delta)<=200&&
     /^\d+$/.test(durationText)&&Number.isSafeInteger(duration)&&duration>0&&initial.year+duration<=1350
   const result=comparison.second
-  const diff=result?compareYear(result,year):undefined
+  const diff=result&&!onDeskCompare?compareYear(result,year):undefined
   const central=result?.a1.result.technicalGoal?.status==='ACHIEVED'
     ?result.a1.result.technicalGoal.assessments.find(x=>x.titleId==='title-exp-central')
     :result?.a1.result.technicalGoal?.status==='NOT_ACHIEVED'
@@ -46,8 +47,8 @@ export function FollowupInterventionPanel({comparison,year,activeBranch,busy,onR
   return <section className="panel" data-testid="a2-panel" aria-labelledby="a2-heading">
     <h3 id="a2-heading">第2介入：A1からA2を作る（試験版）</h3>
     <p className="note" data-testid="a2-parent">
-      第1介入は{initial.year}年の{initial.firstPersonId.length>22?'人物ID長文':initial.firstPersonId}と
-      {initial.secondPersonId.length>22?'人物ID長文':initial.secondPersonId}の信頼{initial.signedDelta>0?'+':''}{initial.signedDelta}・
+      第1介入は{initial.year}年の{candidates.find(person => person.id === initial.firstPersonId)?.name ?? '名前未確認の人物'}と
+      {candidates.find(person => person.id === initial.secondPersonId)?.name ?? '名前未確認の人物'}の信頼{initial.signedDelta>0?'+':''}{initial.signedDelta}・
       {initial.durationYears}年間。この介入を保持し、同年の別の2人に追加します。
       1250年以前の出来事や法的権利を直接変更しません。
     </p>
@@ -82,6 +83,7 @@ export function FollowupInterventionPanel({comparison,year,activeBranch,busy,onR
       {firstId&&secondId&&!anotherPair&&<p className="missing" data-testid="a2-duplicate">同年・同じ人物ペアへの重複介入はできません。</p>}
       <p className="note">同じ{initial.year}年のA1実WorldStateが対象です。別の年への再介入・A3以降はこの試験UIではまだ扱いません。</p>
     </form>
+    {result && onDeskCompare && <p><button type="button" disabled={busy} onClick={onDeskCompare}>A1とA2の比較を開く</button></p>}
     {result&&diff&&<div data-testid="a2-results">
       <h4>A1とA2の実差分（{year}年）</h4>
       <p data-testid="a2-goal-summary">

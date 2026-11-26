@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test'
 
+type ResponseControl = { next?: 'hold' | 'branch' | 'identity'; release?: () => void }
+declare global { interface Window { deskResponseTest: ResponseControl } }
+
+test.use({ actionTimeout: 15_000 })
+
 // 通常入口と既定 v0 の実 A0 を使う。時間のかかる試験なので明示指定時のみ有効。
 test('編纂机で実 A0 の重大事件を開き、同期した年代記・世界図を再生・停止する', async ({ page }, testInfo) => {
   test.skip(process.env.CHRONOFORK_E2E_DESK !== '1', 'CHRONOFORK_E2E_DESK=1 で既定 v0 の100年を実計算する')
@@ -16,6 +21,28 @@ test('編纂机で実 A0 の重大事件を開き、同期した年代記・世�
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.setViewportSize({ width: 1280, height: 900 })
+  // 実 Worker の応答を使う。否定試験でのみ配送を遅らせるか、来歴を一項目だけ変える。
+  await page.addInitScript(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(Worker.prototype, 'onmessage')!
+    const control: ResponseControl = window.deskResponseTest = {}
+    Object.defineProperty(Worker.prototype, 'onmessage', {
+      ...descriptor,
+      set(this: Worker, handler: Worker['onmessage']) {
+        descriptor.set!.call(this, !handler ? null : (event: MessageEvent) => {
+          const payload = event.data
+          if (!control.next || !payload?.ok || !payload.observation) return handler.call(this, event)
+          const action = control.next
+          control.next = undefined
+          if (action === 'hold') {
+            control.release = () => { delete control.release; handler.call(this, event) }
+          } else {
+            const wrong = action === 'branch' ? { branchId: 'A1-play' } : { configIdentity: '別の完全構成' }
+            handler.call(this, new MessageEvent('message', { data: { ...payload, observation: { ...payload.observation, ...wrong } } }))
+          }
+        })
+      },
+    })
+  })
   await page.goto('/')
   await expect(get('obs-intro')).toBeVisible()
   await expect(get('obs-seed-input')).toHaveValue('20260101')
@@ -54,6 +81,31 @@ test('編纂机で実 A0 の重大事件を開き、同期した年代記・世�
   await get('obs-event-list').getByRole('button').first().click()
   await expect(get('obs-event-detail')).toBeVisible()
   await expect(get('region-map')).toBeVisible()
+  const dialogs = page.getByRole('dialog')
+  const close = async () => { await dialogs.last().getByRole('button', { name: '資料を閉じる' }).press('Escape') }
+  const event = page.getByRole('dialog', { name: /^Event / })
+  await expect(event).toContainText('年内の出来事：')
+  await event.getByTestId(/^document-link-trace-/).first().click()
+  const trace = page.getByRole('dialog', { name: /^Trace / })
+  await expect(trace).toContainText('記録された判断：')
+  await expect(trace).toContainText('参照元: Event')
+  await expect(dialogs).toHaveCount(2)
+  const move = event.getByRole('button', { name: '資料を移動' })
+  // 被さっている窓もキーボードで前面化でき、その後ポインターで移動できる。
+  await move.focus()
+  expect(Number(await event.evaluate(el => getComputedStyle(el).zIndex))).toBeGreaterThan(Number(await trace.evaluate(el => getComputedStyle(el).zIndex)))
+  const position = await move.boundingBox()
+  const x = position!.x + position!.width / 2
+  const y = position!.y + position!.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + 460, y + 15, { steps: 8 })
+  await page.mouse.up()
+  const left = (await event.boundingBox())!.x
+  expect(left).toBeGreaterThan(300)
+  expect(Number(await event.evaluate(el => getComputedStyle(el).zIndex))).toBeGreaterThan(Number(await trace.evaluate(el => getComputedStyle(el).zIndex)))
+  await move.press('ArrowRight')
+  expect((await event.boundingBox())!.x).toBe(left + 20)
 
   for (const width of [1280, 960]) {
     await page.setViewportSize({ width, height: 900 })
@@ -68,6 +120,95 @@ test('編纂机で実 A0 の重大事件を開き、同期した年代記・世�
     await page.evaluate(() => window.scrollTo(0, 0))
     await page.screenshot({ path: testInfo.outputPath(`desk-${width}.png`) })
   }
+
+  await close()
+  await close()
+  await expect(dialogs).toHaveCount(0)
+
+  await get('region-node-region-eldia-central').click()
+  const region = page.getByRole('dialog', { name: /^地域 / })
+  await expect(region).toContainText('上位主権：')
+  await region.getByTestId(/^document-link-group-/).first().click()
+  await expect(page.getByRole('dialog', { name: /^集団 / })).toContainText('人口：')
+  await close()
+  await region.getByTestId(/^document-link-country-/).click()
+  await expect(page.getByRole('dialog', { name: /^国家 / })).toContainText('統治者：')
+  await close()
+  await close()
+
+  await get('obs-title-select').selectOption('title-exp-west')
+  await page.getByRole('button', { name: '称号の資料を開く' }).click()
+  await expect(page.getByRole('dialog', { name: '称号 title-exp-west' })).toContainText('年初の保持者：')
+  await close()
+  await seek.press('Home')
+  await atYear(1250)
+  await get('obs-person').selectOption('person-exp-03')
+  await page.getByRole('button', { name: '人物の資料を開く' }).click()
+  const person = page.getByRole('dialog', { name: '人物 person-exp-03' })
+  await person.getByRole('button', { name: '家系を開く' }).click()
+  const family = page.getByRole('dialog', { name: '家系 person-exp-03' })
+  await expect(family.getByTestId('family-house')).not.toBeEmpty()
+  await expect(family).toContainText('参照元: 人物')
+  const relatedPerson = family.getByTestId(/^family-node-/).filter({ has: page.locator('.ft-name') }).and(family.getByRole('button')).first()
+  if (await relatedPerson.count()) {
+    await relatedPerson.click()
+    await expect(dialogs.last()).toContainText('参照元: 家系')
+    await close()
+  }
+  await close()
+
+  const allEventsBeforeFilter = await get('obs-all-events').isChecked()
+  const beforeFilter = await get('obs-event-count').innerText()
+  await person.getByRole('button', { name: '年表で絞り込む' }).click()
+  await expect(get('obs-document-filter')).toContainText('絞り込み中')
+  expect((await get('obs-event-count').innerText()).match(/確定Event (\d+)/)?.[1]).toBe(beforeFilter.match(/確定Event (\d+)/)?.[1])
+  await expect(get('obs-event-type')).toBeDisabled()
+  const movePerson = person.getByRole('button', { name: '資料を移動' })
+  for (let i = 0; i < 25; i++) await movePerson.press('ArrowRight')
+  await person.getByRole('button', { name: 'この人物と年から介入を検討する' }).click()
+  const intervention = page.getByRole('dialog', { name: '介入', exact: true })
+  await expect(intervention.getByTestId('branch-person-one')).toHaveValue('person-exp-03')
+  await expect(intervention.getByTestId('branch-fork-year')).toHaveValue('1250')
+  await expect(intervention.getByRole('button', { name: '同じ年の歴史を比較', exact: true })).toHaveCount(0)
+  await expect(get('legacy-workspace')).not.toHaveAttribute('open', '')
+  await page.screenshot({ path: testInfo.outputPath('desk-intervention.png') })
+  await intervention.getByRole('button', { name: '介入を閉じる', exact: true }).press('Escape')
+  await expect(intervention).toHaveCount(0)
+
+  // 元の人物窓は指定年に固定したまま、別年の実記録を開く。
+  await page.evaluate(() => { window.deskResponseTest.next = 'hold' })
+  const targetYear = 1251
+  const partnerName = (await get('obs-person').locator('option[value="person-exp-04"]').innerText()).split('（')[0]!.split('・')[0]!
+  const partner = person.getByTestId('history-partner').filter({ has: page.locator('summary').filter({ hasText: partnerName }) })
+  await partner.locator('> summary').click()
+  await partner.locator('li').filter({ hasText: 'B-005' }).getByTestId('history-open-trace')
+    .filter({ hasText: `${targetYear}年の判断記録を開く` }).click()
+  await expect(trace).toContainText('未取得')
+  await expect(trace.getByTestId('document-reference')).toContainText(`${targetYear}年`)
+  await expect.poll(() => page.evaluate(() => !!window.deskResponseTest.release)).toBe(true)
+  await seek.press('Home')
+  await page.evaluate(() => window.deskResponseTest.release?.())
+  await atYear(1250)
+  await expect(trace).toContainText('未取得')
+  await expect(trace).not.toContainText('記録された判断：')
+  for (const next of ['branch', 'identity'] as const) {
+    await page.evaluate(value => { window.deskResponseTest.next = value }, next)
+    await trace.getByRole('button', { name: 'この参照へ移動' }).click()
+    await expect(get('obs-error')).toContainText('OBSERVATION_IDENTITY_MISMATCH')
+    await atYear(1250)
+    await expect(trace).toContainText('未取得')
+  }
+  await trace.getByRole('button', { name: 'この参照へ移動' }).click()
+  await atYear(targetYear)
+  await expect(trace).toContainText('記録された判断：')
+  await expect(trace).toContainText('参照元: 人物')
+  await expect(person.getByTestId('document-reference')).toContainText('1250年')
+  await expect(person.getByTestId('person-history')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('desk-cross-year.png') })
+  await close()
+  await close()
+  await get('obs-document-filter').getByRole('button', { name: '資料の絞り込みを解除' }).click()
+  expect(await get('obs-all-events').isChecked()).toBe(allEventsBeforeFilter)
 
   // 既定 v0 の実ログに土地称号の移転がある年。1350年には年内Eventがない。
   await page.getByText('すべての年の記録件数を見る（Event・Trace）', { exact: true }).click()

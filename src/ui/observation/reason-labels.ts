@@ -1,5 +1,18 @@
 // 実DecisionTraceに記録された理由コードの日本語表示。コードの意味づけだけで、規則・原因は新設しない。
 // 辞書にないコードは「未分類」とし、元のコードは技術詳細に残す（推測で説明を作らない）。
+import type { GoalFailureCode } from '../../simulation/goal.ts'
+
+const GOAL_REASON: Readonly<Record<GoalFailureCode, string>> = {
+  NOT_TERRITORIAL: '土地の称号ではない', TITLE_INVALID: '称号が無効', TITLE_NOT_HEREDITARY: '世襲できない称号',
+  TITLE_NOT_RECOGNIZED: '称号の承認が不足', REQUIRES_RECOGNITION: '現在の主権による承認が必要',
+  HOLDER_UNDETERMINED: '保持者が未確定', HOLDER_NOT_FOUND: '保持者の人物記録がない',
+  HOLDER_DEAD: '保持者が死亡している', DYNASTY_UNDETERMINED: '法的王朝所属が未確定',
+  DYNASTY_MISMATCH: '保持者の法的王朝が対象と異なる', REGION_NOT_FOUND: '対象の地域記録がない',
+  NO_CONTROL: '直接支配または有効な統治委任がない',
+}
+
+export const goalFailureText = (codes: readonly GoalFailureCode[]) =>
+  codes.map(code => GOAL_REASON[code] ?? '未分類の不足条件').join('、') || '理由の記録なし'
 
 /** 通常表示には出さない技術区分コード。 */
 const TECHNICAL_ONLY: ReadonlySet<string> = new Set([

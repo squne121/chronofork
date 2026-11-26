@@ -1,5 +1,6 @@
 // 人間のGUIとAI向けCLIが、同じ実シミュレーションを閲覧・操作するためのテキスト境界。
 // 試験専用の勝敗や歴史を作らず、現行GUIのA0/A1試験実行入口を共有する。
+import { GOAL_YEAR, START_YEAR } from '../simulation/contracts/index.ts'
 import type { WorldState } from '../simulation/contracts/index.ts'
 import type { TimelineRun } from '../ui/timeline-source.ts'
 import {
@@ -13,7 +14,9 @@ export type TextResult =
 export type InspectKind = 'person' | 'region' | 'group' | 'title' | 'event' | 'trace'
 
 const success=(channel:'PLAYER'|'DEBUG',action:string,data:unknown):TextResult=>({ok:true,channel,action,data})
-const fail=(code:string,message:string):TextResult=>({ok:false,code,message})
+const fail=(code:string,message:string):Extract<TextResult,{ok:false}>=>({ok:false,code,message})
+const PLAYER_YEAR_UNAVAILABLE='この歴史に指定年の計算済み状態はありません'
+const DEBUG_YEAR_UNAVAILABLE='指定年の状態を参照できません'
 
 /** UI閲覧と同じWorldStateを読み取る。帳簿・試験係数・乱数値はPLAYER出力に含めない。 */
 export function summarizeWorld(w:WorldState){
@@ -45,7 +48,7 @@ export function summarizeWorld(w:WorldState){
 
 export function playerObservation(run:TimelineRun,year:number,branch:BranchChoice):TextResult{
   const world=run.result.snapshots.find(w=>w.year===year)
-  if(!world)return fail('YEAR_UNAVAILABLE','この歴史に指定年の計算済み状態はありません')
+  if(!world)return fail('YEAR_UNAVAILABLE',PLAYER_YEAR_UNAVAILABLE)
   const events=run.result.eventLog.filter(e=>e.year===year).map(e=>({
     eventId:e.eventId,eventType:e.eventType,year:e.year,
     involvedRefs:e.involvedRefs,sourceTraceIds:e.sourceTraceIds,
@@ -62,7 +65,7 @@ export function playerObservation(run:TimelineRun,year:number,branch:BranchChoic
 /** デバッグ情報をプレイヤー出力から分離する。必ず明示的なdebug操作を要求。 */
 export function debugObservation(run:TimelineRun,year:number,ruleId?:string):TextResult{
   const world=run.result.snapshots.find(w=>w.year===year)
-  if(!world)return fail('YEAR_UNAVAILABLE','指定年の状態を参照できません')
+  if(!world)return fail('YEAR_UNAVAILABLE',DEBUG_YEAR_UNAVAILABLE)
   const traces=run.result.decisionTraces.filter(t=>t.year===year&&(!ruleId||t.ruleId===ruleId))
   const traceIds=new Set(traces.map(t=>t.traceId))
   const events=run.result.eventLog.filter(e=>e.year===year&&
@@ -86,7 +89,7 @@ export class TextGameSession {
     this.mode=mode
   }
 
-  private select(branch:BranchChoice):{ok:true;run:TimelineRun}|{ok:false;code:string;message:string}{
+  private select(branch:BranchChoice,year:number,yearUnavailable=PLAYER_YEAR_UNAVAILABLE):{ok:true;run:TimelineRun}|Extract<TextResult,{ok:false}>{
     // 型を迂回した呼び出しでもA0へ黙って落とさない。
     if(branch!=='A0'&&branch!=='A1')return {ok:false,code:'INVALID_BRANCH',message:'branchはA0またはA1のみです'}
     if(branch==='A1'){
@@ -95,6 +98,8 @@ export class TextGameSession {
     }
     if(this.comparison)return {ok:true,run:this.comparison.a0}
     if(this.baseline)return {ok:true,run:this.baseline}
+    if(!Number.isSafeInteger(year)||year<START_YEAR||year>GOAL_YEAR)
+      return fail('YEAR_UNAVAILABLE',yearUnavailable)
     const base=runPlayBaseline(this.seed,this.mode)
     if(!base.ok)return base
     this.baseline=base.a0
@@ -102,16 +107,16 @@ export class TextGameSession {
   }
 
   observe(year:number,branch:BranchChoice='A0'):TextResult{
-    const selected=this.select(branch)
+    const selected=this.select(branch,year)
     return selected.ok?playerObservation(selected.run,year,branch):selected
   }
 
   inspect(kind:InspectKind,id:string,year:number,branch:BranchChoice='A0'):TextResult{
-    const selected=this.select(branch)
+    const selected=this.select(branch,year)
     if(!selected.ok)return selected
     const run=selected.run
     const w=run.result.snapshots.find(s=>s.year===year)
-    if(!w)return fail('YEAR_UNAVAILABLE','この歴史に指定年の計算済み状態はありません')
+    if(!w)return fail('YEAR_UNAVAILABLE',PLAYER_YEAR_UNAVAILABLE)
     const item=kind==='person'?w.persons.find(p=>p.personId===id)
       :kind==='region'?w.regions.find(r=>r.regionId===id)
       :kind==='group'?w.groups.find(g=>g.groupId===id)
@@ -201,7 +206,7 @@ export class TextGameSession {
   }
 
   debug(year:number,branch:BranchChoice='A0',ruleId?:string):TextResult{
-    const selected=this.select(branch)
+    const selected=this.select(branch,year,DEBUG_YEAR_UNAVAILABLE)
     return selected.ok?debugObservation(selected.run,year,ruleId):selected
   }
 }

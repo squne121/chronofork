@@ -1,7 +1,8 @@
 // 統合モード(INTEGRATED_EXPERIMENTAL)のうち、100年計算を伴わない受理・拒否の高速検証。
 // 実計算を伴う検証は integrated-mode-long.test.ts（オプトイン）。
 import {spawnSync} from 'node:child_process'
-import {describe,expect,it} from 'vitest'
+import {describe,expect,it,vi} from 'vitest'
+import * as branchPlaySource from '../../../src/ui/branch-play-source.ts'
 import {runPlayBaseline,runPlayComparison} from '../../../src/ui/branch-play-source.ts'
 import {TextGameSession} from '../../../src/text/game.ts'
 import {executeTextCommand} from '../../../src/text/command.ts'
@@ -31,7 +32,21 @@ describe('統合モードの入口（計算前に判定できる範囲）',()=>{
     expect(runPlayComparison({...base,durationYears:101})).toMatchObject({ok:false,code:'INVALID_DURATION'})
     expect(runPlayComparison({...base,secondPersonId:'person-exp-02'})).toMatchObject({ok:false,code:'INVALID_PERSON_PAIR'})
   })
-  it('不正branch・未作成A1・未計算年は統合モードでも成功扱いにしない（A0計算前に判定）',()=>{
+  it.each(['observe','inspect','debug'] as const)('%s: 無効年のA0参照は計算を起動しない',action=>{
+    const baseline=vi.spyOn(branchPlaySource,'runPlayBaseline')
+      .mockReturnValue({ok:false,code:'UNEXPECTED_ERROR',message:'テストではA0を計算しない'})
+    try{
+      for(const year of [1400,1249,1250.5]){
+        const s=new TextGameSession(20260101,'INTEGRATED_EXPERIMENTAL')
+        const result=action==='inspect'?s.inspect('person','person-exp-01',year):s[action](year)
+        expect(baseline).not.toHaveBeenCalled()
+        expect(result).toMatchObject({ok:false,code:'YEAR_UNAVAILABLE'})
+      }
+    }finally{
+      baseline.mockRestore()
+    }
+  })
+  it('不正branch・未作成A1は統合モードでも成功扱いにしない（A0計算前に判定）',()=>{
     const s=new TextGameSession(20260101,'INTEGRATED_EXPERIMENTAL')
     expect(executeTextCommand(s,['observe','1250','A2'])).toMatchObject({ok:false})
     expect(executeTextCommand(s,['observe','1250','a1'])).toMatchObject({ok:false,code:'INVALID_BRANCH'})

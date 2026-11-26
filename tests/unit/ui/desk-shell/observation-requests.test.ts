@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { createExperimentalIntegratedWorld } from '../../../../src/scenario/experimental/index.ts'
 import { playConfigDigest, playConfigId } from '../../../../src/ui/branch-play-source.ts'
 import type { ObservationInput, ObservationSlice } from '../../../../src/ui/branch-play-source.ts'
+import type { HistoryYearRef } from '../../../../src/ui/desk/data/history.ts'
 import { createObservationRequests } from '../../../../src/ui/desk/timeline/observation-requests.ts'
 import { extractCandidates } from '../../../../src/ui/play-candidates.ts'
 import type { ProgressObserver } from '../../../../src/ui/play-progress.ts'
@@ -22,8 +23,8 @@ function harness() {
   const progress = vi.fn()
   const success = vi.fn()
   const failure = vi.fn()
-  const load = (year: number, playback = false) => requests.request({
-    input: { seed: 7, mode, year }, playback, observe, progress, success, failure,
+  const load = (year: number, playback = false, expectedRef?: HistoryYearRef) => requests.request({
+    input: { seed: 7, mode, year }, expectedRef, playback, observe, progress, success, failure,
   })
   const finish = async (n: number, fields: Partial<ObservationSlice> = {}) => {
     const call = calls[n]!
@@ -87,4 +88,21 @@ it('構成が異なる応答や WorldState の年が異なる応答は採用し�
   expect(h.success).not.toHaveBeenCalled()
   expect(h.failure).toHaveBeenCalledTimes(2)
   expect(h.failure).toHaveBeenLastCalledWith(expect.objectContaining({ code: 'OBSERVATION_IDENTITY_MISMATCH' }))
+})
+
+it('資料要求では年・seed・digestが一致しても別枝・別の完全構成・介入済み応答を採用しない', async () => {
+  const h = harness()
+  const ref: HistoryYearRef = { year: 1251, origin: { seed: 7, branch: 'A0', modifierIds: [],
+    configuration: { mode, configId: playConfigId(mode), configDigest: playConfigDigest(mode) } } }
+  h.load(1251, false, ref)
+  await h.finish(0, { branchId: 'A1-play' })
+  h.load(1251, false, ref)
+  await h.finish(1, { configIdentity: '別の構成' })
+  h.load(1251, false, { ...ref, origin: { ...ref.origin, modifierIds: ['別介入'] } })
+  await h.finish(2)
+  expect(h.success).not.toHaveBeenCalled()
+  expect(h.failure).toHaveBeenCalledTimes(3)
+  h.load(1251, false, ref)
+  await h.finish(3)
+  expect(h.success).toHaveBeenCalledTimes(1)
 })

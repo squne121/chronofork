@@ -1,5 +1,6 @@
 // Node 22+ のTypeScript実行で動く開発用テキストI/O。
 // ゲーム規則や勝敗を再実装せず、GUIと同じ試験A0/A1実行入口を呼ぶ。
+import { once } from 'node:events'
 import { createInterface } from 'node:readline'
 import { TextGameSession, textReport } from '../src/text/game.ts'
 import { executeTextCommand, parseInteger } from '../src/text/command.ts'
@@ -45,18 +46,23 @@ if(typeof startup==='string'){
 const {seed,mode,json}=startup
 const session=new TextGameSession(seed,mode)
 
+// stdoutのbackpressureを尊重し、write falseならdrainまで次の出力・コマンド処理を待つ。
+async function emit(text:string):Promise<void>{
+  if(!process.stdout.write(text+'\n'))await once(process.stdout,'drain')
+}
+
 const rl=createInterface({input:process.stdin,crlfDelay:Infinity,terminal:!!process.stdin.isTTY})
-if(!json)process.stdout.write(HELP+'\n')
+if(!json)await emit(HELP)
 for await(const line of rl){
   const input=line.trim()
   if(!input)continue
   if(input==='exit'||input==='quit')break
   if(input==='help'){
-    process.stdout.write(json?JSON.stringify({help:HELP})+'\n':HELP+'\n')
+    await emit(json?JSON.stringify({help:HELP}):HELP)
     continue
   }
   let output:TextResult
   try{output=executeTextCommand(session,input.split(/\s+/))}
   catch(e){output={ok:false,code:'UNEXPECTED_ERROR',message:e instanceof Error?e.message:String(e)}}
-  process.stdout.write(json?JSON.stringify(output)+'\n':textReport(output)+'\n')
+  await emit(json?JSON.stringify(output):textReport(output))
 }
