@@ -29,8 +29,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      # 同じ lockfile の通常監査を維持する。
-      - run: npm ci
+      - name: npm ci (standard audit)
+        shell: bash
+        run: |
+          install_log="$RUNNER_TEMP/npm-ci.log"
+          npm ci | tee "$install_log"
+          # npm ci は監査 API の失敗だけでは失敗しない。報告がなければ可視化して再照会する。
+          if ! grep -Eq 'audited [1-9][0-9]* packages? in ' "$install_log"; then
+            printf '%s\n' '::warning::npm ci の通常監査報告が見つからないため、npm audit で再照会します。'
+            timeout --verbose 60s npm audit || true
+          fi
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build

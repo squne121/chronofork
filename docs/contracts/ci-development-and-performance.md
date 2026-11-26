@@ -11,8 +11,8 @@ Issue #185 で採用されたCI高速化と引継ぎの技術方針。ゲーム�
 
 ## Phase 2の依存準備
 
-- PR CIのPlaywright準備は、OS依存とbrowser binaryを別stepで実行する。どちらもChromium用の公式CLIを使い、OSのフォント・ライブラリやcold cache時のbrowser取得を省略しない。分離は遅延・失敗箇所の可視化であり、それ自体を高速化とみなさない。
-- 依存の正本は引き続きnpm lockfileとし、`static` は従来どおり `npm ci` で同じ依存範囲を監査する。`unit` の全shard、`e2e`、`worker` は `npm ci --prefer-offline` でキャッシュを優先し、キャッシュにない依存は取得する。全ジョブでauditとlifecycleを実行し、既存の終了条件を変えない。`npm ci` のaudit報告は、脆弱性の報告自体でジョブを失敗させる独立したゲートではない。
+- Playwright準備は、PRとmain pushの `e2e` およびPRのみの `worker` で、OS依存とbrowser binaryを別stepで実行する。どちらもChromium用の公式CLIを使い、OSのフォント・ライブラリやcold cache時のbrowser取得を省略しない。分離は遅延・失敗箇所の可視化であり、それ自体を高速化とみなさない。
+- 依存の正本は引き続きnpm lockfileとし、`static` は従来どおり `npm ci` で同じ依存範囲を監査する。通常監査の集計がなければ警告し、時間を制限して `npm audit` で1回再照会する。`npm ci` の失敗はそのままジョブを失敗させるが、再照会は新たな合否ゲートにしない。`unit` の全shard、`e2e`、`worker` は `npm ci --prefer-offline` でキャッシュを優先し、キャッシュにない依存は取得する。依存を導入する全ジョブでauditとlifecycleを実行し、既存の終了条件を変えない。
 - キャッシュ優先ジョブのauditもregistryへ直接advisoryを照会するが、依存メタデータのキャッシュにより派生するmetavulnerabilityの報告は通常監査と同一とは限らない。この報告は補助情報とし、`static` の通常監査の代わりにしない。過去のCIで観測した報告件数差の根本原因は未確定。pnpm・Bunへの移行は、audit・lifecycle・解決内容の同等性と運用負担の検証が不足しているため行わない。実測と未検証項目はIssue #189とPR #191を参照する。
 - Playwright公式Dockerイメージやrunner OS固定は、取得・運用・既存検証との互換性を含む有効性を確認できておらず、採用しない。OS依存準備が失敗した場合はbrowser準備・後続テストを成功扱いしない。
 
