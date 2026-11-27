@@ -54,6 +54,8 @@ export type AutonomousEvaluatorInput = Readonly<{
   b009Calibration?: B009Calibration
   /** DEC-179: 旧全ペア評価とは別の明示オプトイン。 */
   demandDrivenPairTrust?: true
+  /** DEC-190: 出生児の家門を父方原則と婚姻契約の明示条項から決める。省略は旧版（母の家門）。 */
+  childHouseAffiliation?: 'DEC190_PATERNAL_PRINCIPLE'
 }>
 export type AutonomousEvaluatorResult =
   | Readonly<{ ok: true; evaluators: EvaluatorMap }>
@@ -91,6 +93,11 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   if(input.abstractMarriageSupply && (!input.nextgenMarriage || input.supportingMarriage ||
     input.supportingCandidateTrustBase || input.nextgenMarriage.supportingKinshipClearances || input.promotion))
     return {ok:false,issues:['ABSTRACT_MARRIAGE_SUPPLY_REQUIRES_INDEPENDENT_NEXTGEN_MODE']}
+  // 家門条項の交渉と出生時の父方原則は一体で選ぶ。片方だけでは条項が出生へ反映されない/母方既定が残る。
+  if(input.childHouseAffiliation!==undefined && input.childHouseAffiliation!=='DEC190_PATERNAL_PRINCIPLE')
+    return {ok:false,issues:['INVALID_CHILD_HOUSE_AFFILIATION_MODE']}
+  if((input.nextgenMarriage?.calibration?.childHouse!==undefined)!==(input.childHouseAffiliation!==undefined))
+    return {ok:false,issues:['CHILD_HOUSE_MODE_MISMATCH']}
   if(input.abstractMarriageSupply && !Array.isArray(input.branchStartWorld.demographics?.anonymousBirthHistory))
     return {ok:false,issues:['ANONYMOUS_BIRTH_HISTORY_REQUIRED']}
   let annual: ReturnType<typeof createAbstractSupportingCandidateScope> | undefined
@@ -137,7 +144,7 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
     'B-003':createB003WorldStateEvaluator(autonomy),
     'B-009':createB009WorldStateEvaluator(input.trustBase,input.b009Calibration,
       input.demandDrivenPairTrust ? {marriage: autonomy.marriage, ledger} : undefined),
-    'B-002':createB002WorldStateEvaluator(autonomy),
+    'B-002':createB002WorldStateEvaluator(autonomy,input.childHouseAffiliation??'LEGACY_MATERNAL_HOUSE'),
     'A-DYN-02':createADyn02EvidenceEvaluator(),
     ...(b001?{'B-001':b001}:{}),
     'B-004':createB004WorldStateEvaluator(trust.view,autonomy,input.b004Calibration,ledger,

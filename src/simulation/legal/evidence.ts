@@ -2,6 +2,7 @@
 // 相続評価器・Goal 公開条件・UI は含まない。GAME-01/02/03 は未承認のため、
 // 明示記録が無いものを補完せず UNDETERMINED / PENDING を返す。1200〜1249 の背景史は EventLog に偽造しない。
 import { START_YEAR } from '../contracts/index.ts'
+import { childHouseContractIssue } from './child-house.ts'
 import type {
   ControllerRef, ControlMandate, Id, LegalDynastyState, MarriageContract, Person, WorldState, Year,
 } from '../contracts/index.ts'
@@ -211,8 +212,9 @@ export function verifyInitialLegalEvidence(world: WorldState, book: LegalEvidenc
     if (c.contract !== undefined) {
       const clauseIds = c.contract.clauses.map((x) => x.clauseId)
       if (new Set(clauseIds).size !== clauseIds.length || !c.contract.contractId || !c.contract.evidenceId ||
-        c.contract.clauses.some((x) => !dynastyIds.has(x.dynastyId))) {
-        add('CANDIDATE_CONTRACT_INVALID', `${p}.contract`, '契約の ID・条項 ID が不正、または未知の王朝を参照しています', [c.candidateId])
+        c.contract.clauses.some((x) => x.kind === 'CHILD_LEGAL_DYNASTY' && !dynastyIds.has(x.dynastyId)) ||
+        (pa !== undefined && pb !== undefined && childHouseContractIssue(world, [pa, pb], c.contract) !== null)) {
+        add('CANDIDATE_CONTRACT_INVALID', `${p}.contract`, '契約の ID・条項 ID が不正、未知の王朝、または不適格な家門条項を参照しています', [c.candidateId])
       }
     }
   })

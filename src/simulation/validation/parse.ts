@@ -13,7 +13,9 @@ import type {
   LegalCase,
   LegalDynastyState,
   Marriage,
+  MarriageClause,
   MarriageContract,
+  NextgenContractSelection,
   Person,
   PersonPairTrust,
   PopulationGroup,
@@ -29,7 +31,7 @@ import type {
   TitleRecognition,
   WorldState,
 } from '../contracts/index.ts'
-import { RULE_IDS } from '../contracts/index.ts'
+import { NEXTGEN_CONTRACT_SELECTION_VERSION, RULE_IDS } from '../contracts/index.ts'
 import type { Diagnostic, DiagnosticCode } from './diagnostics.ts'
 
 const PHASES = [1, 2, 3, 4, 5, 6, 7] as const
@@ -332,12 +334,56 @@ function dynasty(d: Sink, v: unknown, p: string): Dynasty {
   return { dynastyId: str(d, o, 'dynastyId', p), name: str(d, o, 'name', p) }
 }
 
+function nullableStr(d: Sink, o: Raw, k: string, path: string): string | null {
+  if (o[k] === null) return null
+  return str(d, o, k, path)
+}
+
+/** DEC-190 v4契約の選択記録。版は完全一致のみ受理し、旧v4（家門条項内の合意記録）を同じ版として読まない。 */
+function contractSelection(d: Sink, v: unknown, p: string): NextgenContractSelection {
+  const o = obj(d, v, p, ['version', 'identity', 'agreement'])
+  const ip = `${p}.identity`, io = obj(d, o['identity'], ip, ['dynastyId', 'childHouse'])
+  const hp = `${ip}.childHouse`
+  const maternal = isPlainObject(io['childHouse']) && io['childHouse']['basis'] === 'MATERNAL_CONTRACT_CLAUSE'
+  const ho = obj(d, io['childHouse'], hp, maternal ? ['basis', 'houseId', 'sourcePersonId'] : ['basis', 'houseId'])
+  const basis = oneOf(d, ho, 'basis', hp, ['PATERNAL_DEFAULT', 'MATERNAL_CONTRACT_CLAUSE'], 'PATERNAL_DEFAULT')
+  const houseId = str(d, ho, 'houseId', hp)
+  const ap = `${p}.agreement`
+  const ao = obj(d, o['agreement'], ap, ['registeredYear', 'personIds', 'sourceTraceId', 'firstConsentScore', 'secondConsentScore', 'consentThreshold'])
+  return {
+    version: oneOf(d, o, 'version', p, [NEXTGEN_CONTRACT_SELECTION_VERSION], NEXTGEN_CONTRACT_SELECTION_VERSION),
+    identity: {
+      dynastyId: nullableStr(d, io, 'dynastyId', ip),
+      childHouse: basis === 'MATERNAL_CONTRACT_CLAUSE'
+        ? { basis, houseId, sourcePersonId: str(d, ho, 'sourcePersonId', hp) }
+        : { basis, houseId },
+    },
+    agreement: {
+      registeredYear: num(d, ao, 'registeredYear', ap), personIds: pair(d, ao, 'personIds', ap),
+      sourceTraceId: str(d, ao, 'sourceTraceId', ap),
+      firstConsentScore: num(d, ao, 'firstConsentScore', ap), secondConsentScore: num(d, ao, 'secondConsentScore', ap),
+      consentThreshold: num(d, ao, 'consentThreshold', ap),
+    },
+  }
+}
+
 function marriageContract(d: Sink, v: unknown, p: string): MarriageContract {
-  const o = obj(d, v, p, ['contractId', 'evidenceId', 'clauses'])
+  const o = obj(d, v, p, ['contractId', 'evidenceId', 'clauses', 'selection', 'selectionRecordKey'])
+  const selection = o['selection'] === undefined ? undefined : contractSelection(d, o['selection'], `${p}.selection`)
+  // DEC-190 v4の正規記録キー。形（空でない文字列）だけを読み、選択記録との一致は登録・出生時の共通照合が保留/拒否とする。
+  const selectionRecordKey = optStr(d, o, 'selectionRecordKey', p)
   return {
     contractId: str(d, o, 'contractId', p),
     evidenceId: str(d, o, 'evidenceId', p),
-    clauses: arr(d, o, 'clauses', p, (cv, cp) => {
+    clauses: arr(d, o, 'clauses', p, (cv, cp): MarriageClause => {
+      // DEC-190の家門条項は王朝条項と別のフィールド集合。合意の根拠は契約の選択記録にある。旧JSONの王朝条項は従来どおり読む。
+      if (isPlainObject(cv) && cv['kind'] === 'CHILD_HOUSE_AFFILIATION') {
+        const co = obj(d, cv, cp, ['clauseId', 'kind', 'houseId', 'sourcePersonId'])
+        return {
+          clauseId: str(d, co, 'clauseId', cp), kind: 'CHILD_HOUSE_AFFILIATION',
+          houseId: str(d, co, 'houseId', cp), sourcePersonId: str(d, co, 'sourcePersonId', cp),
+        }
+      }
       const co = obj(d, cv, cp, ['clauseId', 'kind', 'dynastyId'])
       return {
         clauseId: str(d, co, 'clauseId', cp),
@@ -345,6 +391,8 @@ function marriageContract(d: Sink, v: unknown, p: string): MarriageContract {
         dynastyId: str(d, co, 'dynastyId', cp),
       }
     }),
+    ...(selection === undefined ? {} : { selection }),
+    ...(selectionRecordKey === undefined ? {} : { selectionRecordKey }),
   }
 }
 

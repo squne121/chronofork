@@ -16,6 +16,7 @@ import type {
 import type { Handler } from './draft.ts'
 import { fail, findPerson, findTitle, requireAlivePerson } from './draft.ts'
 import { personSupportingRecord } from './handlers-person.ts'
+import { childHouseAgreementIssue } from '../../legal/child-house.ts'
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 
@@ -24,6 +25,9 @@ export const marriageRegister: Handler<MarriageRegisterCommand> = (d, c) => {
   if (m.supportingPopulationEvidenceIds !== undefined) {
     return fail('INVALID_COMMAND', '人口出典は成立時の補助人物登録からのみ確定します')
   }
+  // DEC-190: 母方家門条項は、Aが登録時に確認した双方合意の記録と契約全体が一致する場合だけ登録する。
+  const agreementIssue = childHouseAgreementIssue(m, m.contract)
+  if (agreementIssue) return fail('LEGAL_BASIS_MISSING', `婚姻 ${m.marriageId} の家門条項が登録時の合意記録と一致しません（${agreementIssue}）`, [m.marriageId])
   if (c.supportingPerson !== undefined) {
     if (!m.personIds.includes(c.supportingPerson.person.personId)) {
       return fail('INVALID_COMMAND', '補助人物は婚姻の当事者でなければなりません')

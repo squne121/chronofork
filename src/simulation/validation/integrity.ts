@@ -320,15 +320,44 @@ export function checkWorldIntegrity(world: WorldState, yearStart = false): Diagn
     if (m.contract !== undefined) {
       const clauseIds = new Set<Id>()
       const attributed = new Set<Id>()
+      const houseClauses: Id[] = []
       m.contract.clauses.forEach((cl, j) => {
         const cp = `${p}.contract.clauses[${j}]`
         if (clauseIds.has(cl.clauseId)) add('DUPLICATE_ID', cp, `条項 ID が重複しています: ${cl.clauseId}`, o)
         clauseIds.add(cl.clauseId)
-        ref('DYNASTY', cl.dynastyId, `${cp}.dynastyId`, o)
-        attributed.add(cl.dynastyId)
+        if (cl.kind === 'CHILD_LEGAL_DYNASTY') {
+          ref('DYNASTY', cl.dynastyId, `${cp}.dynastyId`, o)
+          attributed.add(cl.dynastyId)
+          return
+        }
+        // DEC-190: 家門条項は王朝条項と独立に数える。出典は婚姻当事者に限る。
+        ref('HOUSE', cl.houseId, `${cp}.houseId`, o)
+        ref('PERSON', cl.sourcePersonId, `${cp}.sourcePersonId`, o)
+        if (!m.personIds.includes(cl.sourcePersonId)) {
+          add('MARRIAGE_CLAUSE_CONFLICT', `${cp}.sourcePersonId`, '家門条項の出典は婚姻当事者でなければなりません', o, [cl.sourcePersonId])
+        }
+        houseClauses.push(cl.clauseId)
       })
       if (attributed.size > 1) {
         add('MARRIAGE_CLAUSE_CONFLICT', `${p}.contract.clauses`, '子の法的王朝帰属を指定する条項が矛盾しています（優先順位は自動決定しません）', o, [...attributed])
+      }
+      if (houseClauses.length > 1) {
+        add('MARRIAGE_CLAUSE_CONFLICT', `${p}.contract.clauses`, '子の家門所属を指定する条項が複数あります（優先順位は自動決定しません）', o, houseClauses)
+      }
+      // DEC-190 v4の選択記録: 参照の実在と当事者だけを検査する。記録と契約全体の結合は登録・出生時の共通照合
+      // （childHouseAgreementIssue）が保留/拒否として扱う。
+      const sel = m.contract.selection
+      if (sel !== undefined) {
+        const sp = `${p}.contract.selection`
+        if (sel.identity.dynastyId !== null) ref('DYNASTY', sel.identity.dynastyId, `${sp}.identity.dynastyId`, o)
+        ref('HOUSE', sel.identity.childHouse.houseId, `${sp}.identity.childHouse.houseId`, o)
+        if (sel.identity.childHouse.basis === 'MATERNAL_CONTRACT_CLAUSE') {
+          const src = sel.identity.childHouse.sourcePersonId
+          ref('PERSON', src, `${sp}.identity.childHouse.sourcePersonId`, o)
+          if (!m.personIds.includes(src)) {
+            add('MARRIAGE_CLAUSE_CONFLICT', `${sp}.identity.childHouse.sourcePersonId`, '家門選択の出典は婚姻当事者でなければなりません', o, [src])
+          }
+        }
       }
     }
   })

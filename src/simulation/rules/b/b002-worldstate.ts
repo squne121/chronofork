@@ -7,16 +7,24 @@ import { EvaluationFailure } from '../../engine/evaluators.ts'
 import { GENERATED_ID_DOMAINS, recordGeneratedIdSource, stableGeneratedId } from '../../engine/stable-generated-id.ts'
 import type { AutonomyCalibration } from '../../autonomy/config.ts'
 import { checkAutonomyCalibration } from '../../autonomy/config.ts'
+import { resolveChildHouseAffiliation } from '../../legal/child-house.ts'
 
 export const B002_AUTONOMOUS_VERSION = 'b002-worldstate-marriage-fertility-0:CALIBRATION_ONLY'
+/** DEC-190の明示オプトイン。出生枠・乱数・ID・年齢は旧版と同じで、子の家門だけを父方原則と契約条項から決める。 */
+export const B002_PATERNAL_HOUSE_VERSION = 'b002-worldstate-marriage-fertility-1-dec190-paternal-house:CALIBRATION_ONLY'
+/** 省略は旧版（母の家門）。旧構成の履歴を保護するため既定を変更しない。 */
+export type B002ChildHouseMode = 'LEGACY_MATERNAL_HOUSE' | 'DEC190_PATERNAL_PRINCIPLE'
 const cmp = (a:string,b:string) => a<b?-1:a>b?1:0
 
 /** parent/marriage/yearのみを使う。枝番号や走査順を混ぜない。 */
 export const childIdForMarriageYear = (marriageId:Id,fatherId:Id,motherId:Id,year:number):Id =>
   stableGeneratedId(GENERATED_ID_DOMAINS.B002_PERSON,[year,marriageId,fatherId,motherId])
 
-export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEvaluator {
+export function createB002WorldStateEvaluator(input:AutonomyCalibration,
+  childHouse:B002ChildHouseMode='LEGACY_MATERNAL_HOUSE'):RuleEvaluator {
   const c=checkAutonomyCalibration(input).birth
+  if(childHouse!=='LEGACY_MATERNAL_HOUSE'&&childHouse!=='DEC190_PATERNAL_PRINCIPLE')throw new RangeError('INVALID_B002_CHILD_HOUSE_MODE')
+  const dec190=childHouse==='DEC190_PATERNAL_PRINCIPLE'
   const evaluator:RuleEvaluator=(world:WorldState,ctx:EvaluationContext):RuleOutcome=>{
     if(ctx.ruleId!=='B-002'||ctx.phase!==3||ctx.year!==world.year) {
       throw new EvaluationFailure('B-002は当年フェーズ3でのみ評価可能',[{code:'RULE_MISMATCH',message:String(ctx.ruleId)}])
@@ -40,6 +48,8 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
       const sexKey='b002:sex:CALIBRATION_ONLY:'+m.marriageId
       const sexDraw=ctx.random({stream:'ENDOGENOUS',actorId:m.personIds[0],targetId:m.personIds[1],eventKey:sexKey})
       const childSex=sexDraw<0.5?'MALE' as const:'FEMALE' as const
+      // DEC-190: 家門は出生枠（母の出身集団）と独立。条項の不正は父方へfallbackせず保留する。
+      const house=dec190&&father&&mother?resolveChildHouseAffiliation(world,father,mother,m):undefined
       let reason:string
       if(!pairValid||!father||!mother||!father.alive||!mother.alive) reason='PARENTS_UNAVAILABLE'
       else if(m.registeredYear>ctx.year) reason='MARRIAGE_NOT_YET_VALID'
@@ -47,6 +57,7 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
         ageFather===null||ageFather<c.minFatherAge) reason='AGE_OUTSIDE_CALIBRATION_WINDOW'
       else if(!slot) reason='BIRTH_COHORT_SLOT_MISSING'
       else if(birthDraw>=c.chancePermille/1000) reason='BIRTH_RNG_NOT_SELECTED'
+      else if(dec190&&house?.status!=='RESOLVED') reason=house?.reasonCode??'CHILD_HOUSE_UNRESOLVED'
       else if(slot.claimedBirths+(pendingByGroup.get(mother.originGroupId)??0)>=slot.birthSlots) reason='BIRTH_COHORT_SLOT_EXHAUSTED'
       else reason='WORLDSTATE_RNG_BIRTH_SELECTED'
       const accepted=reason==='WORLDSTATE_RNG_BIRTH_SELECTED'
@@ -68,7 +79,12 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
           inputs:{marriageId:m.marriageId,personIds:[...m.personIds],fatherId:father?.personId??null,
             motherId:mother?.personId??null,motherAge:ageMother,fatherAge:ageFather,
             fertilityChancePermille:c.chancePermille,childPersonId:id,childSex,
-            originGroupId:mother?.originGroupId??null,houseId:mother?.houseId??null,
+            originGroupId:mother?.originGroupId??null,
+            houseId:dec190?(house?.status==='RESOLVED'?house.houseId:null):mother?.houseId??null,
+            ...(dec190?{paternalHouseId:father?.houseId??null,maternalHouseId:mother?.houseId??null,
+              childHouseBasis:house?.status==='RESOLVED'?house.basis:null,
+              childHouseClauseId:house?.status==='RESOLVED'?house.clauseId:null,
+              contractId:m.contract?.contractId??null}:{}),
             birthSlots:slot?.birthSlots??null,claimedBirths:slot?.claimedBirths??null,
             provenance:'CALIBRATION_ONLY'},
           reasonCodes:['CALIBRATION_ONLY',reason],
@@ -78,9 +94,11 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
         reasonCodes:['CALIBRATION_ONLY',reason],
         modifierIds:[],
         random:{stream:'ENDOGENOUS',key:chanceKey,value:birthDraw},
-        ruleVersion:B002_AUTONOMOUS_VERSION,
+        ruleVersion:dec190?B002_PATERNAL_HOUSE_VERSION:B002_AUTONOMOUS_VERSION,
       })
       if(!accepted||!father||!mother)continue
+      const childHouseId=dec190?(house?.status==='RESOLVED'?house.houseId:null):mother.houseId
+      if(childHouseId===null)continue
       pendingByGroup.set(mother.originGroupId,(pendingByGroup.get(mother.originGroupId)??0)+1)
       const commandSource=[ctx.year,m.marriageId,father.personId,mother.personId] as const
       const commandId=stableGeneratedId(GENERATED_ID_DOMAINS.B002_COMMAND,commandSource)
@@ -97,7 +115,7 @@ export function createB002WorldStateEvaluator(input:AutonomyCalibration):RuleEva
           personId:id,
           name:'試験用自律児 '+ctx.year,
           sex:childSex,birthYear:ctx.year,alive:true,
-          originGroupId:mother.originGroupId,houseId:mother.houseId,
+          originGroupId:mother.originGroupId,houseId:childHouseId,
           fatherId:father.personId,motherId:mother.personId,
           legalDynasty:{status:'UNDETERMINED',reasonCodes:['GAME_01_NO_DEFAULT_DYNASTY','A_DYN_02_PENDING']},
         },

@@ -5,7 +5,7 @@ import {
   createExperimentalLegalEvidence,
   createExperimentalWorld,
 } from '../../../src/scenario/experimental/index.ts'
-import type { ControlMandate, WorldState } from '../../../src/simulation/contracts/index.ts'
+import type { ChildLegalDynastyClause, ControlMandate, WorldState } from '../../../src/simulation/contracts/index.ts'
 import type { LegalEvidenceBook } from '../../../src/simulation/legal/evidence.ts'
 import {
   resolveChildLegalDynasty, reviewApprovalAuthority, reviewMandateBeneficiary, reviewNewDelegation, verifyInitialLegalEvidence,
@@ -72,7 +72,7 @@ describe('証拠の欠落・不一致を診断し、補完しない', () => {
   })
   it('無効な契約候補（未知王朝・不在人物・重複）と ID 重複', () => {
     const c = EXPERIMENTAL_MARRIAGE_CANDIDATES[1]!
-    expect(mk((b) => { b.marriageCandidates = [{ ...c, contract: { ...c.contract!, clauses: [{ ...c.contract!.clauses[0]!, dynastyId: 'dynasty-ghost' }] } }] })).toContain('CANDIDATE_CONTRACT_INVALID')
+    expect(mk((b) => { b.marriageCandidates = [{ ...c, contract: { ...c.contract!, clauses: [{ ...(c.contract!.clauses[0]! as ChildLegalDynastyClause), dynastyId: 'dynasty-ghost' }] } }] })).toContain('CANDIDATE_CONTRACT_INVALID')
     expect(mk((b) => { b.marriageCandidates = [{ ...c, personIds: ['person-exp-02', 'person-zzz'] }] })).toContain('CANDIDATE_PERSON_INVALID')
     expect(mk((b) => { b.marriageCandidates = [c, c] })).toContain('DUPLICATE_EVIDENCE_ID')
   })

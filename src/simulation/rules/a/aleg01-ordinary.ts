@@ -11,6 +11,7 @@ import { GENERATED_ID_DOMAINS, recordGeneratedIdSource, stableGeneratedId } from
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
 import type { OrdinaryLaw } from '../../legal/ordinary-authority.ts'
 import { reviewOrdinaryAuthority, validateOrdinaryLaws } from '../../legal/ordinary-authority.ts'
+import { childHouseRegistrationIssue } from '../../legal/child-house.ts'
 
 export const ORDINARY_MARRIAGE_VERSION = 'aleg01-domestic-authority-0:CALIBRATION_ONLY'
 /** 正規化済みの personIds の意味的同一性から、世代数に依存しない婚姻IDを生成する。 */
@@ -126,7 +127,8 @@ export function createALeg01OrdinaryEvaluator(input:OrdinaryMarriageInput):Ordin
         rev.reviewedBy.kind!=='COUNTRY'||rev.reviewedBy.id!==countryId)why='ELIGIBILITY_AUTHORITY_MISMATCH'
       else if(proposed!==null&&(!candidate||!contract||candidate.registration!=='NOT_REGISTERED'))why='CONTRACT_AGREEMENT_NOT_FOUND'
       else if(contract&&(contract.clauses.some(c=>!present(c.clauseId)||
-        !world.legal.dynasties.some(d=>d.dynastyId===c.dynastyId))||
+        (c.kind==='CHILD_LEGAL_DYNASTY'&&!world.legal.dynasties.some(d=>d.dynastyId===c.dynastyId)))||
+        childHouseRegistrationIssue(world,ctx.year,pair,[a,b],contract,ctx.priorTraces??[])!==null||
         !present(contract.contractId)||!present(contract.evidenceId)))why='CONTRACT_INVALID'
       else {status='ACCEPT';why='DOMESTIC_MARRIAGE_AUTHORITY_AND_CONSENT_VERIFIED'}
       const index=traceDrafts.length

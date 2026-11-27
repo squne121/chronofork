@@ -8,10 +8,11 @@ import { EvaluationFailure } from '../../engine/evaluators.ts'
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
 import type { OrdinaryLaw } from '../../legal/ordinary-authority.ts'
 import { reviewOrdinaryAuthority } from '../../legal/ordinary-authority.ts'
-import { chooseNextgenContract, negotiatedMarriageContract,
+import { chooseNextgenContract, contractChoiceIdentity, negotiatedMarriageContract,
   EXPERIMENTAL_NEXTGEN_CONTRACT, validateNextgenContractCalibration } from '../../legal/nextgen-contract.ts'
 import type { NextgenContractCalibration } from '../../legal/nextgen-contract.ts'
 import { reviewDomesticMarriageEligibility } from '../../legal/nextgen-marriage.ts'
+import { sameNextgenChildHouse, sameNextgenContractIdentity } from '../../legal/nextgen-contract-ids.ts'
 import { reviewSupportingKinshipClearance,supportingClearanceKey,validateSupportingKinshipClearances }
   from '../../legal/supporting-kinship-clearance.ts'
 import type { SupportingKinshipClearance } from '../../legal/supporting-kinship-clearance.ts'
@@ -113,10 +114,19 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
           const option=options[i]
           if(option===null||typeof option!=='object'||Array.isArray(option))return false
           const recorded=option as Readonly<Record<string,unknown>>
+          const identity=contractChoiceIdentity(choice)
+          // DEC-190: 各選択肢は構造化同一性（王朝案・家門選択・出典）でも一致すること。キーの一致だけで同一視しない。
           return recorded.key===choice.key&&recorded.dynastyId===choice.dynastyId&&
             recorded.firstConsentScore===choice.firstConsentScore&&recorded.secondConsentScore===choice.secondConsentScore&&
-            recorded.mutuallyAccepted===choice.mutuallyAccepted&&recorded.minimumUtility===choice.minimumUtility
+            recorded.mutuallyAccepted===choice.mutuallyAccepted&&recorded.minimumUtility===choice.minimumUtility&&
+            (identity===null?recorded.childHouse===undefined
+              :sameNextgenContractIdentity({dynastyId:recorded.dynastyId,childHouse:recorded.childHouse},identity))
         }))continue
+      // DEC-190: 選択した案の同一性・家門もB-005記録とAの再評価で完全一致しなければ登録しない。
+      const chosenIdentity=contractChoiceIdentity(agreement.choice)
+      if(cal.childHouse!==undefined&&(chosenIdentity===null||
+        !sameNextgenContractIdentity(negotiation.inputs.selectedContractIdentity,chosenIdentity)||
+        !sameNextgenChildHouse(negotiation.inputs.selectedChildHouse,chosenIdentity.childHouse)))continue
       const law=reviewOrdinaryAuthority(world,book,laws,{
         action:'NORMAL_MARRIAGE',sovereignCountryId:eligibility.countryId,
         issuerRef:{kind:'COUNTRY',id:eligibility.countryId},year:ctx.year,
@@ -127,7 +137,7 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
       }
       if(matching[0])registrations.push(matching[0].registration)
       const candidateId='candidate:nextgen:'+JSON.stringify([ctx.year,pair,agreement.choice.key])
-      const contract=negotiatedMarriageContract(ctx.year,pair,agreement.choice,verified.traceId)
+      const contract=negotiatedMarriageContract(ctx.year,pair,agreement.choice,verified.traceId,cal.consentThreshold)
       // 候補は当年の同意Traceから生成したものだけ。過去・他婚姻の契約を流用しない。
       candidates.push({
         candidateId,personIds:pair,contract,
