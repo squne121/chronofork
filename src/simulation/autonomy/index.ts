@@ -129,7 +129,8 @@ export function createAutonomousCalibrationEvaluators(input:AutonomousEvaluatorI
   const crown=createCrownSuccessionEvaluators(
     reviewed?.ok ? reviewed.evaluators['A-SUC-04']! : createASuc04WorldStateEvaluator(),
     reviewed?.ok ? reviewed.evaluators['A-TIT-07']! : createATit07EvidenceEvaluator(),
-    {book:input.reviewedLegal?.book,laws:input.reviewedLegal?.ordinaryLaws},
+    {book:input.reviewedLegal?.book,laws:input.reviewedLegal?.ordinaryLaws,
+      ...(input.reviewedLegal?.heirSearch?{heirSearch:input.reviewedLegal.heirSearch}:{})},
   )
   const evaluators:EvaluatorMap={
     ...createCalibrationEvaluators(input.tuning??EXPERIMENTAL_TUNING),

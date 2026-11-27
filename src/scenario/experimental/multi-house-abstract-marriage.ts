@@ -6,6 +6,8 @@ import type { EvaluatorMap } from '../../simulation/engine/index.ts'
 import { ABSTRACT_MARRIAGE_BACKGROUND_VERSION } from '../../simulation/population/abstract-marriage-background.ts'
 import { rngVersion } from '../../simulation/random.ts'
 import { B009_DEMAND_RULE_VERSION, b009DemandModelKey, createB009DemandObserver } from '../../simulation/rules/b/index.ts'
+import { ANCESTRAL_HEIR_SEARCH_VERSION } from '../../simulation/rules/a/legal-heirs.ts'
+import type { HeirSearchMode } from '../../simulation/rules/a/legal-heirs.ts'
 import {
   createMultiHouseWorld, digestMultiHouseIdentity, multiHouseRunConfigIdentity, MULTI_HOUSE_RUN_CONDITIONS,
   MULTI_HOUSE_AUTONOMY, MULTI_HOUSE_B009_CALIBRATION, MULTI_HOUSE_NEXTGEN_CONTRACT,
@@ -44,7 +46,8 @@ export function createMultiHouseAbstractEvaluators(startWorld: WorldState, ledge
   return createAbstractEvaluators(startWorld, ledger)
 }
 
-function createAbstractEvaluators(startWorld: WorldState, ledger: readonly StatModifier[], drift?: 0 | 1): EvaluatorMap {
+function createAbstractEvaluators(startWorld: WorldState, ledger: readonly StatModifier[], drift?: 0 | 1,
+  heirSearch?: HeirSearchMode): EvaluatorMap {
   const calibration = drift === undefined ? ABSTRACT_B009_CALIBRATION : demandCalibration(drift)
   const modelKey = drift === undefined ? undefined : b009DemandModelKey(MULTI_HOUSE_TRUST_BASE, calibration)
   if (startWorld.pairTrustDrift !== drift || startWorld.pairTrustModelKey !== modelKey)
@@ -53,7 +56,7 @@ function createAbstractEvaluators(startWorld: WorldState, ledger: readonly StatM
   const result = createAutonomousCalibrationEvaluators({
     branchStartWorld: startWorld, ledger, trustBase: MULTI_HOUSE_TRUST_BASE,
     nextgenMarriage: {book: trial.book, laws: trial.laws, calibration: MULTI_HOUSE_NEXTGEN_CONTRACT},
-    reviewedLegal: {book: trial.book, ordinaryLaws: trial.laws},
+    reviewedLegal: {book: trial.book, ordinaryLaws: trial.laws, ...(heirSearch ? {heirSearch} : {})},
     spouseDeathDissolution: true, abstractMarriageSupply: MULTI_HOUSE_ABSTRACT_MARRIAGE,
     autonomy: MULTI_HOUSE_AUTONOMY, b009Calibration: calibration,
     ...(drift === undefined ? {} : {demandDrivenPairTrust: true}),
@@ -106,4 +109,25 @@ export function multiHouseDemandRunConfigIdentity(drift: 0 | 1 = 1): Readonly<Re
 
 export function multiHouseDemandRunConfigDigest(drift: 0 | 1 = 1): string {
   return digestMultiHouseIdentity(multiHouseDemandRunConfigIdentity(drift))
+}
+
+// Issue #200 / DEC-189の独立構成。v2需要構成と同じ世界・校正・法令で、相続順位の探索範囲だけを変える。
+// 既存のv2構成・限定試遊のidentity/digestと既定は変更しない。
+export const MULTI_HOUSE_ANCESTRAL_CONFIG_ID = 'experimental-multi-house-v3-dec189-ancestral-heirs'
+export const MULTI_HOUSE_ANCESTRAL_HEIR_SEARCH: HeirSearchMode = 'RECORDED_COMMON_ANCESTOR'
+const ancestralConfigId = (drift: 0 | 1) => drift === 1 ? MULTI_HOUSE_ANCESTRAL_CONFIG_ID : MULTI_HOUSE_ANCESTRAL_CONFIG_ID + '-drift-0'
+
+/** 開始世界はv2需要構成と同一。比較時の差分は評価器の相続順位探索に限る。 */
+export function createMultiHouseAncestralEvaluators(startWorld: WorldState, ledger: readonly StatModifier[] = [], drift: 0 | 1 = 1): EvaluatorMap {
+  return createAbstractEvaluators(startWorld, ledger, demandCalibration(drift).annualDelta, MULTI_HOUSE_ANCESTRAL_HEIR_SEARCH)
+}
+
+export function multiHouseAncestralRunConfigIdentity(drift: 0 | 1 = 1): Readonly<Record<string, unknown>> {
+  const shared = multiHouseDemandRunConfigIdentity(drift)
+  return {...shared, configId: ancestralConfigId(drift), heirSearch: MULTI_HOUSE_ANCESTRAL_HEIR_SEARCH,
+    ruleVersions: {...shared.ruleVersions as Record<string, unknown>, heirSearch: ANCESTRAL_HEIR_SEARCH_VERSION}}
+}
+
+export function multiHouseAncestralRunConfigDigest(drift: 0 | 1 = 1): string {
+  return digestMultiHouseIdentity(multiHouseAncestralRunConfigIdentity(drift))
 }

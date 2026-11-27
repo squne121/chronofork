@@ -10,7 +10,8 @@ import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.t
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
 import { reviewOrdinaryAuthority } from '../../legal/ordinary-authority.ts'
 import type { OrdinaryLaw } from '../../legal/ordinary-authority.ts'
-import { reviewLandHeir } from './legal-heirs.ts'
+import { heirReviewerFor, heirSearchInputs } from './legal-heirs.ts'
+import type { HeirSearchMode } from './legal-heirs.ts'
 
 export const CROWN_SUCCESSION_VERSION = 'crown-succession-mvp-1:CALIBRATION_ONLY'
 const cmp = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0
@@ -22,7 +23,8 @@ const countryOf = (c: LegalCase): Id | undefined =>
 const caseId = (deathYear: number, titleId: Id) => 'case:crown:' + JSON.stringify([deathYear, titleId])
 const sameRef = (a: {kind:string;id:Id}, b: {kind:string;id:Id}) => a.kind === b.kind && a.id === b.id
 
-type Input = Readonly<{ book?: LegalEvidenceBook; laws?: readonly OrdinaryLaw[] }>
+/** heirSearch省略時は旧同胞枝までの照合。DEC-189構成だけが近い共通祖先へ遡る。 */
+type Input = Readonly<{ book?: LegalEvidenceBook; laws?: readonly OrdinaryLaw[]; heirSearch?: HeirSearchMode }>
 type Approval = Readonly<{ countryId: Id; decisionId: Id; authorityBasisId: Id; lawId: Id }>
 
 /** 国土の実効支配・統治委任とは独立の王位法的管轄を、授与・認定の原本と照合する。 */
@@ -74,6 +76,7 @@ function rulerCountry(w: WorldState, titleId: Id, predecessorId: Id,
 function succession(base: RuleEvaluator, input: Input): RuleEvaluator {
   const book = input.book === undefined ? undefined : structuredClone(input.book)
   const laws = structuredClone(input.laws ?? [])
+  const reviewHeir = heirReviewerFor(input.heirSearch)
   return (world, ctx) => {
     const original = base(world, ctx)
     const commands: DomainCommand[] = [...original.commands]
@@ -102,7 +105,7 @@ function succession(base: RuleEvaluator, input: Input): RuleEvaluator {
       const canCreate = newIncident && pending.length === 0 &&
         !world.legal.cases.some(c => c.caseId === caseId(predecessor.deathYear!,title.titleId))
       const cid = canCreate ? caseId(predecessor.deathYear!,title.titleId) : current?.caseId
-      const heir = reviewLandHeir(world, predecessorId)
+      const heir = reviewHeir(world, predecessorId)
       const proof = verifiedDeath && pending.length <= 1 && hasId(cid) && title.valid && title.hereditary &&
         heir.status === 'READY'
         ? approval(world, title.titleId, predecessorId, heir.personId, ctx.year, book, laws) : undefined
@@ -123,7 +126,7 @@ function succession(base: RuleEvaluator, input: Input): RuleEvaluator {
           inputs:{titleId:title.titleId,caseId:cid ?? null,predecessorPersonId:predecessorId,
             candidatePersonId:successor,decisionId:proof?.decisionId ?? null,
             authorityBasisId:proof?.authorityBasisId ?? null,
-            rankedCandidateIds:heir.rankedCandidateIds,provenance:'CALIBRATION_ONLY'},
+            rankedCandidateIds:heir.rankedCandidateIds,...heirSearchInputs(heir),provenance:'CALIBRATION_ONLY'},
           reasonCodes:['CALIBRATION_ONLY',approved?'CROWN_LEGAL_APPROVAL':noApproval],
         }],
         ...(approved?{selectedCandidateId:candidateId}:{}),
@@ -168,8 +171,20 @@ function succession(base: RuleEvaluator, input: Input): RuleEvaluator {
           reasonCodes:['CALIBRATION_ONLY','CROWN_CASE_RECORDING_ONLY','NOT_SUCCESSION_APPROVAL'],
           modifierIds:[],ruleVersion:CROWN_SUCCESSION_VERSION,
         })
-        const rawCandidates = heir.rankedCandidateIds.filter(id =>
-          world.persons.some(p => p.personId === id && p.alive))
+        const rankedIds = heir.rankedCandidateIds.filter(id => world.persons.some(p => p.personId === id && p.alive))
+        // 全体順位が不明でも、各上位枝で確認した存命候補を案件から消さない。
+        const possibleIds = 'search' in heir ? [
+          ...heir.search.samePriority.flatMap(tie => tie.candidateIds ?? []),
+          ...heir.search.independentStages.flatMap(stage => {
+            const top = new Set(stage.possibleTopBranchIds)
+            return stage.branches.filter(branch => top.has(branch.branchHeadId)).flatMap(branch =>
+              branch.candidateId === null ? [
+                ...branch.reviewed.filter(r => r.outcome === 'LEGAL_DYNASTY_UNDETERMINED').map(r => r.personId),
+                ...branch.samePriority.flatMap(tie => tie.candidateIds ?? []),
+              ] : [branch.candidateId])
+          }),
+        ] : []
+        const rawCandidates = [...new Set([...rankedIds, ...possibleIds])]
         const cmd: LegalCaseSetCommand = {
           type:'LEGAL_CASE_SET',commandId:'cmd:crown:pending:'+JSON.stringify([ctx.year,cid]),
           source:{requestId:'req:crown:pending:'+cid,
