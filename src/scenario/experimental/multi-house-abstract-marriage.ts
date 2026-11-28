@@ -10,7 +10,9 @@ import { ANCESTRAL_HEIR_SEARCH_VERSION } from '../../simulation/rules/a/legal-he
 import { B002_PATERNAL_HOUSE_VERSION } from '../../simulation/rules/b/b002-worldstate.ts'
 import { B005_CHILD_HOUSE_VERSION } from '../../simulation/rules/b/b005-nextgen.ts'
 import { CHILD_HOUSE_AFFILIATION_VERSION } from '../../simulation/legal/child-house.ts'
+import { NEXTGEN_LINEAGE_CONTINUITY_VERSION } from '../../simulation/legal/nextgen-contract.ts'
 import type { ChildHouseContractCalibration, NextgenContractCalibration } from '../../simulation/legal/nextgen-contract.ts'
+import type { LineageContinuityCalibration } from '../../simulation/legal/lineage-continuity.ts'
 import type { HeirSearchMode } from '../../simulation/rules/a/legal-heirs.ts'
 import {
   createMultiHouseWorld, digestMultiHouseIdentity, multiHouseRunConfigIdentity, MULTI_HOUSE_RUN_CONDITIONS,
@@ -51,7 +53,7 @@ export function createMultiHouseAbstractEvaluators(startWorld: WorldState, ledge
 }
 
 function createAbstractEvaluators(startWorld: WorldState, ledger: readonly StatModifier[], drift?: 0 | 1,
-  heirSearch?: HeirSearchMode, childHouse?: true): EvaluatorMap {
+  heirSearch?: HeirSearchMode, contract = MULTI_HOUSE_NEXTGEN_CONTRACT): EvaluatorMap {
   const calibration = drift === undefined ? ABSTRACT_B009_CALIBRATION : demandCalibration(drift)
   const modelKey = drift === undefined ? undefined : b009DemandModelKey(MULTI_HOUSE_TRUST_BASE, calibration)
   if (startWorld.pairTrustDrift !== drift || startWorld.pairTrustModelKey !== modelKey)
@@ -59,13 +61,12 @@ function createAbstractEvaluators(startWorld: WorldState, ledger: readonly StatM
   const trial = createExperimentalOrdinaryLegalTrial()
   const result = createAutonomousCalibrationEvaluators({
     branchStartWorld: startWorld, ledger, trustBase: MULTI_HOUSE_TRUST_BASE,
-    nextgenMarriage: {book: trial.book, laws: trial.laws,
-      calibration: childHouse ? MULTI_HOUSE_CHILD_HOUSE_NEXTGEN_CONTRACT : MULTI_HOUSE_NEXTGEN_CONTRACT},
+    nextgenMarriage: {book: trial.book, laws: trial.laws, calibration: contract},
     reviewedLegal: {book: trial.book, ordinaryLaws: trial.laws, ...(heirSearch ? {heirSearch} : {})},
     spouseDeathDissolution: true, abstractMarriageSupply: MULTI_HOUSE_ABSTRACT_MARRIAGE,
     autonomy: MULTI_HOUSE_AUTONOMY, b009Calibration: calibration,
     ...(drift === undefined ? {} : {demandDrivenPairTrust: true}),
-    ...(childHouse ? {childHouseAffiliation: MULTI_HOUSE_CHILD_HOUSE_AFFILIATION} : {}),
+    ...(contract.childHouse ? {childHouseAffiliation: MULTI_HOUSE_CHILD_HOUSE_AFFILIATION} : {}),
   })
   if (!result.ok) throw new Error('INVALID_MULTI_HOUSE_ABSTRACT_EVALUATORS:' + result.issues.join('; '))
   return result.evaluators
@@ -154,7 +155,8 @@ const childHouseConfigId = (drift: 0 | 1) => drift === 1 ? MULTI_HOUSE_CHILD_HOU
 
 /** 開始世界はv2/v3と同一。差分は出生時の家門所属と、その契約条項の交渉に限る。 */
 export function createMultiHouseChildHouseEvaluators(startWorld: WorldState, ledger: readonly StatModifier[] = [], drift: 0 | 1 = 1): EvaluatorMap {
-  return createAbstractEvaluators(startWorld, ledger, demandCalibration(drift).annualDelta, MULTI_HOUSE_ANCESTRAL_HEIR_SEARCH, true)
+  return createAbstractEvaluators(startWorld, ledger, demandCalibration(drift).annualDelta, MULTI_HOUSE_ANCESTRAL_HEIR_SEARCH,
+    MULTI_HOUSE_CHILD_HOUSE_NEXTGEN_CONTRACT)
 }
 
 export function multiHouseChildHouseRunConfigIdentity(drift: 0 | 1 = 1): Readonly<Record<string, unknown>> {
@@ -167,4 +169,35 @@ export function multiHouseChildHouseRunConfigIdentity(drift: 0 | 1 = 1): Readonl
 
 export function multiHouseChildHouseRunConfigDigest(drift: 0 | 1 = 1): string {
   return digestMultiHouseIdentity(multiHouseChildHouseRunConfigIdentity(drift))
+}
+
+// Issue #209 / DEC-197。v4と同じ開始世界・法令・出生所属・相続探索で、契約別同意効用だけを変更する。
+export const MULTI_HOUSE_LINEAGE_CONFIG_ID = 'experimental-multi-house-v5-dec197-lineage-continuity'
+export type MultiHouseLineageVariant = 'MOTIVATION' | 'ZERO_CONTROL'
+const LINEAGE_CALIBRATION = Object.freeze({
+  status: 'CALIBRATION_ONLY', version: 'dec197-lineage-continuity-calibration-0', marriageBonus: 6, affiliationBonus: 12,
+}) satisfies LineageContinuityCalibration
+const ZERO_LINEAGE_CALIBRATION = Object.freeze({...LINEAGE_CALIBRATION, marriageBonus: 0, affiliationBonus: 0})
+
+function lineageContract(variant: MultiHouseLineageVariant): NextgenContractCalibration {
+  if (variant !== 'MOTIVATION' && variant !== 'ZERO_CONTROL') throw new RangeError('INVALID_LINEAGE_VARIANT')
+  return {...MULTI_HOUSE_CHILD_HOUSE_NEXTGEN_CONTRACT,
+    lineageContinuity: variant === 'MOTIVATION' ? LINEAGE_CALIBRATION : ZERO_LINEAGE_CALIBRATION}
+}
+
+export function createMultiHouseLineageEvaluators(startWorld: WorldState, ledger: readonly StatModifier[] = [],
+  drift: 0 | 1 = 1, variant: MultiHouseLineageVariant = 'MOTIVATION'): EvaluatorMap {
+  return createAbstractEvaluators(startWorld, ledger, demandCalibration(drift).annualDelta, MULTI_HOUSE_ANCESTRAL_HEIR_SEARCH,
+    lineageContract(variant))
+}
+
+export function multiHouseLineageRunConfigIdentity(drift: 0 | 1 = 1, variant: MultiHouseLineageVariant = 'MOTIVATION') {
+  const shared = multiHouseChildHouseRunConfigIdentity(drift)
+  const configId = MULTI_HOUSE_LINEAGE_CONFIG_ID + (drift === 0 ? '-drift-0' : '') + (variant === 'ZERO_CONTROL' ? '-zero' : '')
+  return {...shared, configId, nextgenContract: lineageContract(variant),
+    ruleVersions: {...shared.ruleVersions as Record<string, unknown>, b005: NEXTGEN_LINEAGE_CONTINUITY_VERSION}}
+}
+
+export function multiHouseLineageRunConfigDigest(drift: 0 | 1 = 1, variant: MultiHouseLineageVariant = 'MOTIVATION'): string {
+  return digestMultiHouseIdentity(multiHouseLineageRunConfigIdentity(drift, variant))
 }

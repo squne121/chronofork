@@ -5,11 +5,12 @@ import { supportingAnnualMarriageEvidence, supportingPopulationEvidenceIds, insp
 import type { SupportingCandidateResolver } from '../../autonomy/supporting-candidate-view.ts'
 import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.ts'
 import { EvaluationFailure } from '../../engine/evaluators.ts'
+import { canonicalize } from '../../engine/reducer/canonical.ts'
 import type { LegalEvidenceBook } from '../../legal/evidence.ts'
 import type { OrdinaryLaw } from '../../legal/ordinary-authority.ts'
 import { reviewOrdinaryAuthority } from '../../legal/ordinary-authority.ts'
 import { chooseNextgenContract, contractChoiceIdentity, negotiatedMarriageContract,
-  EXPERIMENTAL_NEXTGEN_CONTRACT, validateNextgenContractCalibration } from '../../legal/nextgen-contract.ts'
+  EXPERIMENTAL_NEXTGEN_CONTRACT, NEXTGEN_LINEAGE_CONTINUITY_VERSION, validateNextgenContractCalibration } from '../../legal/nextgen-contract.ts'
 import type { NextgenContractCalibration } from '../../legal/nextgen-contract.ts'
 import { reviewDomesticMarriageEligibility } from '../../legal/nextgen-marriage.ts'
 import { sameNextgenChildHouse, sameNextgenContractIdentity } from '../../legal/nextgen-contract-ids.ts'
@@ -108,6 +109,14 @@ export function createALeg01NextgenEvaluator(input:NextgenMarriageInput):Nextgen
       // 双方の効用は当事者順に記録されるため、B-005と同じ順序で再計算する。
       const agreement=chooseNextgenContract(world,verified.actorRef.ids,score,cal,temporary)
       if(agreement.status!=='ACCEPT'||negotiation.inputs.selectedContractKey!==agreement.choice.key)continue
+      const continuityUtilities=agreement.continuityEvidence===undefined?undefined:
+        agreement.choices.map(c=>({key:c.key,utility:c.continuityUtility!}))
+      if((verified.ruleVersion===NEXTGEN_LINEAGE_CONTINUITY_VERSION)!==(cal.lineageContinuity!==undefined)||
+        canonicalize(negotiation.inputs.continuityEvidence)!==canonicalize(agreement.continuityEvidence)||
+        canonicalize(negotiation.inputs.continuityUtilities)!==canonicalize(continuityUtilities)){
+        deferReasons.set(query.source.requestId,'LINEAGE_CONTINUITY_EVIDENCE_MISMATCH')
+        continue
+      }
       const options=negotiation.inputs.contractOptions
       if(!Array.isArray(options)||options.length!==agreement.choices.length||
         !agreement.choices.every((choice,i)=>{

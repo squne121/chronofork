@@ -5,7 +5,8 @@ import type { EvaluationContext, RuleEvaluator } from '../../engine/evaluators.t
 import { EvaluationFailure } from '../../engine/evaluators.ts'
 import { pairKey, normalizePersonPair } from '../../intervention/index.ts'
 import {
-  chooseNextgenContract, contractChoiceIdentity, partnerHouseInterest, EXPERIMENTAL_NEXTGEN_CONTRACT, validateNextgenContractCalibration,
+  chooseNextgenContract, contractChoiceIdentity, partnerHouseInterest, EXPERIMENTAL_NEXTGEN_CONTRACT,
+  NEXTGEN_LINEAGE_CONTINUITY_VERSION, validateNextgenContractCalibration,
 } from '../../legal/nextgen-contract.ts'
 import type { NextgenContractCalibration } from '../../legal/nextgen-contract.ts'
 import { reviewDomesticMarriageEligibility } from '../../legal/nextgen-marriage.ts'
@@ -140,6 +141,11 @@ export function createB005NextgenEvaluator(
             supportingKinshipClearanceId:clearance?.status==='CLEARED'?clearance.clearanceId:null,
             ...(clearance?.status==='CLEARED'&&clearance.clearanceId!==null
               ?{supportingKinshipClearanceRecordKey:clearance.clearanceRecordKey}:{}),
+            ...(agreement?.continuityEvidence?{
+              continuityEvidence:agreement.continuityEvidence,
+              // DEC-190 contractOptions remains the exact seven-field registration evidence.
+              continuityUtilities:agreement.choices.map(c=>({key:c.key,utility:c.continuityUtility!})),
+            }:{}),
             ...(agreement?{contractOptions:agreement.choices.map(c=>({
               key:c.key,dynastyId:c.dynastyId,
               firstConsentScore:c.firstConsentScore,secondConsentScore:c.secondConsentScore,
@@ -154,7 +160,8 @@ export function createB005NextgenEvaluator(
         status:accepted?'ACCEPT':'DEFER',
         reasonCodes:['CALIBRATION_ONLY','DEC_058_CONTRACT_NEGOTIATION',why],
         modifierIds:trace.modifierIds,
-        ruleVersion:fixedCalibration.childHouse?B005_CHILD_HOUSE_VERSION:B005_NEXTGEN_VERSION,
+        ruleVersion:fixedCalibration.lineageContinuity?NEXTGEN_LINEAGE_CONTINUITY_VERSION
+          :fixedCalibration.childHouse?B005_CHILD_HOUSE_VERSION:B005_NEXTGEN_VERSION,
       })
       if(!accepted)continue
       requests.push({

@@ -4,9 +4,27 @@ import type { Id, MarriageContract, NextgenContractChildHouse, NextgenContractId
 import { NEXTGEN_CONTRACT_SELECTION_VERSION } from '../contracts/index.ts'
 import { marriageCandidatePersons } from './nextgen-marriage.ts'
 import { childHouseClauseIssue } from './child-house.ts'
+import { lineageContinuity } from './lineage-continuity.ts'
+import type { LineageContinuityCalibration } from './lineage-continuity.ts'
 import {
   nextgenContractIdentityKey, nextgenContractKey, nextgenMarriageContract, nextgenSelectionContract,
 } from './nextgen-contract-ids.ts'
+
+export const NEXTGEN_LINEAGE_CONTINUITY_VERSION='b005-bilateral-family-contract-6-dec197:CALIBRATION_ONLY'
+type ContinuityBasis=ReturnType<typeof lineageContinuity>
+type ContinuityEvidence=Readonly<{
+  calibration: LineageContinuityCalibration
+  consentThreshold: number
+  parties: readonly [ContinuityBasis,ContinuityBasis]
+}>
+type ContinuityUtility=Readonly<{
+  baseUtility: number
+  marriageBonus: number
+  preservesShortfallHouse: boolean
+  preservesShortfallDynasty: boolean
+  affiliationBonus: number
+  consents: boolean
+}>
 
 /** DEC-190: 契約案の子の家門。PATERNAL_DEFAULTは無条項、MATERNALは母の家門を指定する明示条項。 */
 export type ContractChildHouse = NextgenContractChildHouse
@@ -21,13 +39,16 @@ export type ContractChoice=Readonly<{
   minimumUtility:number
   /** DEC-190構成だけが持つ。旧構成の選択肢・記録は変更しない。 */
   childHouse?:ContractChildHouse
+  /** 当事者順。家門・王朝の双方を維持する場合にも所属加点は1回。 */
+  continuityUtility?:readonly [ContinuityUtility,ContinuityUtility]
 }>
 /** DEC-190構成の選択肢の構造化同一性。旧構成の選択肢はnull。 */
 export const contractChoiceIdentity=(c:Pick<ContractChoice,'dynastyId'|'childHouse'>):NextgenContractIdentity|null=>
   c.childHouse===undefined?null:{dynastyId:c.dynastyId,childHouse:c.childHouse}
-export type ContractAgreement=
+export type ContractAgreement=(
   | Readonly<{status:'ACCEPT';reasonCode:'BOTH_PARTIES_ACCEPT_UNIQUE_CONTRACT';choice:ContractChoice;choices:readonly ContractChoice[]}>
   | Readonly<{status:'DEFER';reasonCode:string;choices:readonly ContractChoice[]}>
+) & Readonly<{continuityEvidence?:ContinuityEvidence}>
 
 export type NextgenContractCalibration=Readonly<{
   status:'CALIBRATION_ONLY'
@@ -39,6 +60,7 @@ export type NextgenContractCalibration=Readonly<{
   supportWeight:number
   /** DEC-190の家門条項案。省略は旧版（王朝条項のみ）。王朝の利害係数とは別に版管理する。 */
   childHouse?:ChildHouseContractCalibration
+  lineageContinuity?:LineageContinuityCalibration
 }>
 /** 子の家門所属に関する当事者別の利害（CALIBRATION_ONLY）。正式係数・家系存続意思ではない。 */
 export type ChildHouseContractCalibration=Readonly<{
@@ -69,12 +91,20 @@ export function validateNextgenContractCalibration(c:NextgenContractCalibration)
     c.titleWeight,c.noClauseCost,c.supportWeight,
   ]
   if(!fields.every(n=>int(n)&&Math.abs(n)<=1000))return ['CONTRACT_CALIBRATION_OUT_OF_RANGE']
-  if(c.childHouse===undefined)return []
   const h=c.childHouse
-  if(!h||h.status!=='CALIBRATION_ONLY'||typeof h.version!=='string'||h.version.length===0)
-    return ['CHILD_HOUSE_CALIBRATION_NOT_EXPERIMENTAL']
-  return [h.ownHouseBonus,h.otherHouseCost,h.exceptionCost,h.titleWeight,h.supportWeight]
-    .every(n=>int(n)&&Math.abs(n)<=1000)?[]:['CHILD_HOUSE_CALIBRATION_OUT_OF_RANGE']
+  if(h!==undefined){
+    if(!h||h.status!=='CALIBRATION_ONLY'||typeof h.version!=='string'||h.version.length===0)
+      return ['CHILD_HOUSE_CALIBRATION_NOT_EXPERIMENTAL']
+    if(![h.ownHouseBonus,h.otherHouseCost,h.exceptionCost,h.titleWeight,h.supportWeight]
+      .every(n=>int(n)&&Math.abs(n)<=1000))return ['CHILD_HOUSE_CALIBRATION_OUT_OF_RANGE']
+  }
+  const l=c.lineageContinuity
+  if(l===undefined)return []
+  if(h===undefined)return ['LINEAGE_CONTINUITY_REQUIRES_CHILD_HOUSE_CONTRACT']
+  if(!l||l.status!=='CALIBRATION_ONLY'||typeof l.version!=='string'||l.version.length===0)
+    return ['LINEAGE_CONTINUITY_CALIBRATION_NOT_EXPERIMENTAL']
+  return [l.marriageBonus,l.affiliationBonus].every(n=>int(n)&&n>=0&&n<=1000)
+    ?[]:['LINEAGE_CONTINUITY_CALIBRATION_OUT_OF_RANGE']
 }
 /** 当年の家門所属者が保持する有効な世襲Title数。王朝の称号強度とは別に数える。 */
 function houseTitleStrength(world:WorldState,houseId:Id):number{
@@ -177,12 +207,36 @@ export function chooseNextgenContract(
       }):[]),
     ]
   }
+  const l=calibration.lineageContinuity
+  const evidence=l===undefined?{}:{continuityEvidence:{calibration:l,consentThreshold:calibration.consentThreshold,
+    parties:[lineageContinuity(world,people[0]),lineageContinuity(world,people[1])] as const}}
+  if(evidence.continuityEvidence){
+    const {parties,consentThreshold,calibration:continuity}=evidence.continuityEvidence
+    choices=choices.map(c=>{
+      const assess=(basis:ContinuityBasis,baseUtility:number):ContinuityUtility=>{
+        const houseShort=basis.house?.status==='RECORDED_SHORTFALL'
+        const dynastyShort=basis.dynasty?.status==='RECORDED_SHORTFALL'
+        const preservesShortfallHouse=houseShort&&c.childHouse?.houseId===basis.house?.ownId
+        const preservesShortfallDynasty=dynastyShort&&c.dynastyId===basis.dynasty?.ownId
+        const marriageBonus=houseShort||dynastyShort?continuity.marriageBonus:0
+        const affiliationBonus=preservesShortfallHouse||preservesShortfallDynasty?continuity.affiliationBonus:0
+        return {baseUtility,marriageBonus,preservesShortfallHouse,preservesShortfallDynasty,affiliationBonus,
+          consents:baseUtility+marriageBonus+affiliationBonus>=consentThreshold}
+      }
+      const first=assess(parties[0],c.firstConsentScore),second=assess(parties[1],c.secondConsentScore)
+      const total=(u:ContinuityUtility)=>u.baseUtility+u.marriageBonus+u.affiliationBonus
+      const firstConsentScore=total(first),secondConsentScore=total(second)
+      return {...c,firstConsentScore,secondConsentScore,continuityUtility:[first,second],
+        mutuallyAccepted:first.consents&&second.consents,
+        minimumUtility:Math.min(firstConsentScore,secondConsentScore)}
+    })
+  }
   const accepted=choices.filter(c=>c.mutuallyAccepted)
-  if(accepted.length===0)return {status:'DEFER',reasonCode:'NO_BILATERAL_CONSENT',choices}
+  if(accepted.length===0)return {status:'DEFER',reasonCode:'NO_BILATERAL_CONSENT',choices,...evidence}
   const top=Math.max(...accepted.map(c=>c.minimumUtility))
   const leaders=accepted.filter(c=>c.minimumUtility===top)
-  if(leaders.length!==1)return {status:'DEFER',reasonCode:'CONTRACT_CHOICE_TIE',choices}
-  return {status:'ACCEPT',reasonCode:'BOTH_PARTIES_ACCEPT_UNIQUE_CONTRACT',choice:leaders[0]!,choices}
+  if(leaders.length!==1)return {status:'DEFER',reasonCode:'CONTRACT_CHOICE_TIE',choices,...evidence}
+  return {status:'ACCEPT',reasonCode:'BOTH_PARTIES_ACCEPT_UNIQUE_CONTRACT',choice:leaders[0]!,choices,...evidence}
 }
 
 /** B-005がその年に合意した選択肢をAが登録するための安定した証拠。
